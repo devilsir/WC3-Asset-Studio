@@ -110,4 +110,5 @@ WC3 Asset Studio is an independent community tool and is not affiliated with or 
 
 ## License
 
-The original WC3 Asset Studio source is currently published with **all rights reserved** unless a file states otherwise. Third-party components retain their original licenses as described in the third-party notices.
+The original **WC3 Asset Studio** source code is licensed under the **MIT License**, unless explicitly stated otherwise in an individual file.
+Third-party libraries, components, tools, and other external resources remain subject to their respective original licenses, as detailed in the included **Third-Party Notices**.
