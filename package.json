@@ -1,0 +1,57 @@
+{
+  "name": "wc3-asset-studio",
+  "version": "1.1.0",
+  "description": "WC3 Asset Studio v1.1 - portable Warcraft III asset editor",
+  "author": "DarkSir#1620",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "verify": "node scripts/verify-build.js",
+    "start": "electron .",
+    "dist:win": "npm run verify && electron-builder --win portable --x64",
+    "dist:dir": "npm run verify && electron-builder --win dir --x64"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.16.1"
+  },
+  "build": {
+    "appId": "com.darksir.wc3assetstudio",
+    "productName": "WC3 Asset Studio",
+    "executableName": "WC3 Asset Studio",
+    "artifactName": "WC3 Asset Studio v1.1 Portable.${ext}",
+    "asar": true,
+    "compression": "maximum",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "app/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    },
+    "extraResources": [
+      {
+        "from": "tools/casc-reader.ps1",
+        "to": "tools/casc-reader.ps1"
+      }
+    ]
+  }
+}

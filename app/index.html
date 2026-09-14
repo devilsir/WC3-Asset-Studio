@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<meta content="dark" name="color-scheme"/>
+<title>WC3 Asset Studio v1.1</title>
+<link href="css/app.css?v1-credits-20260912" rel="stylesheet"/>
+<link href="css/model-lab.css?v1-credits-20260912" rel="stylesheet"/>
+</head>
+<body>
+<div id="app">
+<header class="topbar app-header unified-header">
+  <div class="unified-menubar onebar">
+    <div class="brand no-mark"><div><strong>WC3 Asset Studio v1.1</strong></div></div>
+    <div class="header-credits-slot" aria-label="Credits area">
+      <button class="btn" id="creditsBtn" type="button">Credits</button>
+    </div>
+    <div class="workspace-inline-tabs" id="workspaceTabs" aria-label="Workspaces">
+      <button class="workspace-tab active" data-module="texture" id="workspaceTexture">Texture Paint</button>
+      <button class="workspace-tab" data-module="model" id="workspaceModel">Model Lab</button>
+      <button class="workspace-tab" data-module="sanity" id="workspaceSanity">Sanity</button>
+      <button class="workspace-tab" data-module="buttons" id="workspaceButtons">WC3 Buttons</button>
+      <button class="workspace-tab" data-module="log" id="workspaceLog">Log</button>
+    </div>
+    <div class="unified-quick-actions">
+      <button class="btn" id="newBtn">New</button>
+      <button class="btn primary" id="openBtn">Open</button>
+      <button class="btn" id="importLayerBtn">Import</button>
+      <button class="btn" id="saveProjectBtn">Save</button>
+      <div class="header-export-actions quickbar-group">
+        <button class="btn primary" id="exportBlpBtn">BLP</button>
+        <button class="btn primary" id="exportTgaBtn">TGA</button>
+        <button class="btn" id="exportPngBtn">PNG</button>
+        <button class="btn" id="exportGameBtn">War3</button>
+      </div>
+      <details class="header-more-menu"><summary class="btn">More</summary><div class="header-more-popover"><button class="btn" id="convertBtn">Convert File</button><button class="btn" id="resizeBtn">Resize Image</button><button class="btn" id="canvasSizeBtn">Canvas Size</button></div></details>
+      <div class="blender-window-actions">
+        <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
+        <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>
+      </div>
+      <div class="blender-quickbar-status"><span class="quickbar-pill">Mode</span><strong id="activeModuleTitleTop">Texture Paint</strong></div>
+    </div>
+  </div>
+</header>
+<nav aria-label="Studio modules" class="module-nav legacy-module-nav" id="moduleNav">
+<button class="module-nav-btn active" data-module="texture" id="legacyNavTexture"><span class="module-icon">✦</span><span><strong>Texture Paint</strong><small>BLP / TGA / layers</small></span></button>
+<button class="module-nav-btn" data-module="model" id="legacyNavModel"><span class="module-icon">◆</span><span><strong>Model Lab</strong><small>MDX / MDL / UV</small></span></button>
+<button class="module-nav-btn" data-module="sanity" id="legacyNavSanity"><span class="module-icon">✓</span><span><strong>Sanity</strong><small>Hive-style checks</small></span></button>
+<button class="module-nav-btn" data-module="buttons" id="legacyNavButtons"><span class="module-icon">▣</span><span><strong>WC3 Buttons</strong><small>BTN / DISBTN sets</small></span></button>
+<button class="module-nav-btn" data-module="log" id="legacyNavLog"><span class="module-icon">≡</span><span><strong>Log</strong><small>Errors / CASC / history</small></span></button>
+<div class="module-nav-spacer"></div>
+<div class="active-module-label"><span>Workspace</span><strong id="activeModuleTitle">Texture Paint</strong><small>Blender-style workspace tabs</small></div>
+</nav>
+<section class="tool-options blender-tool-settings">
+<div class="tool-name"><span id="toolName">Brush</span></div>
+<label data-opt="brushlike">Size <input id="brushSize" max="256" min="1" type="range" value="24"/><output id="brushSizeValue">24 px</output></label>
+<label data-opt="brushlike">Hardness <input id="brushHardness" max="100" min="0" type="range" value="85"/><output id="brushHardnessValue">85%</output></label>
+<label data-opt="brushlike">Opacity <input id="brushOpacity" max="100" min="1" type="range" value="100"/><output id="brushOpacityValue">100%</output></label>
+<label data-opt="brushlike">Tip <select id="brushTip"><option value="soft">Soft</option><option value="hard">Hard</option><option value="square">Square</option><option value="pixel">Pixel</option><option value="scatter">Scatter</option><option value="spray">Spray</option><option value="airbrush">Airbrush</option><option value="chalk">Chalk</option><option value="noise">Noise</option><option value="diamond">Diamond</option><option value="cross">Cross</option><option value="star">Star</option><option value="calligraphy">Calligraphy</option><option value="slash">Slash</option></select></label>
+<label data-opt="brushlike">Spacing <input id="brushSpacing" max="100" min="1" type="range" value="18"/><output id="brushSpacingValue">18%</output></label>
+<label class="hidden-option" data-opt="bucket">Tolerance <input id="bucketTolerance" max="100" min="0" type="range" value="18"/><output id="bucketToleranceValue">18</output></label>
+<label class="toggle"><input id="preserveAlpha" type="checkbox"/><span>Preserve alpha</span></label>
+<label class="toggle"><input id="alphaOnly" type="checkbox"/><span>Edit alpha only</span></label>
+<label class="hidden-option" id="alphaValueWrap">Alpha <input id="alphaValue" max="255" min="0" type="range" value="255"/><output id="alphaValueLabel">255</output></label>
+<label class="toggle"><input id="wrapPaint" type="checkbox"/><span>Wrap UV</span></label>
+<label class="toggle hidden-option" id="shapeFillWrap"><input id="shapeFill" type="checkbox"/><span>Fill</span></label>
+<span class="spacer"></span><button class="btn small" id="fitBtn">Fit</button><button class="icon-btn small" id="zoomOutBtn">−</button><span class="zoom-label" id="zoomLabel">100%</span><button class="icon-btn small" id="zoomInBtn">+</button>
+</section>
+<main class="workspace-layout">
+<aside class="toolbar blender-toolbar">
+<button class="tool active" data-tool="brush" title="Brush (B)"><span>●</span><small>Brush</small></button>
+<button class="tool" data-tool="eraser" title="Eraser (E)"><span>◇</span><small>Eraser</small></button>
+<button class="tool" data-tool="clone" title="Clone stamp (K)"><span>◎</span><small>Clone</small></button>
+<button class="tool" data-tool="smudge" title="Smudge (M)"><span>≈</span><small>Smudge</small></button>
+<button class="tool" data-tool="blur" title="Blur (U)"><span>◌</span><small>Blur</small></button>
+<button class="tool" data-tool="bucket" title="Bucket (G)"><span>▰</span><small>Bucket</small></button>
+<button class="tool" data-tool="eyedropper" title="Eyedropper (I)"><span>⌁</span><small>Color</small></button>
+<button class="tool" data-tool="pan" title="Move view / pan canvas (H)"><span>↔</span><small>Move View</small></button>
+<button class="tool" data-tool="move" title="Move active layer (V)"><span>✥</span><small>Layer Move</small></button>
+<button class="tool" data-tool="rotate" title="Rotate active layer freely (T)"><span>⟳</span><small>Rotate</small></button>
+<button class="tool" data-tool="line" title="Line (L)"><span>╱</span><small>Line</small></button>
+<button class="tool" data-tool="rect" title="Rectangle (R)"><span>□</span><small>Rect</small></button>
+<button class="tool" data-tool="ellipse" title="Ellipse (O)"><span>○</span><small>Ellipse</small></button>
+<button class="tool" data-tool="crop" title="Crop (C)"><span>⌗</span><small>Crop</small></button>
+<div class="toolbar-sep"></div>
+<button class="tool action" id="flipHBtn" title="Flip layer horizontally"><span>↔</span><small>Flip H</small></button>
+<button class="tool action" id="flipVBtn" title="Flip layer vertically"><span>↕</span><small>Flip V</small></button>
+<button class="tool action" id="rotateLayerBtn" title="Rotate layer 90°"><span>↻</span><small>Layer 90°</small></button>
+<button class="tool action" id="rotateDocBtn" title="Rotate document 90°"><span>⟳</span><small>Doc 90°</small></button>
+</aside>
+<section class="canvas-stage" id="canvasStage">
+<div class="drop-hint" id="dropHint">Drop BLP / TGA / PNG / JPG / JPEG / DDS here</div>
+<div class="canvas-wrap checkerboard" id="canvasWrap"><canvas height="512" id="displayCanvas" width="512"></canvas><canvas height="512" id="cursorCanvas" width="512"></canvas></div>
+</section>
+<aside class="right-panel">
+<div class="panel-tabs blender-side-tabs" id="rightPanelTabs">
+<button class="active" data-panel-tab="inspector"><span>⛭</span><small>Properties</small></button>
+<button data-panel-tab="model"><span>◆</span><small>Model</small></button>
+<button data-panel-tab="sanity"><span>✓</span><small>Checks</small></button>
+</div>
+<div id="inspectorPanels">
+<section class="panel wc-profile-panel">
+<div class="panel-title">WARCRAFT TARGET</div>
+<div class="two-col"><label>Profile<select id="wcProfile"><option value="hd">Reforged HD</option><option value="sd">Classic / SD in Reforged</option></select></label><label>Asset<select id="assetType"><option value="texture">Model texture</option><option value="icon">Icon</option><option value="ui">UI / image</option></select></label></div>
+<div class="profile-hint" id="profileHint"></div>
+<div class="compat-box"><div class="compat-head"><span>Compatibility</span><strong id="compatScore">OK</strong></div><div class="compat-list" id="compatList"></div></div>
+</section>
+<section class="panel color-panel">
+<div class="panel-title">COLOR</div><div class="color-row"><input id="colorPicker" type="color" value="#ffcc33"/><input id="hexColor" maxlength="7" type="text" value="#FFCC33"/></div><div class="color-swatches" id="colorSwatches"></div>
+</section>
+<section class="panel preview-panel">
+<div class="panel-heading"><div class="panel-title">PREVIEW</div><div class="segmented" id="previewModes"><button class="active" data-preview="rgba">RGBA</button><button data-preview="alpha">Alpha</button><button data-preview="rgb">RGB</button></div></div>
+<div class="preview-row"><div class="preview-main checkerboard"><canvas height="128" id="preview256" width="128"></canvas></div><div class="preview-stack"><div><canvas height="64" id="preview64" width="64"></canvas><span>64</span></div><div><canvas height="32" id="preview32" width="32"></canvas><span>32</span></div><div><canvas height="16" id="preview16" width="16"></canvas><span>16</span></div></div></div>
+<div class="tile-label">Tile / seam preview</div><canvas class="tile-preview checkerboard" height="60" id="tilePreview" width="180"></canvas>
+</section>
+<section class="panel icon-panel" id="iconPanel">
+<div class="panel-heading"><div><div class="panel-title">BUTTON EXPORT</div><div class="icon-mini-note">Warcraft-ready BTN variants and import paths.</div></div><span class="mini-pill">WC3</span></div>
+<div class="two-col"><label>Profile<select id="buttonStudioProfile"><option value="hd">Reforged HD · 256</option><option value="sd">Classic / SD · 64</option></select></label><label>Preview type<select id="iconVariant"><option value="BTN">BTN / Normal</option><option value="DISBTN">DISBTN / Disabled</option><option value="PASBTN">PASBTN / Passive</option><option value="DISPASBTN">DISPASBTN / Disabled passive</option><option value="ATC">ATC / Autocast</option><option value="DISATC">DISATC / Disabled autocast</option></select></label></div>
+<label>Name<input id="iconBaseName" type="text" value="CustomIcon"/></label>
+<label class="icon-output-label">Output<select id="iconOutputFormat"><option value="blp">BLP1 — recommended</option><option value="tga">TGA 32-bit</option></select></label>
+<div class="icon-frame-box">
+  <div class="icon-frame-heading"><div><div class="icon-set-title">FRAME / BORDER</div><div class="icon-mini-note">Independent presets for normal, passive and autocast buttons.</div></div><button class="btn tiny" id="iconFrameResetBtn" type="button">Reset</button></div>
+  <label>Normal border<select id="iconNormalFrameStyle"><option value="classic">Classic Bevel</option><option value="thin">Thin Metal</option><option value="heavy">Heavy Warcraft</option><option value="double">Double Rim</option><option value="corner">Corner Cut</option><option value="minimal">Minimal</option></select></label>
+  <label>Passive border<select id="iconPassiveFrameStyle"><option value="classic">Classic Passive</option><option value="rune">Rune Frame</option><option value="etched">Inner Etch</option><option value="heavy">Heavy Passive</option><option value="minimal">Minimal Passive</option></select></label>
+  <label>Autocast border<select id="iconAutocastFrameStyle"><option value="classic">Classic Corners · stock-like</option><option value="brackets">Long Edge Brackets</option><option value="chevrons">Corner Chevrons</option><option value="full">Full Gold Rim</option><option value="arrows">Edge Arrows</option><option value="minimal">Minimal Corners</option></select></label>
+  <div class="icon-frame-colors">
+    <label>Border color<div class="icon-color-control"><input id="iconFrameColor" type="color" value="#7f8995"/><input id="iconFrameColorHex" maxlength="7" type="text" value="#7F8995"/></div></label>
+    <label>Autocast accent<div class="icon-color-control"><input id="iconAutocastColor" type="color" value="#f6c84d"/><input id="iconAutocastColorHex" maxlength="7" type="text" value="#F6C84D"/></div></label>
+  </div>
+  <label class="icon-frame-range">Artwork bleed<input id="iconArtBleed" type="range" min="0" max="10" step="0.5" value="2"/><output id="iconArtBleedLabel">2%</output></label>
+  <label class="toggle icon-trim-toggle"><input checked id="iconTrimTransparent" type="checkbox"/><span>Trim transparent outer pixels before framing</span></label>
+  <div class="icon-mini-note">Artwork now extends under the frame, eliminating the transparent seam. Autocast decorations sit directly on the outer edge.</div>
+</div>
+<div class="path-box"><code id="iconPath"></code><button class="btn tiny" id="copyPathBtn">Copy path</button></div>
+<button class="btn full hidden" id="resizeIconBtn">Resize document to profile size</button>
+<div class="icon-set-box">
+<div class="icon-set-title">EXPORT VARIANTS</div>
+<div class="icon-bulk-actions">
+<button class="btn tiny" id="selectAllIconsBtn" type="button">All</button>
+<button class="btn tiny" id="selectCoreIconsBtn" type="button">BTN + DISBTN</button>
+<button class="btn tiny" id="clearIconsBtn" type="button">None</button>
+</div>
+<div class="icon-check-grid">
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="BTN"/><span>BTN</span><small>active</small></label>
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="DISBTN"/><span>DISBTN</span><small>disabled</small></label>
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="PASBTN"/><span>PASBTN</span><small>passive</small></label>
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="DISPASBTN"/><span>DISPASBTN</span><small>disabled passive</small></label>
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="ATC"/><span>ATC</span><small>autocast</small></label>
+<label class="icon-check"><input checked="" class="icon-set-check" type="checkbox" value="DISATC"/><span>DISATC</span><small>disabled autocast</small></label>
+</div>
+<button class="btn primary full icon-export-main" id="generateIconSetBtn" type="button">Generate selected package (.zip)</button>
+<div class="icon-mini-note">Includes the button files plus <code>_import_paths.txt</code>.</div>
+</div>
+</section>
+<section class="panel layers-panel">
+<div class="panel-heading"><div class="panel-title">LAYERS</div><button class="icon-btn tiny" id="addLayerBtn" title="New layer">＋</button></div>
+<div class="layer-controls"><label>Opacity <input id="layerOpacity" max="100" min="0" type="range" value="100"/></label><select id="blendMode"><option value="source-over">Normal</option><option value="multiply">Multiply</option><option value="screen">Screen</option><option value="overlay">Overlay</option><option value="lighter">Add</option><option value="darken">Darken</option><option value="lighten">Lighten</option></select></div>
+<div class="layers-list" id="layersList"></div>
+<div class="layer-footer"><button class="btn small" id="duplicateLayerBtn">Duplicate</button><button class="btn small" id="mergeDownBtn">Merge ↓</button><button class="btn small" id="flattenBtn">Flatten</button><button class="btn small danger" id="deleteLayerBtn">Delete</button></div>
+</section>
+</div>
+<div class="hidden" id="modelLabPanels">
+<div class="model-lab-shell">
+  <section class="panel model-lab-overview-panel">
+    <div class="panel-heading"><div class="panel-title">MODEL LAB WORKSPACE</div><span class="mini-pill">Organized workflow</span></div>
+    <div class="model-lab-overview">
+      <div class="overview-step"><strong>1. Setup</strong><span>Open model, add textures, inspect slots.</span></div>
+      <div class="overview-step"><strong>2. Paint</strong><span>Pick a texture and paint in 2D or directly on the model.</span></div>
+      <div class="overview-step"><strong>3. View</strong><span>Orbit, inspect UVs, switch display modes and geosets.</span></div>
+      <div class="overview-step"><strong>4. Inspect</strong><span>Review rig, materials, objects, emitters and Warcraft data.</span></div>
+      <div class="overview-step"><strong>5. Animate</strong><span>Preview sequences, timing and playback.</span></div>
+    </div>
+    <div class="model-mini-note">Open a model, add textures, then work in the large viewport area. The left column is setup and paint, the right column is inspection.</div>
+  </section>
+  <div class="model-lab-sectionbar" id="modelLabSectionbar">
+    <button class="active" data-model-section-filter="setup" type="button">Setup</button>
+    <button data-model-section-filter="paint" type="button">Paint</button>
+    <button data-model-section-filter="view" type="button">View</button>
+    <button data-model-section-filter="inspect" type="button">Inspect</button>
+    <button data-model-section-filter="animate" type="button">Animate</button>
+    <button data-model-section-filter="all" type="button">All</button>
+  </div>
+<section class="panel model-source-panel" data-model-section="setup">
+<div class="panel-heading"><div class="panel-title">MODEL LAB</div><span class="model-badge" id="modelRuntimeBadge" aria-hidden="true"></span></div>
+<div class="model-actions-grid compact-model-actions">
+<label class="btn file-picker-btn primary" for="modelFileInput" id="openModelBtn" role="button" tabindex="0">Open Model</label>
+<label class="btn file-picker-btn" for="modelTextureInput" id="addModelTexturesBtn" role="button" tabindex="0">Add Textures</label>
+<button class="btn" id="exportModelCopyBtn">Export Model Copy</button>
+</div>
+<div class="model-mini-note">Selected texture: <strong id="modelSelectedTextureName">No texture selected</strong> <span class="model-mini-note">· 3D paint auto-syncs to the clicked surface texture</span></div>
+<div class="model-drop-zone" id="modelDropZone" tabindex="0"><strong>Drop model or textures here</strong><span>MDX / MDL + BLP / TGA / DDS / PNG / JPG</span></div>
+<div class="model-load-status" id="modelLoadStatus" data-kind="info">Ready to open MDX / MDL.</div>
+<div class="model-info-box" id="modelFileInfo">No model loaded yet.</div>
+<div class="model-mini-note">Reads MDL / MDX texture references, automatically looks for matching textures beside the model and in its subfolders, and warns when a referenced texture is missing.</div>
+</section>
+<section class="panel model-textures-panel" data-model-section="setup">
+<div class="panel-heading"><div class="panel-title">TEXTURE SLOTS / BINDINGS</div><span class="mini-pill" id="modelTextureCount">0 slots</span></div>
+<div class="model-texture-list empty" id="modelTextureList">Load a model to detect texture slots.</div>
+</section>
+<section class="panel model-paint-panel" data-model-section="paint">
+<div class="panel-heading model-paint-heading"><div><div class="panel-title">3D PAINT</div><span class="model-panel-subtitle">Surface-linked texture painting</span></div><div class="panel-heading-right"><span class="mini-pill" id="modelPaintModeBadge">Brush · Soft</span></div></div>
+<div class="model-paint-toolbar">
+<label class="toggle model-paint-enable"><input checked id="modelPaintEnabled" type="checkbox"/><span>Enable 3D painting</span></label>
+<div class="model-paint-tool-buttons">
+<button class="btn small active" data-model-paint-tool="brush" id="modelPaintBrushBtn" type="button">Brush</button>
+<button class="btn small" data-model-paint-tool="eraser" id="modelPaintEraserBtn" type="button">Eraser</button>
+<button class="btn small" data-model-paint-tool="clone" id="modelPaintCloneBtn" type="button">Clone</button>
+<button class="btn small" data-model-paint-tool="smudge" id="modelPaintSmudgeBtn" type="button">Smudge</button>
+<button class="btn small" data-model-paint-tool="blur" id="modelPaintBlurBtn" type="button">Blur</button>
+<button class="btn small" data-model-paint-tool="bucket" id="modelPaintBucketBtn" type="button">Bucket</button>
+<button class="btn small" data-model-paint-tool="eyedropper" id="modelPaintEyedropperBtn" type="button">Pick Color</button>
+</div>
+<div class="model-paint-controls">
+<label class="paint-control-row" data-paint-option="color"><span class="paint-control-label">Color</span><span class="model-color-field"><input id="modelPaintColor" type="color" value="#ffcc33"/><code id="modelPaintColorHex">#FFCC33</code></span></label>
+<label class="paint-control-row" data-paint-option="size"><span class="paint-control-label">Size</span><input id="modelPaintSize" max="256" min="1" type="range" value="24"/><output id="modelPaintSizeValue">24 px</output></label>
+<label class="paint-control-row" data-paint-option="opacity"><span class="paint-control-label">Opacity</span><input id="modelPaintOpacity" max="100" min="1" type="range" value="100"/><output id="modelPaintOpacityValue">100%</output></label>
+<label class="paint-control-row" data-paint-option="hardness"><span class="paint-control-label">Hardness</span><input id="modelPaintHardness" max="100" min="0" type="range" value="85"/><output id="modelPaintHardnessValue">85%</output></label>
+<label class="paint-control-row" data-paint-option="spacing"><span class="paint-control-label">Spacing</span><input id="modelPaintSpacing" max="100" min="1" type="range" value="18"/><output id="modelPaintSpacingValue">18%</output></label>
+<label class="paint-control-row" data-paint-option="density"><span class="paint-control-label">Density</span><input id="modelPaintDensity" max="100" min="5" type="range" value="55"/><output id="modelPaintDensityValue">55%</output></label>
+<label class="paint-control-row" data-paint-option="angle"><span class="paint-control-label">Angle</span><input id="modelPaintAngle" max="180" min="-180" type="range" value="-35"/><output id="modelPaintAngleValue">-35°</output></label>
+<label class="paint-control-row" data-paint-option="tolerance"><span class="paint-control-label">Tolerance</span><input id="modelPaintTolerance" max="100" min="0" type="range" value="18"/><output id="modelPaintToleranceValue">18</output></label>
+<label class="paint-control-row paint-control-select" data-paint-option="tip"><span class="paint-control-label">Brush tip</span><select id="modelPaintTip">
+<option value="soft">Soft</option><option value="hard">Hard</option><option value="square">Square</option><option value="pixel">Pixel</option><option value="scatter">Scatter</option><option value="spray">Spray</option><option value="airbrush">Airbrush</option><option value="chalk">Chalk</option><option value="noise">Noise</option><option value="diamond">Diamond</option><option value="cross">Cross</option><option value="star">Star</option><option value="calligraphy">Calligraphy</option><option value="slash">Slash</option>
+</select></label>
+</div>
+<div class="model-paint-toggles">
+<label class="toggle"><input id="modelPaintPreserveAlpha" type="checkbox"/><span>Preserve alpha</span></label>
+<label class="toggle"><input id="modelPaintAlphaOnly" type="checkbox"/><span>Alpha only</span></label>
+<label class="toggle"><input id="modelDebugPicking" type="checkbox"/><span>Debug Picking</span></label>
+</div>
+<div class="model-paint-status">
+<div>Texture <strong id="modelPaintTextureName">No texture loaded</strong></div>
+<div class="model-paint-hit-info" id="modelPaintHitInfo">Cursor: —</div>
+<pre class="model-picking-debug hidden" id="modelPickingDebug"></pre>
+</div>
+<div class="model-mini-note">Left drag paints · Alt + Left orbits · Right drag pans · Ctrl + click in Clone sets source. Brush size is measured in texture pixels and does not change when the camera zoom changes.</div>
+</div>
+</section>
+<section class="panel model-native-panel" data-model-section="paint view">
+<div class="panel-heading"><div class="panel-title">VIEWPORT</div><div class="panel-heading-right"><span class="mini-pill" id="modelProjectionBadge">Orthographic</span><span class="mini-pill" id="nativeRenderBadge">No mesh</span></div></div>
+<div class="model-controls-grid native-model-controls">
+<label>Geoset<select id="modelGeosetSelect"><option value="all">All geosets</option></select></label>
+<label>Display<select id="modelDisplayMode"><option value="textured">Textured</option><option value="lit">Lit</option><option value="solid">Solid</option><option value="normals">Normals</option><option value="geoset">Geoset colors</option><option value="bonecount">Bone count heat map</option><option value="wireframe">Wireframe</option><option value="both">Textured + wireframe</option><option value="litwire">Lit + wireframe</option></select></label>
+<label class="toggle"><input id="modelBackfaceCulling" type="checkbox"/><span>Backface culling</span></label>
+<label class="toggle rig-master-toggle"><input id="modelShowRig" type="checkbox"/><span>Show rig overlay</span></label>
+<label class="toggle"><input checked="" id="modelShowPivots" type="checkbox"/><span>Show bone pivots</span></label>
+<label class="toggle"><input checked="" id="modelShowBones" type="checkbox"/><span>Show bone links</span></label>
+<label class="toggle"><input id="modelShowExtents" type="checkbox"/><span>Show extents</span></label>
+<label class="toggle"><input id="modelShowNodeNames" type="checkbox"/><span>Node names</span></label>
+<label class="toggle"><input checked="" id="modelShowGrid" type="checkbox"/><span>Grid</span></label>
+<label class="toggle"><input id="modelDebugPickingView" type="checkbox"/><span>Debug Picking</span></label>
+<label>Rotation speed<input id="modelSpinSpeed" max="100" min="0" type="range" value="0"/></label>
+<label>Zoom<input id="modelZoomRange" max="100" min="-100" step="1" type="range" value="0"/><output id="modelZoomLabel">1.00×</output></label>
+<label>Performance<select id="modelPerformanceMode"><option value="auto" selected>Auto</option><option value="speed">Speed</option><option value="quality">Quality</option></select></label>
+<label>Team color<div class="model-team-color-control"><span class="model-team-color-swatch" id="modelTeamColorSwatch"></span><select id="modelTeamColorSelect" aria-label="Warcraft III team color"></select></div></label>
+<div class="model-inline-actions model-view-actions"><button class="btn small" id="modelZoomOutBtn" type="button">−</button><button class="btn small" id="modelZoomFitBtn" type="button">Fit</button><button class="btn small" id="modelResetCameraBtn" type="button">Reset Camera</button><button class="btn small" id="modelZoomInBtn" type="button">+</button><button class="btn small" id="modelScreenshotBtn" type="button">Screenshot</button></div>
+</div>
+<canvas class="model-3d-canvas" height="560" id="model3dCanvas" width="920"></canvas>
+<div class="model-mini-note">Blender-style flow: paint in 2D or directly on the 3D model and keep the texture synced. Viewport and overlay share one fixed-resolution orthographic camera transform. Mouse wheel zoom supports 0.02× to 100× without changing picking, rig or paint coordinates.</div>
+</section>
+<section class="panel model-sequences-panel" data-model-section="animate">
+<div class="panel-heading"><div class="panel-title">ANIMATION PREVIEW</div><span class="mini-pill" id="modelSequenceCount">0 sequences</span></div>
+<div class="model-controls-grid">
+<label>Sequence<select id="modelSequenceSelect"><option value="">None</option></select></label>
+<label>Animation<select id="modelAnimMode"><option value="tracks">Node tracks</option><option value="rig">Rig only</option><option value="orbit">Orbit only</option></select></label>
+<label>Progress<input id="modelSequenceScrub" max="1000" min="0" type="range" value="0"/></label>
+<div class="model-inline-actions"><button class="btn small" id="modelSequencePlayBtn" type="button">Play</button><button class="btn small" id="modelSequenceResetBtn" type="button">Reset</button></div>
+<label class="toggle"><input checked="" id="modelSequenceLoop" type="checkbox"/><span>Loop</span></label><label class="toggle"><input checked="" id="modelSkinningEnabled" type="checkbox"/><span>Bone skinning</span></label><label>Speed<input id="modelAnimationSpeed" max="300" min="10" type="range" value="100"/><output id="modelAnimationSpeedLabel">1.00×</output></label>
+</div>
+<div class="model-info-box compact" id="modelSequenceInfo">No sequence loaded.</div>
+</section>
+<section class="panel model-rig-panel" data-model-section="inspect">
+<div class="panel-heading"><div class="panel-title">RIG / NODES</div><span class="mini-pill" id="modelRigCount">0 nodes</span></div>
+<div class="rig-overlay-control">
+<label class="toggle"><input id="modelRigOverlayToggle" type="checkbox"/><span>Show rig in viewport</span></label>
+<span>Overlay only. It never changes skinning, pivots or authored node data.</span>
+</div>
+<div class="model-info-box compact" id="modelRigInfo">No pivot or node data loaded.</div>
+<div class="model-node-list empty" id="modelNodeList">Load a model to inspect nodes, helpers and bones.</div>
+</section>
+<section class="panel model-materials-panel" data-model-section="inspect">
+<div class="panel-heading"><div class="panel-title">MATERIALS</div><span class="mini-pill" id="modelMaterialCount">0 materials</span></div>
+<div class="model-texture-list empty" id="modelMaterialList">No materials loaded.</div>
+</section>
+<section class="panel model-effects-panel" data-model-section="inspect">
+<div class="panel-heading"><div class="panel-title">OBJECTS / EMITTERS</div><span class="mini-pill" id="modelEffectCount">0 objects</span></div>
+<div class="model-controls-grid">
+<label class="toggle"><input checked="" id="modelShowEffects" type="checkbox"/><span>Show emitters / effects</span></label>
+<label class="toggle"><input id="modelShowCollision" type="checkbox"/><span>Show collision shapes</span></label>
+<button class="btn small" id="modelFxPreviewBtn" type="button">Start animated FX preview</button>
+<label class="toggle"><input id="modelUseCascEffects" type="checkbox"/><span>Read FX / Spells from local CASC</span></label>
+<button class="btn small model-casc-connect" id="modelCascSetupBtn" type="button">Connect CASC</button>
+</div>
+<div class="model-mini-note" id="modelEffectsHelp">Tip: click an object below to highlight it in the viewport. “Start animated FX preview” plays referenced MDX/MDL effect models directly from CASC when available. ParticleEmitter2 data from the loaded model is rendered in real time and uses CASC textures when resolved. A red warning appears whenever the visible FX is local, simulated fallback, or a CASC asset cannot be played natively.</div>
+<div class="model-casc-status" id="modelCascStatus">CASC FX resolver is off.</div>
+<div class="model-info-box compact" id="modelEffectsInfo">No effect data loaded.</div>
+<div class="model-node-list empty" id="modelEffectsList">Load a model to inspect particles, ribbons, lights, attachments, events and other Warcraft objects.</div>
+</section>
+<section class="panel model-author-panel" data-model-section="inspect">
+<div class="panel-heading"><div><div class="panel-title">CAMERAS / FX AUTHORING</div><span class="model-panel-subtitle">Recognize cameras, look through them, and add viewport-side cameras or effect objects.</span></div><span class="mini-pill" id="modelAuthorCounts">0 cameras · 0 FX</span></div>
+<div class="model-actions-grid compact-model-actions">
+<button class="btn small" id="modelRecognizeCamerasBtn" type="button">Recognize / refresh cameras</button>
+<button class="btn small" id="modelAddCameraBtn" type="button">Add camera from current view</button>
+<button class="btn small" id="modelLookThroughCameraBtn" type="button">Look through selected camera</button>
+<button class="btn small" id="modelExitCameraViewBtn" type="button">Exit camera view</button>
+</div>
+<div class="model-mini-note" style="margin-top:7px">Detected cameras</div>
+<select id="modelAuthorCameraSelect" style="width:100%;margin-top:5px"></select>
+<div class="model-mini-note" id="modelAuthorCameraInfo">No model loaded.</div>
+<div class="model-actions-grid compact-model-actions" style="margin-top:8px">
+<button class="btn small" id="modelAddEmitterBtn" type="button">Add ParticleEmitter2</button>
+<button class="btn small" id="modelAddEffectAttachmentBtn" type="button">Add effect attachment</button>
+<button class="btn small" id="modelFocusSelectedObjectBtn" type="button">Focus selected object</button>
+</div>
+<div class="model-info-box compact" id="modelAuthorStatus">Load a model to inspect cameras and add effect helpers.</div>
+<div class="model-mini-note">Recognize cameras from the model, place a new camera from the current viewport, look through any detected camera, and add ParticleEmitter2 or attachment-based effects directly into the viewer.</div>
+</section>
+<section class="panel model-core-panel" data-model-section="inspect">
+<div class="panel-heading"><div class="panel-title">WARCRAFT MODEL DATA</div><span class="mini-pill" id="modelCoreVersion">v7</span></div>
+<div class="model-info-box compact" id="modelCoreInfo">Shared parser not loaded yet.</div>
+<div class="model-mini-note">Unknown MDX chunks are preserved as raw chunk metadata instead of being silently treated as known data. Texture-path export patches only the path table and keeps the rest of the MDX byte-for-byte intact.</div>
+</section>
+<section class="panel model-uv-panel" data-model-section="paint view">
+<div class="panel-heading"><div><div class="panel-title">UV INSPECTOR</div><span class="model-panel-subtitle">Live texture-space hit inspection</span></div><span class="mini-pill" id="uvViewInfo">No UV</span></div>
+<div class="model-uv-toolbar"><button class="btn tiny" id="modelUvZoomOut" type="button">−</button><button class="btn tiny" id="modelUvReset" type="button">Fit</button><button class="btn tiny" id="modelUvZoomIn" type="button">+</button><output id="modelUvZoomLabel">100%</output></div>
+<div class="model-uv-stage"><canvas class="model-uv-canvas" height="320" id="modelUvCanvas" width="640"></canvas></div>
+<div class="model-uv-meta" id="modelUvMeta">
+<div><span>Geoset</span><strong id="uvMetaGeoset">—</strong></div><div><span>Material</span><strong id="uvMetaMaterial">—</strong></div>
+<div><span>Layer</span><strong id="uvMetaLayer">—</strong></div><div><span>UV set</span><strong id="uvMetaSet">—</strong></div>
+<div><span>UV</span><strong id="uvMetaCoord">—</strong></div><div><span>Pixel</span><strong id="uvMetaPixel">—</strong></div>
+<div><span>Shared UV</span><strong id="uvMetaShared">—</strong></div><div><span>Texture</span><strong id="uvMetaTexture">—</strong></div>
+</div>
+<div class="model-mini-note">Wheel zooms the UV view · drag pans. The cyan marker is the exact 3D surface hit; selected face and shared UV usage are highlighted independently.</div>
+</section>
+</div>
+</div>
+<div class="hidden" id="sanityPanels">
+<section class="sanity-sidebar-panel">
+  <div class="sanity-brand">
+    <div class="sanity-brand-mark">✓</div>
+    <div><strong>Warcraft Sanity Checker</strong><span>MDX / MDL / textures / ZIP package validation</span></div>
+  </div>
+  <div class="sanity-primary-actions">
+    <button class="btn primary" id="sanityFilesBtn" type="button">Check Files</button>
+    <button class="btn" id="sanityZipBtn" type="button">Check ZIP</button>
+  </div>
+  <div class="sanity-drop-zone" id="sanityDropZone">
+    <strong>Drop files or a ZIP package</strong>
+    <span>Models + their custom textures can be checked together so texture references are validated too.</span>
+    <small>MDX · MDL · BLP · TGA · DDS · PNG · JPG · ZIP</small>
+  </div>
+  <div class="sanity-summary" id="sanitySummary">
+    <div class="sanity-stat error"><span>Errors</span><strong id="sanityErrors">0</strong></div>
+    <div class="sanity-stat severe"><span>Severe</span><strong id="sanitySevere">0</strong></div>
+    <div class="sanity-stat warning"><span>Warnings</span><strong id="sanityWarnings">0</strong></div>
+    <div class="sanity-stat unused"><span>Unused</span><strong id="sanityUnused">0</strong></div>
+  </div>
+  <div class="sanity-batch-card" id="sanityBatchInfo">No files checked yet.</div>
+  <div class="sanity-filter-box">
+    <div class="sanity-filter-title">Filter results</div>
+    <input id="sanitySearch" placeholder="Search file, warning, bone, texture…" type="text"/>
+    <div class="sanity-filter-checks">
+      <label><input checked="" class="sanity-filter-check" type="checkbox" value="error"/> Errors</label>
+      <label><input checked="" class="sanity-filter-check" type="checkbox" value="severe"/> Severe</label>
+      <label><input checked="" class="sanity-filter-check" type="checkbox" value="warning"/> Warnings</label>
+      <label><input checked="" class="sanity-filter-check" type="checkbox" value="unused"/> Unused</label>
+      <label><input checked="" class="sanity-filter-check" type="checkbox" value="info"/> Info</label>
+    </div>
+  </div>
+  <div class="sanity-secondary-actions">
+    <button class="btn" id="sanityClearBtn" type="button">Clear</button>
+    <button class="btn" id="sanityExportBtn" type="button">Export Report</button>
+  </div>
+</section>
+<section class="sanity-main-panel">
+  <div class="sanity-results-header">
+    <div><strong>Inspection Results</strong><span>Parser, references, hierarchy, skinning, animations and texture checks.</span></div>
+    <span class="mini-pill" id="sanityFileCount">0 files</span>
+  </div>
+  <div class="sanity-empty-guide" id="sanityEmptyGuide">
+    <div class="sanity-empty-icon">✓</div>
+    <strong>Ready to inspect Warcraft assets</strong>
+    <span>Open individual files or drop a package. Results stay grouped by file and sorted by severity.</span>
+  </div>
+  <div class="sanity-results empty" id="sanityResults">Run a check to see model, texture and package issues.</div>
+</section>
+</div>
+<div class="hidden" id="buttonsPanels">
+  <aside class="buttons-source-panel">
+    <div class="buttons-section-kicker">BUTTON SOURCE</div>
+    <h2>Choose the icon artwork</h2>
+    <p class="buttons-copy">Use an image/texture, the current Texture Paint document, or a camera take from Model Lab.</p>
+    <div class="buttons-source-actions">
+      <button class="btn primary" id="buttonImportSourceBtn" type="button">Open image / texture</button>
+      <button class="btn" id="buttonUseTextureBtn" type="button">Use Texture Paint</button>
+      <button class="btn" id="buttonUseModelTextureBtn" type="button">Use selected Model texture</button>
+      <button class="btn photo" id="buttonOpenPhotoModeBtn" type="button">Model Lab · Photo Mode</button>
+    </div>
+    <div class="buttons-drop-zone" id="buttonSourceDropZone" tabindex="0"><strong>Drop source here</strong><span>BLP / TGA / DDS / PNG / JPG / WEBP</span></div>
+    <div class="buttons-source-card">
+      <canvas id="buttonSourceThumb" width="260" height="260"></canvas>
+      <div><strong id="buttonSourceName">No custom source</strong><span id="buttonSourceMeta">Using the current Texture Paint document.</span></div>
+    </div>
+    <div class="buttons-photo-note"><strong>Photo Mode</strong><span>Open Model Lab, frame the character/effect, then click <b>Use camera as button</b>. The take comes back here automatically.</span></div>
+  </aside>
+  <section class="buttons-preview-panel">
+    <div class="buttons-preview-header">
+      <div><span class="buttons-section-kicker">BUTTON PREVIEW</span><h2>Frame the artwork</h2></div>
+      <div class="buttons-variant-tabs" id="buttonVariantTabs">
+        <button class="active" data-button-variant="BTN" type="button">BTN</button><button data-button-variant="DISBTN" type="button">DIS</button><button data-button-variant="PASBTN" type="button">PAS</button><button data-button-variant="DISPASBTN" type="button">DISPAS</button><button data-button-variant="ATC" type="button">ATC</button><button data-button-variant="DISATC" type="button">DISATC</button>
+      </div>
+    </div>
+    <div class="buttons-preview-stage checkerboard"><canvas id="buttonStudioPreview" width="512" height="512"></canvas></div>
+    <div class="buttons-framing-controls">
+      <label>Zoom <input id="buttonCropZoom" type="range" min="60" max="400" value="100"/><output id="buttonCropZoomLabel">100%</output></label>
+      <label>Horizontal <input id="buttonCropX" type="range" min="-100" max="100" value="0"/><output id="buttonCropXLabel">0</output></label>
+      <label>Vertical <input id="buttonCropY" type="range" min="-100" max="100" value="0"/><output id="buttonCropYLabel">0</output></label>
+      <button class="btn small" id="buttonCropResetBtn" type="button">Reset framing</button>
+    </div>
+    <div class="buttons-variant-strip" id="buttonVariantStrip">
+      <button data-button-variant="BTN"><canvas width="72" height="72"></canvas><span>BTN</span></button>
+      <button data-button-variant="DISBTN"><canvas width="72" height="72"></canvas><span>DISBTN</span></button>
+      <button data-button-variant="PASBTN"><canvas width="72" height="72"></canvas><span>PASBTN</span></button>
+      <button data-button-variant="DISPASBTN"><canvas width="72" height="72"></canvas><span>DISPASBTN</span></button>
+      <button data-button-variant="ATC"><canvas width="72" height="72"></canvas><span>ATC</span></button>
+      <button data-button-variant="DISATC"><canvas width="72" height="72"></canvas><span>DISATC</span></button>
+    </div>
+  </section>
+  <aside class="buttons-export-panel" id="buttonsExportHost"></aside>
+</div>
+<div class="hidden" id="logPanels">
+  <section class="log-workspace">
+    <div class="log-toolbar-row">
+      <div class="log-title-block"><strong>Runtime Log</strong><span>Model Lab · CASC · FX · paint history · renderer · errors</span></div>
+      <div class="log-actions">
+        <button class="btn small" id="logRefreshBtn" type="button">Refresh main log</button>
+        <button class="btn small" id="logCopyBtn" type="button">Copy</button>
+        <button class="btn small" id="logExportBtn" type="button">Export .txt</button>
+        <button class="btn small danger" id="logClearBtn" type="button">Clear</button>
+      </div>
+    </div>
+    <div class="log-filter-row">
+      <input id="logSearch" type="search" placeholder="Search CASC, texture, emitter, error, undo…"/>
+      <label><input checked id="logLevelError" type="checkbox"/> Error</label>
+      <label><input checked id="logLevelWarn" type="checkbox"/> Warn</label>
+      <label><input checked id="logLevelInfo" type="checkbox"/> Info</label>
+      <label><input id="logLevelDebug" type="checkbox"/> Debug</label>
+      <label><input checked id="logAutoScroll" type="checkbox"/> Auto-scroll</label>
+      <span class="mini-pill" id="logCount">0/0</span>
+    </div>
+    <div class="log-help">Click a row with details to expand it. The persistent log is also saved under <b>WC3 Asset Studio Data / Logs / runtime.log</b>.</div>
+    <div class="log-entries" id="logEntries"></div>
+  </section>
+</div>
+</aside>
+</main>
+<footer class="statusbar"><span id="statusText">Ready</span><span class="spacer"></span><span id="cursorStatus">X — Y —</span><span class="divider"></span><span id="docStatus">512 × 512</span><span class="divider"></span><span id="alphaStatus">Alpha —</span><span class="divider"></span><span id="formatStatus">RGBA</span></footer>
+</div>
+<div aria-hidden="true" class="legacy-action-bridges">
+<button id="warcraftButtonsBtn" tabindex="-1" type="button">WC3 Buttons</button>
+<button id="sanityCheckerBtn" tabindex="-1" type="button">Sanity Checker</button>
+
+
+</div>
+<input accept=".blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif,.blpproj" hidden="" id="fileInput" type="file"/>
+<input accept=".blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden="" id="convertFileInput" type="file"/>
+<input accept=".blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden="" id="layerFileInput" type="file"/>
+<input accept=".mdl,.mdx" hidden="" id="modelFileInput" type="file"/>
+<input accept=".blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden="" id="modelTextureInput" multiple="" type="file"/>
+<input accept=".mdx,.mdl,.blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif,.zip" hidden="" id="sanityFilesInput" multiple="" type="file"/>
+<input accept=".zip" hidden="" id="sanityZipInput" type="file"/>
+<input accept=".blp,.tga,.dds,.png,.jpg,.jpeg,.webp,.bmp,.gif" hidden="" id="buttonSourceInput" type="file"/>
+
+
+
+
+
+<dialog class="modal" id="newDialog"><form class="modal-card" id="newForm" method="dialog"><div class="modal-title">New document</div><div class="form-grid"><label>Width<input id="newWidth" max="8192" min="1" type="number" value="512"/></label><label>Height<input id="newHeight" max="8192" min="1" type="number" value="512"/></label></div><label>Preset<select id="newPreset"><option value="custom">Custom</option><option value="hdicon">Reforged HD Icon — 256×256</option><option value="sdicon">Classic/SD Icon — 64×64</option><option value="512">Texture — 512×512</option><option value="1024">Texture — 1024×1024</option><option value="2048">Texture — 2048×2048</option></select></label><label>Background<select id="newBackground"><option value="transparent">Transparent</option><option value="white">White</option><option value="black">Black</option></select></label><div class="modal-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="createDocBtn" value="default">Create</button></div></form></dialog>
+<dialog class="modal" id="resizeDialog"><form class="modal-card" method="dialog"><div class="modal-title">Resize image</div><div class="form-grid"><label>Width<input id="resizeWidth" max="8192" min="1" type="number"/></label><label>Height<input id="resizeHeight" max="8192" min="1" type="number"/></label></div><label class="toggle"><input checked="" id="resizeLockAspect" type="checkbox"/><span>Keep aspect ratio</span></label><label class="toggle"><input checked="" id="resizeSmooth" type="checkbox"/><span>Smooth interpolation</span></label><div class="modal-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="confirmResizeBtn" value="default">Apply</button></div></form></dialog>
+<dialog class="modal" id="canvasDialog"><form class="modal-card" method="dialog"><div class="modal-title">Canvas size</div><div class="form-grid"><label>Width<input id="canvasWidth" max="8192" min="1" type="number"/></label><label>Height<input id="canvasHeight" max="8192" min="1" type="number"/></label></div><label>Anchor<select id="canvasAnchor"><option value="center">Center</option><option value="top-left">Top left</option><option value="top">Top</option><option value="top-right">Top right</option><option value="left">Left</option><option value="right">Right</option><option value="bottom-left">Bottom left</option><option value="bottom">Bottom</option><option value="bottom-right">Bottom right</option></select></label><div class="modal-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="confirmCanvasBtn" value="default">Apply</button></div></form></dialog>
+<dialog class="modal" id="exportDialog"><form class="modal-card wide" id="exportForm" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Export for Warcraft III Reforged</div><div class="modal-subtitle" id="exportSubtitle">Choose BLP or TGA explicitly.</div></div><span class="safe-badge">WARCRAFT</span></div>
+<div class="export-summary"><div><span>Format</span><strong id="exportFormat">BLP1</strong></div><div><span>Image</span><strong id="exportDimensions"></strong></div><div><span>Alpha</span><strong id="exportAlphaInfo"></strong></div><div><span>Asset</span><strong id="exportAssetType"></strong></div></div>
+<div class="export-options single-row"><label>Output format<select id="gameExportFormat"><option value="blp">BLP1 (.blp)</option><option value="tga">TGA 32-bit (.tga)</option></select></label></div>
+<div class="export-options" id="blpOptions"><label>BLP alpha<select id="blpAlphaBits"><option value="8">8-bit — smooth transparency</option><option value="4">4-bit — smaller</option><option value="1">1-bit — hard cutout</option><option value="0">0-bit — opaque</option></select></label><label class="toggle"><input id="exportDither" type="checkbox"/><span>Palette dithering</span></label></div>
+<label class="toggle export-toggle" id="mipmapOption"><input checked="" id="generateMipmaps" type="checkbox"/><span>Generate mipmaps in BLP</span></label>
+<div class="warning ok hidden" id="tgaInfo">TGA will be exported as 32-bit BGRA, top-left origin, with full alpha.</div>
+<div class="warning-list" id="exportWarnings"></div>
+<div class="modal-actions"><button class="btn" value="cancel">Cancel</button><button class="btn primary" id="confirmExportBtn" value="default">Export</button></div>
+</form></dialog>
+
+
+
+<dialog class="modal" id="creditsDialog"><form class="modal-card wide credits-modal" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Credits</div><div class="modal-subtitle">WC3 Asset Studio v1.1</div></div><span class="safe-badge">THANKS</span></div><div class="credits-grid"><section class="credits-section"><h3>Project credit</h3><p><strong>DarkSir#1620</strong> — project direction, testing, feature requests and Warcraft III workflow vision.</p></section><section class="credits-section"><h3>Free projects used</h3><ul><li><strong>mdx-m3-viewer</strong> — Warcraft III model-format behavior and implementation concepts by Chananya Freiman and contributors (MIT).</li><li><strong>Warcraft Sanity Checker / Sanity Tester</strong> — validation rules adapted from the sanity tester in <strong>mdx-m3-viewer</strong>. GitHub: <a href="https://github.com/flowtsohg/mdx-m3-viewer" target="_blank" rel="noopener noreferrer">github.com/flowtsohg/mdx-m3-viewer</a></li><li><strong>JPEG decoder core</strong> — adapted from notmasteryet / pdf.js lineage for BLP1 raw B,G,R,A decoding (Apache-2.0).</li></ul></section><section class="credits-section"><h3>Notes</h3><p>This build keeps the attribution for the free/open projects used in the app. Full notices are available in <code>THIRD_PARTY_LICENSES.md</code>.</p></section></div><div class="modal-actions"><button class="btn primary" value="default">Close</button></div></form></dialog>
+
+<div class="busy-overlay hidden" id="busyOverlay"><div class="spinner"></div><strong id="busyText">Processing…</strong></div>
+<script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v1-credits-20260912"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v1-credits-20260912"></script><script src="js/editor.js?v1-credits-20260912"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v1-credits-20260912"></script><script src="js/war3-model-core.js?v1-credits-20260912"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
+<script src="js/model-lab.js?v1-credits-20260912"></script><script src="js/buttons-studio.js?v2-buttons-frame-20260914"></script><script src="js/sanity.js?v1-credits-20260912"></script><script src="js/workspace-ui.js?v1-credits-20260912"></script>
+</body>
+</html>

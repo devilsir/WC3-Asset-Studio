@@ -1,0 +1,32 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+release/
+build/
+*.exe
+*.msi
+*.zip
+*.7z
+*.asar
+*.blockmap
+latest*.yml
+
+# Portable/runtime data
+WC3 Asset Studio Data/
+CascLib.dll
+
+# Logs / caches
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.cache/
+.temp/
+tmp/

@@ -1,0 +1,15 @@
+* text=auto
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.ps1 text eol=crlf
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.blp binary
+*.tga binary
+*.dds binary
+*.mdx binary
