@@ -95,7 +95,7 @@ body[data-module="model"] .model-info-box{margin-top:8px;background:#0c1218;bord
 body[data-module="model"] .model-info-box.compact{font-size:9.5px}
 
 /* Setup */
-body[data-module="model"] .model-actions-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin-top:7px}
+body[data-module="model"] .model-actions-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:7px}
 body[data-module="model"] .model-actions-grid .btn{width:100%;min-width:0;padding:6px 5px;font-size:9px}
 body[data-module="model"] .file-picker-btn{display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;user-select:none;font-weight:700}
 body[data-module="model"] .file-picker-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

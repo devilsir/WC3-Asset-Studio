@@ -5,7 +5,7 @@
 <meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta content="dark" name="color-scheme"/>
-<title>WC3 Asset Studio v1.1</title>
+<title>WC3 Asset Studio v1.1.1</title>
 <link href="css/app.css?v1-credits-20260912" rel="stylesheet"/>
 <link href="css/model-lab.css?v1-credits-20260912" rel="stylesheet"/>
 </head>
@@ -13,7 +13,7 @@
 <div id="app">
 <header class="topbar app-header unified-header">
   <div class="unified-menubar onebar">
-    <div class="brand no-mark"><div><strong>WC3 Asset Studio v1.1</strong></div></div>
+    <div class="brand no-mark"><div><strong>WC3 Asset Studio v1.1.1</strong></div></div>
     <div class="header-credits-slot" aria-label="Credits area">
       <button class="btn" id="creditsBtn" type="button">Credits</button>
     </div>
@@ -187,7 +187,9 @@
 <div class="model-actions-grid compact-model-actions">
 <label class="btn file-picker-btn primary" for="modelFileInput" id="openModelBtn" role="button" tabindex="0">Open Model</label>
 <label class="btn file-picker-btn" for="modelTextureInput" id="addModelTexturesBtn" role="button" tabindex="0">Add Textures</label>
-<button class="btn" id="exportModelCopyBtn">Export Model Copy</button>
+<button class="btn primary" id="saveEditedModelBtn">Save Model</button>
+<button class="btn" id="exportModelTexturesBtn">Export Textures</button>
+<button class="btn" id="exportModelPackageBtn">Model + Textures ZIP</button>
 </div>
 <div class="model-mini-note">Selected texture: <strong id="modelSelectedTextureName">No texture selected</strong> <span class="model-mini-note">· 3D paint auto-syncs to the clicked surface texture</span></div>
 <div class="model-drop-zone" id="modelDropZone" tabindex="0"><strong>Drop model or textures here</strong><span>MDX / MDL + BLP / TGA / DDS / PNG / JPG</span></div>
@@ -320,7 +322,7 @@
 <section class="panel model-core-panel" data-model-section="inspect">
 <div class="panel-heading"><div class="panel-title">WARCRAFT MODEL DATA</div><span class="mini-pill" id="modelCoreVersion">v7</span></div>
 <div class="model-info-box compact" id="modelCoreInfo">Shared parser not loaded yet.</div>
-<div class="model-mini-note">Unknown MDX chunks are preserved as raw chunk metadata instead of being silently treated as known data. Texture-path export patches only the path table and keeps the rest of the MDX byte-for-byte intact.</div>
+<div class="model-mini-note">Unknown MDX chunks remain untouched. Save Model now writes edited texture paths plus newly authored cameras, ParticleEmitter2 objects and effect attachments. Use Model + Textures ZIP to keep painted external textures together with the edited model.</div>
 </section>
 <section class="panel model-uv-panel" data-model-section="paint view">
 <div class="panel-heading"><div><div class="panel-title">UV INSPECTOR</div><span class="model-panel-subtitle">Live texture-space hit inspection</span></div><span class="mini-pill" id="uvViewInfo">No UV</span></div>
@@ -492,10 +494,10 @@
 
 
 
-<dialog class="modal" id="creditsDialog"><form class="modal-card wide credits-modal" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Credits</div><div class="modal-subtitle">WC3 Asset Studio v1.1</div></div><span class="safe-badge">THANKS</span></div><div class="credits-grid"><section class="credits-section"><h3>Project credit</h3><p><strong>DarkSir#1620</strong> — project direction, testing, feature requests and Warcraft III workflow vision.</p></section><section class="credits-section"><h3>Free projects used</h3><ul><li><strong>mdx-m3-viewer</strong> — Warcraft III model-format behavior and implementation concepts by Chananya Freiman and contributors (MIT).</li><li><strong>Warcraft Sanity Checker / Sanity Tester</strong> — validation rules adapted from the sanity tester in <strong>mdx-m3-viewer</strong>. GitHub: <a href="https://github.com/flowtsohg/mdx-m3-viewer" target="_blank" rel="noopener noreferrer">github.com/flowtsohg/mdx-m3-viewer</a></li><li><strong>JPEG decoder core</strong> — adapted from notmasteryet / pdf.js lineage for BLP1 raw B,G,R,A decoding (Apache-2.0).</li></ul></section><section class="credits-section"><h3>Notes</h3><p>This build keeps the attribution for the free/open projects used in the app. Full notices are available in <code>THIRD_PARTY_LICENSES.md</code>.</p></section></div><div class="modal-actions"><button class="btn primary" value="default">Close</button></div></form></dialog>
+<dialog class="modal" id="creditsDialog"><form class="modal-card wide credits-modal" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Credits</div><div class="modal-subtitle">WC3 Asset Studio v1.1.1</div></div><span class="safe-badge">THANKS</span></div><div class="credits-grid"><section class="credits-section"><h3>Project credit</h3><p><strong>DarkSir#1620</strong> — project direction, testing, feature requests and Warcraft III workflow vision.</p></section><section class="credits-section"><h3>Free projects used</h3><ul><li><strong>mdx-m3-viewer</strong> — Warcraft III model-format behavior and implementation concepts by Chananya Freiman and contributors (MIT).</li><li><strong>Warcraft Sanity Checker / Sanity Tester</strong> — validation rules adapted from the sanity tester in <strong>mdx-m3-viewer</strong>. GitHub: <a href="https://github.com/flowtsohg/mdx-m3-viewer" target="_blank" rel="noopener noreferrer">github.com/flowtsohg/mdx-m3-viewer</a></li><li><strong>JPEG decoder core</strong> — adapted from notmasteryet / pdf.js lineage for BLP1 raw B,G,R,A decoding (Apache-2.0).</li></ul></section><section class="credits-section"><h3>Notes</h3><p>This build keeps the attribution for the free/open projects used in the app. Full notices are available in <code>THIRD_PARTY_LICENSES.md</code>.</p></section></div><div class="modal-actions"><button class="btn primary" value="default">Close</button></div></form></dialog>
 
 <div class="busy-overlay hidden" id="busyOverlay"><div class="spinner"></div><strong id="busyText">Processing…</strong></div>
-<script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v1-credits-20260912"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v1-credits-20260912"></script><script src="js/editor.js?v1-credits-20260912"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v1-credits-20260912"></script><script src="js/war3-model-core.js?v1-credits-20260912"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
+<script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v1-credits-20260912"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v1-credits-20260912"></script><script src="js/editor.js?v1-credits-20260912"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v1-credits-20260912"></script><script src="js/war3-model-core.js?v1-credits-20260912"></script><script src="js/model-save.js?v1-save-20260915"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
 <script src="js/model-lab.js?v1-credits-20260912"></script><script src="js/buttons-studio.js?v2-buttons-frame-20260914"></script><script src="js/sanity.js?v1-credits-20260912"></script><script src="js/workspace-ui.js?v1-credits-20260912"></script>
 </body>
 </html>

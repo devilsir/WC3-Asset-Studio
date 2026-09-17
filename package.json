@@ -1,7 +1,7 @@
 {
   "name": "wc3-asset-studio",
-  "version": "1.1.0",
-  "description": "WC3 Asset Studio v1.1 - portable Warcraft III asset editor",
+  "version": "1.1.1",
+  "description": "WC3 Asset Studio v1.1.1 - portable Warcraft III asset editor",
   "author": "DarkSir#1620",
   "main": "main.js",
   "private": true,
@@ -19,7 +19,7 @@
     "appId": "com.darksir.wc3assetstudio",
     "productName": "WC3 Asset Studio",
     "executableName": "WC3 Asset Studio",
-    "artifactName": "WC3 Asset Studio v1.1 Portable.${ext}",
+    "artifactName": "WC3 Asset Studio v1.1.1 Portable.${ext}",
     "asar": true,
     "compression": "maximum",
     "directories": {
@@ -30,8 +30,7 @@
       "main.js",
       "preload.js",
       "package.json",
-      "app/**/*",
-      "assets/**/*"
+      "app/**/*"
     ],
     "win": {
       "target": [

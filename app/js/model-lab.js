@@ -83,7 +83,7 @@
     const source=app.getCompositeCanvas();
     if(!slot.canvas||slot.canvas.width!==source.width||slot.canvas.height!==source.height){slot.canvas=document.createElement('canvas');slot.canvas.width=source.width;slot.canvas.height=source.height;}
     const ctx=slot.canvas.getContext('2d',{willReadFrequently:true});ctx.clearRect(0,0,slot.canvas.width,slot.canvas.height);ctx.drawImage(source,0,0);
-    slot.imageData=ctx.getImageData(0,0,slot.canvas.width,slot.canvas.height);slot.width=slot.canvas.width;slot.height=slot.canvas.height;
+    slot.imageData=ctx.getImageData(0,0,slot.canvas.width,slot.canvas.height);slot.width=slot.canvas.width;slot.height=slot.canvas.height;slot.edited=true;
     bumpTextureRevision(index);return true;
   }
   let textureUiRefreshPending=false;
@@ -118,7 +118,7 @@
     const slot=state.textures[snap.index];
     if(!slot.canvas)slot.canvas=document.createElement('canvas');slot.canvas.width=snap.width;slot.canvas.height=snap.height;
     const ctx=slot.canvas.getContext('2d',{willReadFrequently:true});ctx.clearRect(0,0,snap.width,snap.height);ctx.putImageData(snap.imageData,0,0);
-    slot.imageData=ctx.getImageData(0,0,snap.width,snap.height);slot.width=snap.width;slot.height=snap.height;slot.error='';slot.revision=(slot.revision||1)+1;
+    slot.imageData=ctx.getImageData(0,0,snap.width,snap.height);slot.width=snap.width;slot.height=snap.height;slot.error='';slot.edited=true;slot.revision=(slot.revision||1)+1;
     state.selectedTextureIndex=snap.index;state.editorTextureIndex=snap.index;state.paintTextureIndex=-1;
     await app.openImageData(slot.imageData,basename(slot.ref)||`texture_${snap.index+1}`);
     bumpTextureRevision(snap.index);renderTextureList();updateSelectedTextureLabel();drawUvView();sync3DPaintUi();scheduleTextureUiRefresh();markDirty();
@@ -277,13 +277,13 @@
     let textureId=state.selectedTextureIndex>=0?state.selectedTextureIndex:0;
     if(!(state.model.textureDefs||[])[textureId]){
       state.model.textureDefs=(state.model.textureDefs||[]); state.model.textures=(state.model.textures||[]);
-      const fallbackPath='Textures\Clouds8x8Fire.blp';
+      const fallbackPath='Textures\\Clouds8x8Fire.blp';
       state.model.textureDefs.push({path:fallbackPath,replaceableId:0}); state.model.textures.push(fallbackPath);
       state.textures.push({ref:fallbackPath,resolvedName:fallbackPath,canvas:null,imageData:null,width:0,height:0,error:'',revision:1});
       textureId=state.model.textureDefs.length-1;
     }
     const pivot=authoringPivot(); const id=nextAuthorNodeId();
-    const emitter={id,objectId:id,type:'ParticleEmitter2',name:`ParticleEmitter2_${id}`,parentId:-1,flags:0,pivot:{x:pivot.x,y:pivot.y,z:pivot.z},textureId,filterMode:1,filterModeName:'Additive',rows:8,columns:8,headOrTail:0,emissionRate:48,speed:32,variation:0.2,latitude:24,gravity:0,lifeSpan:0.9,width:32,length:32,timeMiddle:0.45,segmentScaling:[0.22,0.42,0.10],segmentAlphas:[255,190,0],segmentColors:[[1,0.78,0.22],[1,0.35,0.08],[0.3,0.02,0]],replaceableId:0};
+    const emitter={id,objectId:id,type:'ParticleEmitter2',__custom:true,name:`ParticleEmitter2_${id}`,parentId:-1,flags:0,pivot:{x:pivot.x,y:pivot.y,z:pivot.z},textureId,filterMode:1,filterModeName:'Additive',rows:8,columns:8,headOrTail:0,emissionRate:48,speed:32,variation:0.2,latitude:24,gravity:0,lifeSpan:0.9,width:32,length:32,timeMiddle:0.45,segmentScaling:[0.22,0.42,0.10],segmentAlphas:[255,190,0],segmentColors:[[1,0.78,0.22],[1,0.35,0.08],[0.3,0.02,0]],replaceableId:0};
     state.model.nodes.push(emitter); state.model.particleEmitters2=(state.model.particleEmitters2||[]); state.model.particleEmitters2.push(emitter); state.selectedNodeId=id; state.fxPreviewMode=true; state.fxPreviewStartedAt=performance.now();
     diag('info','Authoring','ParticleEmitter2 created',{id,name:emitter.name,textureId,pivot:emitter.pivot});
     renderEverything(); if(state.casc.enabled) await loadCascEffectAssets(true); markDirty(); return emitter;
@@ -294,7 +294,7 @@
     const path=(prompt('Effect model path (.mdx / .mdl):',defaultPath)||'').trim(); if(!path) return null;
     const name=(prompt('Attachment name:',`Effect_${(state.model.nodes||[]).length+1}`)||'').trim()||`Effect_${(state.model.nodes||[]).length+1}`;
     const pivot=authoringPivot(); const id=nextAuthorNodeId();
-    const node={id,objectId:id,type:'Attachment',name,parentId:-1,flags:0,pivot:{x:pivot.x,y:pivot.y,z:pivot.z},path};
+    const node={id,objectId:id,type:'Attachment',__custom:true,name,parentId:-1,flags:0,pivot:{x:pivot.x,y:pivot.y,z:pivot.z},path};
     state.model.nodes.push(node); state.selectedNodeId=id; diag('info','Authoring','Attachment effect created',{id,name,path,pivot:node.pivot}); renderEverything(); if(state.casc.enabled) await loadCascEffectAssets(true); markDirty(); return node;
   }
   function performanceMode(){ const el=$('#modelPerformanceMode'); return el ? el.value : 'auto'; }
@@ -696,6 +696,7 @@
         height: imageData ? imageData.height : 0,
         format: ext || '—',
         revision: 1,
+        edited: false,
         error
       });
     }
@@ -1737,7 +1738,10 @@
   }
   function updateFxSourceWarning(){
     const el=$('#modelFxSourceWarning');if(!el)return;
-    if(!state.model){el.hidden=true;return;}
+    // This warning only belongs to the Effects property tab. Keeping it out of
+    // the other Model Lab tabs prevents CASC/FX diagnostics from covering the
+    // viewport while the user is painting, rigging, editing UVs, materials, etc.
+    if(state.activePropPanel!=='effects'||!state.model){el.hidden=true;return;}
     const relevant=(state.model.nodes||[]).filter(n=>n.type==='ParticleEmitter2'||((n.type==='Attachment'||n.type==='ParticleEmitter'||n.type==='ParticleEmitterPopcorn')&&n.path));
     if(!relevant.length){el.hidden=true;return;}
     const sources=relevant.map(n=>effectSourceForNode(n)),non=sources.filter(x=>x!=='casc'),fallback=sources.filter(x=>x==='fallback').length,local=sources.filter(x=>x==='local').length;
@@ -2651,17 +2655,91 @@
     app.setStatus(`Texture path ${index} updated`);
   }
 
-  function exportModelCopy(){
-    if(!state.model || !state.model.sourceBuffer) return;
+  function downloadModelBlob(blob,name){
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1200);
+  }
+  function safeZipPath(path,fallback='texture.blp'){
+    let out=String(path||fallback).replace(/\\/g,'/').replace(/^[A-Za-z]:/,'').replace(/^\/+/, '');
+    const parts=[];for(const part of out.split('/')){if(!part||part==='.')continue;if(part==='..'){if(parts.length)parts.pop();continue;}parts.push(part.replace(/[<>:"|?*]/g,'_'));}
+    return parts.join('/')||fallback;
+  }
+  function modelBaseName(){
+    const ext=(state.model&&state.model.type||'MDX').toLowerCase();
+    return (state.model&&state.model.sourceName||state.model&&state.model.name||`model.${ext}`).replace(/\.(mdx|mdl)$/i,'');
+  }
+  async function blobBytes(blob){return new Uint8Array(await blob.arrayBuffer());}
+  function originalTextureBytes(slot){
+    const candidates=[slot&&slot.resolvedName,slot&&slot.ref].filter(Boolean).map(normalizePath);
+    for(const [name,entry] of state.packageFiles.entries()){
+      const n=normalizePath(name);if(candidates.some(c=>n===c||basename(n).toLowerCase()===basename(c).toLowerCase()))return entry&&entry.data?new Uint8Array(entry.data):null;
+    }
+    for(const rec of state.casc.loaded.values()){
+      const names=[rec&&rec.resolvedPath,rec&&rec.relativePath,rec&&rec.requestedPath].filter(Boolean).map(normalizePath);
+      if(!names.some(n=>candidates.some(c=>n===c||basename(n).toLowerCase()===basename(c).toLowerCase())))continue;
+      const ab=arrayBufferFromIpc(rec&&rec.data);if(ab)return new Uint8Array(ab);
+    }
+    return null;
+  }
+  async function canvasEncodedBytes(canvas,imageData,ext){
+    ext=String(ext||'').toLowerCase();
+    if(ext==='blp')return blobBytes(BLP.encodePaletted(imageData,{mipmaps:true,dither:false,alphaBits:BLP.hasMeaningfulAlpha(imageData)?8:0}));
+    if(ext==='tga')return blobBytes(TGA.encode(imageData));
+    const mime=ext==='jpg'||ext==='jpeg'?'image/jpeg':ext==='webp'?'image/webp':'image/png';
+    const blob=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(new Error('Texture encoder returned no data.')),mime,0.95));
+    return blobBytes(blob);
+  }
+  async function buildTextureExportFiles(){
+    const files=[],pathOverrides=[],notes=[];const defs=state.model&&state.model.textureDefs||[];
+    for(let idx=0;idx<defs.length;idx++){
+      const def=defs[idx]||{},slot=state.textures[idx],rid=Number(def.replaceableId||0),ref=String(def.path||slot&&slot.ref||'');
+      if(!ref&&rid){notes.push(`Slot ${idx}: ReplaceableId ${rid} (Warcraft runtime texture; no external file).`);pathOverrides[idx]='';continue;}
+      if(!ref){notes.push(`Slot ${idx}: empty texture path.`);continue;}
+      let target=safeZipPath(ref,`Textures/texture_${idx}.blp`),ext=(target.split('.').pop()||'').toLowerCase(),bytes=null;
+      if(slot&&!slot.edited)bytes=originalTextureBytes(slot);
+      if(!bytes&&slot&&slot.canvas&&slot.imageData){
+        if(!['blp','tga','png','jpg','jpeg','webp'].includes(ext)){
+          target=target.replace(/\.[^/.]+$/,'')+'.blp';ext='blp';notes.push(`Slot ${idx}: edited ${ref} exported as ${target} because ${String(ref).split('.').pop()||'that format'} encoding is not available.`);
+        }
+        bytes=await canvasEncodedBytes(slot.canvas,slot.imageData,ext);
+      }
+      if(!bytes){notes.push(`Slot ${idx}: ${ref} could not be included because its source pixels were not loaded.`);pathOverrides[idx]=ref;continue;}
+      files.push({name:target,data:bytes});pathOverrides[idx]=target.replace(/\//g,'\\');
+    }
+    return {files,pathOverrides,notes};
+  }
+  function clonedModelForPaths(paths){
+    const model={...state.model};model.textureDefs=(state.model.textureDefs||[]).map((d,i)=>({...d,path:paths[i]!=null?paths[i]:d.path}));model.textures=model.textureDefs.map(d=>d.path||'');return model;
+  }
+  function serializeCurrentModel(model=state.model){
+    if(!state.model||!state.model.sourceBuffer)throw new Error('No editable MDX / MDL model is loaded.');
+    const saver=window.WC3_MODEL_SAVE;if(!saver||!saver.saveEditedModel)throw new Error('Model save module is unavailable.');
+    return saver.saveEditedModel(state.model.sourceBuffer,state.model.sourceName||state.model.name,model);
+  }
+  function saveEditedModel(){
+    if(!state.model||!state.model.sourceBuffer)return false;
     try{
-      const paths=(state.model.textureDefs||[]).map(t=>t.path||'');
-      const patched=modelCore.patchTexturePaths(state.model.sourceBuffer,state.model.sourceName||state.model.name,paths);
-      const ext=(state.model.type||'MDX').toLowerCase();
-      const base=(state.model.sourceName||state.model.name||`model.${ext}`).replace(/\.(mdx|mdl)$/i,'');
-      const blob=new Blob([patched],{type:state.model.type==='MDL'?'text/plain':'application/octet-stream'});
-      const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${base}_BLPPaint.${ext}`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
-      app.setStatus('Model copy exported · only texture paths patched');
-    }catch(e){alert('Could not export model copy.\n\n'+e.message);}
+      const result=serializeCurrentModel(),ext=(result.type||state.model.type||'MDX').toLowerCase(),base=modelBaseName();
+      downloadModelBlob(new Blob([result.bytes],{type:result.type==='MDL'?'text/plain':'application/octet-stream'}),`${base}_edited.${ext}`);
+      const c=result.changes||{};app.setStatus(`Model saved · ${String(result.type||'').toUpperCase()} · ${c.cameras||0} camera(s), ${c.particleEmitters2||0} emitter(s), ${c.attachments||0} attachment(s) added`);
+      diag('info','Model Save','Edited model serialized',{type:result.type,name:`${base}_edited.${ext}`,changes:c});return true;
+    }catch(e){diag('error','Model Save','Could not save edited model',e);alert('Could not save edited model.\n\n'+(e.message||e));return false;}
+  }
+  async function exportModelTextures(){
+    if(!state.model)return false;
+    try{
+      const pack=await buildTextureExportFiles();if(!pack.files.length)throw new Error('No external texture files are available to export.');
+      const manifest=['WC3 Asset Studio texture export','',...pack.notes].join('\n');pack.files.push({name:'WC3_Asset_Studio_Texture_Export.txt',data:manifest});
+      downloadModelBlob(SimpleZip.create(pack.files),`${modelBaseName()}_textures.zip`);app.setStatus(`Textures exported · ${pack.files.length-1} file(s)`);return true;
+    }catch(e){diag('error','Model Save','Could not export textures',e);alert('Could not export model textures.\n\n'+(e.message||e));return false;}
+  }
+  async function exportModelPackage(){
+    if(!state.model||!state.model.sourceBuffer)return false;
+    try{
+      const pack=await buildTextureExportFiles(),packageModel=clonedModelForPaths(pack.pathOverrides),result=serializeCurrentModel(packageModel),ext=(result.type||state.model.type||'MDX').toLowerCase(),base=modelBaseName(),modelName=`${base}_edited.${ext}`;
+      const files=[{name:modelName,data:result.bytes},...pack.files];
+      const c=result.changes||{};files.push({name:'WC3_Asset_Studio_SaveInfo.txt',data:[`Model: ${modelName}`,`Format: ${String(result.type||'').toUpperCase()}`,`Textures included: ${pack.files.length}`,`New cameras: ${c.cameras||0}`,`New ParticleEmitter2: ${c.particleEmitters2||0}`,`New attachments: ${c.attachments||0}`,'',...pack.notes].join('\n')});
+      downloadModelBlob(SimpleZip.create(files),`${base}_edited_package.zip`);app.setStatus(`Full model package saved · ${pack.files.length} texture(s)`);diag('info','Model Save','Model + texture package exported',{model:modelName,textures:pack.files.length,changes:c,notes:pack.notes});return true;
+    }catch(e){diag('error','Model Save','Could not save model package',e);alert('Could not save model + textures package.\n\n'+(e.message||e));return false;}
   }
 
   async function loadTextureSlot(index){
@@ -3113,6 +3191,9 @@
       propsContent.querySelectorAll('[data-model-prop-panel]').forEach(panel=>panel.classList.toggle('model-prop-hidden', panel.dataset.modelPropPanel !== key));
       toolHost.querySelectorAll('[data-model-panel]').forEach(btn=>btn.classList.toggle('active', btn.dataset.modelPanel === key));
       const canvas=$('#model3dCanvas'); if(canvas){ canvas.classList.toggle('paint-mode',can3DPaint()); canvas.style.cursor=''; }
+      // Re-evaluate the CASC/FX banner immediately when switching sub-tabs so
+      // it disappears as soon as Effects is no longer active.
+      updateFxSourceWarning();
       markDirty();
     };
     propsHost.querySelectorAll('[data-model-prop]').forEach(btn=>btn.addEventListener('click',()=>activatePanel(btn.dataset.modelProp)));
@@ -3218,7 +3299,9 @@
     }
     $('#modelFileInput').addEventListener('change', e => { openModelFile(e.target.files[0]); e.target.value=''; });
     $('#modelTextureInput').addEventListener('change', e => { addTextureFiles(e.target.files); e.target.value=''; });
-    $('#exportModelCopyBtn').addEventListener('click', exportModelCopy);
+    $('#saveEditedModelBtn')?.addEventListener('click', saveEditedModel);
+    $('#exportModelTexturesBtn')?.addEventListener('click', ()=>exportModelTextures());
+    $('#exportModelPackageBtn')?.addEventListener('click', ()=>exportModelPackage());
     $('#modelGeosetSelect').addEventListener('change', ()=>{invalidatePickCache();drawUvView();markDirty();});
     const uvCanvas=$('#modelUvCanvas');
     const setUvZoom=(z)=>{state.uvView.zoom=clamp(z,.1,32);drawUvView();};
@@ -3333,6 +3416,10 @@
     setMode,
     getModel:()=>state.model,
     getState:()=>state,
+    save:exportModelPackage,
+    saveModel:saveEditedModel,
+    exportTextures:exportModelTextures,
+    exportPackage:exportModelPackage,
     getSelectedTextureCanvas(){const i=state.selectedTextureIndex>=0?state.selectedTextureIndex:state.editorTextureIndex;const c=currentTextureCanvas(i);if(!c)return null;const out=document.createElement('canvas');out.width=c.width;out.height=c.height;out.getContext('2d',{willReadFrequently:true}).drawImage(c,0,0);return out;},
     getSelectedTextureName(){const i=state.selectedTextureIndex>=0?state.selectedTextureIndex:state.editorTextureIndex;const s=state.textures[i];return s?basename(s.ref):'';},
     debug:{
