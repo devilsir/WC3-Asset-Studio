@@ -1,0 +1,68 @@
+{
+  "name": "wc3-asset-studio",
+  "version": "1.3.0",
+  "description": "WC3 Asset Studio v1.3 - Warcraft III model, animation, rig, material and texture editor",
+  "author": "DarkSir#1620",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "verify": "node scripts/verify-build.js",
+    "start": "electron .",
+    "dist:win": "npm run verify && electron-builder --win portable --x64",
+    "dist:dir": "npm run verify && electron-builder --win dir --x64"
+  },
+  "devDependencies": {
+    "electron": "44.3.0",
+    "electron-builder": "26.16.1"
+  },
+  "build": {
+    "appId": "com.darksir.wc3assetstudio",
+    "productName": "WC3 Asset Studio",
+    "executableName": "WC3 Asset Studio",
+    "artifactName": "WC3 Asset Studio v1.3 Portable.${ext}",
+    "asar": true,
+    "compression": "maximum",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "app/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "portable": {
+      "requestExecutionLevel": "user"
+    },
+    "extraResources": [
+      {
+        "from": "tools/casc-reader.ps1",
+        "to": "tools/casc-reader.ps1"
+      },
+      {
+        "from": "tools/casc-cdn-reader.js",
+        "to": "tools/casc-cdn-reader.js"
+      },
+      {
+        "from": "assets/file-model.ico",
+        "to": "file-icons/model.ico"
+      },
+      {
+        "from": "assets/file-texture.ico",
+        "to": "file-icons/texture.ico"
+      }
+    ]
+  }
+}
