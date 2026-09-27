@@ -3,23 +3,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' wc3asset:; script-src 'self' wc3asset:; style-src 'self' wc3asset: 'unsafe-inline'; img-src 'self' wc3asset: data: blob:; media-src 'self' wc3asset: data: blob:; font-src 'self' wc3asset: data:; connect-src 'self' wc3asset: data: blob: https: http:; worker-src 'self' wc3asset: blob:; object-src 'none'; base-uri 'none'; form-action 'none'"/>
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta content="dark" name="color-scheme"/>
-<title>WC3 Asset Studio v1.3</title>
-<link href="css/app.css?v3-texture-scroll-stage-20260920" rel="stylesheet"/>
-<link href="css/model-lab.css?v5-pro-workflow-20260920" rel="stylesheet"/>
+<title>WC3 Asset Studio v1.4</title>
+<link href="css/app.css?v6-sanity-tabs-texturelookup-v14-20260927" rel="stylesheet"/>
+<link href="css/model-lab.css?v6-casc-workspace-20260923" rel="stylesheet"/>
+<link href="css/effects-lab.css?v1-effects-lab-20260925" rel="stylesheet"/>
 </head>
 <body>
 <div id="app">
 <header class="topbar app-header unified-header">
   <div class="unified-menubar onebar">
-    <div class="brand no-mark"><div><strong>WC3 Asset Studio v1.3</strong></div></div>
+    <div class="brand no-mark"><div><strong>WC3 Asset Studio v1.4</strong></div></div>
     <div class="header-credits-slot" aria-label="Credits area">
       <button class="btn" id="creditsBtn" type="button">Credits</button>
     </div>
     <div class="workspace-inline-tabs" id="workspaceTabs" aria-label="Workspaces">
       <button class="workspace-tab active" data-module="texture" id="workspaceTexture">Texture Paint</button>
       <button class="workspace-tab" data-module="model" id="workspaceModel">Model Lab</button>
+      <button class="workspace-tab" data-module="effects" id="workspaceEffects">Effects Lab</button>
+      <button class="workspace-tab" data-module="casc" id="workspaceCasc">CASC</button>
       <button class="workspace-tab" data-module="sanity" id="workspaceSanity">Sanity</button>
       <button class="workspace-tab" data-module="buttons" id="workspaceButtons">WC3 Buttons</button>
       <button class="workspace-tab" data-module="log" id="workspaceLog">Log</button>
@@ -35,7 +39,7 @@
         <button class="btn" id="exportPngBtn">PNG</button>
         <button class="btn" id="exportGameBtn">War3</button>
       </div>
-      <details class="header-more-menu"><summary class="btn">More</summary><div class="header-more-popover"><button class="btn" id="convertBtn">Convert File</button><button class="btn" id="defaultFileTypesBtn" type="button">Default File Types</button><button class="btn" id="resizeBtn">Resize Image</button><button class="btn" id="canvasSizeBtn">Canvas Size</button></div></details>
+      <details class="header-more-menu"><summary class="btn">More</summary><div class="header-more-popover"><button class="btn" id="convertBtn">Convert File</button><button class="btn" id="defaultFileTypesBtn" type="button">Default File Types</button><button class="btn" id="resizeBtn">Resize Image</button><button class="btn" id="canvasSizeBtn">Canvas Size</button><div class="casc-more-settings" id="cascMoreSettings"><div class="more-menu-section-title">MODEL GALLERY PERFORMANCE</div><label class="more-menu-field"><span>Thumbnail resolution</span><select id="cascThumbnailQuality"><option value="320">Original · 320 px</option><option value="256">High · 256 px</option><option value="192" selected>Balanced · 192 px</option><option value="128">Low · 128 px</option><option value="96">Very low · 96 px</option></select></label><label class="more-menu-field"><span>Thumbnail detail</span><select id="cascThumbnailTextureMode"><option value="textured" selected>Textured · visible cards</option><option value="mesh">Mesh only · fastest</option></select></label><div class="more-menu-hint">Lower resolution reduces GPU/CPU use. Mesh only skips gallery texture downloads and decoding; full Viewer / Export quality is unaffected.</div><button class="btn" id="cascClearThumbnailCache" type="button">Clear thumbnail cache</button></div></div></details>
       <div class="blender-window-actions">
         <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
         <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>
@@ -47,6 +51,8 @@
 <nav aria-label="Studio modules" class="module-nav legacy-module-nav" id="moduleNav">
 <button class="module-nav-btn active" data-module="texture" id="legacyNavTexture"><span class="module-icon">✦</span><span><strong>Texture Paint</strong><small>BLP / TGA / layers</small></span></button>
 <button class="module-nav-btn" data-module="model" id="legacyNavModel"><span class="module-icon">◆</span><span><strong>Model Lab</strong><small>MDX / MDL / UV</small></span></button>
+<button class="module-nav-btn" data-module="effects" id="legacyNavEffects"><span class="module-icon">✹</span><span><strong>Effects Lab</strong><small>EPF / CFX / PKB</small></span></button>
+<button class="module-nav-btn" data-module="casc" id="legacyNavCasc"><span class="module-icon">◈</span><span><strong>CASC</strong><small>Game Storage</small></span></button>
 <button class="module-nav-btn" data-module="sanity" id="legacyNavSanity"><span class="module-icon">✓</span><span><strong>Sanity</strong><small>Hive-style checks</small></span></button>
 <button class="module-nav-btn" data-module="buttons" id="legacyNavButtons"><span class="module-icon">▣</span><span><strong>WC3 Buttons</strong><small>BTN / DISBTN sets</small></span></button>
 <button class="module-nav-btn" data-module="log" id="legacyNavLog"><span class="module-icon">≡</span><span><strong>Log</strong><small>Errors / CASC / history</small></span></button>
@@ -196,7 +202,7 @@
 </div>
 <div class="model-autotest-box">
   <div class="model-autotest-head">
-    <div><strong>AUTOMATIC MODEL TEST · v1.3</strong><span>Runs safe UI + edit checks across Texture Paint, Geosets, Animation, Timeline, Rig/SKIN4, PBR, Outliner, Cameras, FX, CASC and serializer.</span></div>
+    <div><strong>AUTOMATIC MODEL TEST · v1.4</strong><span>Runs safe UI + edit checks across Texture Paint, Geosets, Animation, Timeline, Rig/SKIN4, PBR, Outliner, Cameras, FX, CASC and serializer.</span></div>
     <span class="mini-pill" id="modelAutoTestBadge">IDLE</span>
   </div>
   <div class="model-autotest-actions">
@@ -206,7 +212,7 @@
     <button class="btn danger" id="modelAutoTestStopBtn" type="button" disabled>Stop</button>
     <input accept=".mdx,.mdl,.zip" hidden id="modelAutoTestFileInput" type="file"/>
   </div>
-  <div class="model-autotest-status" id="modelAutoTestStatus">Load a model, then run the v1.3 automatic suite.</div>
+  <div class="model-autotest-status" id="modelAutoTestStatus">Load a model, then run the v1.4 automatic suite.</div>
   <pre class="model-autotest-results" id="modelAutoTestResults">No automatic test has run yet.</pre>
 </div>
 <div class="model-mini-note">Selected texture: <strong id="modelSelectedTextureName">No texture selected</strong> <span class="model-mini-note">· 3D paint auto-syncs to the clicked surface texture</span></div>
@@ -335,7 +341,7 @@
 <div class="model-node-list empty" id="modelEffectsList">Load a model to inspect particles, ribbons, lights, attachments, events and other Warcraft objects.</div>
 </section>
 <section class="panel model-author-panel" data-model-section="inspect">
-<div class="panel-heading"><div><div class="panel-title">CAMERAS / FX AUTHORING</div><span class="model-panel-subtitle">Recognize cameras, look through them, and add viewport-side cameras or effect objects.</span></div><span class="mini-pill" id="modelAuthorCounts">0 cameras · 0 FX</span></div>
+<div class="panel-heading"><div><div class="panel-title">CAMERAS / AUTHORING</div><span class="model-panel-subtitle">Recognize cameras, look through them, and author camera views. Particle / FX creation now lives in the Particles tab.</span></div><span class="mini-pill" id="modelAuthorCounts">0 cameras · 0 FX</span></div>
 <div class="model-actions-grid compact-model-actions">
 <button class="btn small" id="modelRecognizeCamerasBtn" type="button">Recognize / refresh cameras</button>
 <button class="btn small" id="modelAddCameraBtn" type="button">Add camera from current view</button>
@@ -350,8 +356,8 @@
 <button class="btn small" id="modelAddEffectAttachmentBtn" type="button">Add effect attachment</button>
 <button class="btn small" id="modelFocusSelectedObjectBtn" type="button">Focus selected object</button>
 </div>
-<div class="model-info-box compact" id="modelAuthorStatus">Load a model to inspect cameras and add effect helpers.</div>
-<div class="model-mini-note">Recognize cameras from the model, place a new camera from the current viewport, look through any detected camera, and add ParticleEmitter2 or attachment-based effects directly into the viewer.</div>
+<div class="model-info-box compact" id="modelAuthorStatus">Load a model to inspect cameras and authored objects.</div>
+<div class="model-mini-note">Recognize cameras from the model, place a new camera from the current viewport, and look through any detected camera. ParticleEmitter2 and attachment-based FX are organized under Particles.</div>
 </section>
 <section class="panel model-core-panel" data-model-section="inspect">
 <div class="panel-heading"><div class="panel-title">WARCRAFT MODEL DATA</div><span class="mini-pill" id="modelCoreVersion">v7</span></div>
@@ -372,6 +378,186 @@
 </section>
 </div>
 </div>
+<div class="hidden" id="cascPanels">
+  <section class="casc-workspace">
+    <header class="casc-workspace-head">
+      <div>
+        <span class="casc-kicker">WARCRAFT III GAME STORAGE</span>
+        <strong>CASC Browser</strong>
+        <small>Search, inspect, use and export stock Warcraft assets without leaving WC3 Asset Studio.</small>
+      </div>
+      <div class="casc-head-tools">
+        <div class="casc-artset-switch" id="cascArtSetSwitch" role="group" aria-label="Warcraft art set">
+          <span class="casc-artset-label">ART SET</span>
+          <button class="casc-artset-btn active" type="button" data-casc-artset="sd" aria-pressed="true">SD</button>
+          <button class="casc-artset-btn" type="button" data-casc-artset="hd" aria-pressed="false">HD</button>
+          <button class="casc-artset-btn" type="button" data-casc-artset="de" aria-pressed="false">DE</button>
+        </div>
+        <div class="casc-head-status"><span class="mini-pill">CASC / CDN</span><span id="cascStatus">Ready to search Warcraft storage.</span></div>
+      </div>
+    </header>
+    <nav class="casc-view-tabs" id="cascViewTabs" aria-label="CASC views">
+      <button class="casc-view-tab active" id="cascBrowserTab" data-casc-view="browser" type="button"><strong>SEARCH / VIEWER</strong><small>Find any game-storage asset</small></button>
+      <button class="casc-view-tab" id="cascGalleryTab" data-casc-view="gallery" type="button"><strong>MODEL GALLERY</strong><small>Browse rendered Warcraft models</small></button>
+    </nav>
+    <div class="casc-browser-grid" id="cascBrowserView">
+      <section class="casc-column casc-search-column" id="cascSearchHost"></section>
+      <section class="casc-column casc-preview-column" id="cascPreviewHost"></section>
+    </div>
+    <section class="casc-gallery-view hidden" id="cascGalleryView">
+      <header class="casc-gallery-toolbar">
+        <div class="casc-gallery-search">
+          <input id="cascGalleryQuery" type="search" placeholder="Search models by name or Warcraft path…" autocomplete="off"/>
+          <button class="btn primary" id="cascGallerySearchBtn" type="button">Search</button>
+          <button class="btn" id="cascGalleryRefreshBtn" type="button">Refresh</button>
+        </div>
+        <div class="casc-gallery-options">
+          <label>Card size <select id="cascGallerySize"><option value="156">Small</option><option value="192" selected>Medium</option><option value="236">Large</option></select></label>
+          <span class="casc-gallery-counter" id="cascGalleryCounter">Model index not loaded.</span>
+        </div>
+        <div class="casc-gallery-filters" id="cascGalleryFilters" role="group" aria-label="Model category filters">
+          <button class="casc-gallery-filter active" type="button" data-gallery-category="all">ALL</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="units">UNITS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="heroes">HEROES</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="buildings">BUILDINGS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="doodads">DOODADS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="effects">EFFECTS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="projectiles">MISSILES</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="items">ITEMS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="environment">ENVIRONMENT</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="portraits">PORTRAITS</button>
+          <button class="casc-gallery-filter" type="button" data-gallery-category="other">OTHER</button>
+        </div>
+      </header>
+      <div class="casc-model-gallery" id="cascModelGallery" aria-live="polite"></div>
+      <footer class="casc-gallery-footer">
+        <div><strong id="cascGallerySelected">Nothing selected.</strong><span>Click a card to select it. Double-click to open the full CASC viewer.</span></div>
+        <div class="casc-gallery-actions">
+          <button class="btn" id="cascGalleryViewSelected" type="button" disabled>View selected</button>
+          <button class="btn primary" id="cascGalleryOpenSelected" type="button" disabled>Open in Model Lab</button>
+          <button class="btn" id="cascGalleryExportSelected" type="button" disabled>Export</button>
+          <button class="btn" id="cascGalleryLoadMore" type="button" disabled>Load more</button>
+        </div>
+      </footer>
+    </section>
+  </section>
+</div>
+
+<div class="hidden" id="effectsLabPanels">
+  <section class="effects-workspace">
+    <header class="effects-head">
+      <div class="effects-head-copy"><span class="effects-kicker">WARCRAFT III EFFECT AUTHORING</span><strong>Effects Lab</strong><small>EPF, CFX and PKB authoring integrated with WC3 Asset Studio.</small></div>
+      <div class="effects-head-actions">
+        <span class="effects-tool-status" id="effectsToolStatus">Checking effects backend…</span>
+        <span class="effects-test-status" id="effectsAutoTestStatus">TESTS · IDLE</span>
+        <button class="btn" id="effectsAutoTestBtn" type="button">Auto Test</button>
+        <button class="btn" id="effectsOpenEpfBtn" type="button">Open EPF</button>
+        <button class="btn" id="effectsSaveEpfBtn" type="button">Save EPF</button>
+        <button class="btn primary" id="effectsBuildTopBtn" type="button">Build PKB</button>
+      </div>
+    </header>
+    <nav class="effects-tabs" id="effectsTabs" aria-label="Effects Lab views">
+      <button class="effects-tab active" data-effects-view="designer" type="button"><strong>DESIGNER</strong><small>Phases · layers · movement</small></button>
+      <button class="effects-tab" data-effects-view="cfx" type="button"><strong>CFX / PKB</strong><small>Decompile · edit · rebuild</small></button>
+      <button class="effects-tab" data-effects-view="graph" type="button"><strong>GRAPH / LAYERS</strong><small>Spawn and event flow</small></button>
+      <button class="effects-tab" data-effects-view="samplers" type="button"><strong>SAMPLERS</strong><small>Curves · shapes · turbulence</small></button>
+      <button class="effects-tab" data-effects-view="renderers" type="button"><strong>RENDERERS</strong><small>Billboard · ribbon · light · mesh</small></button>
+      <button class="effects-tab" data-effects-view="code" type="button"><strong>CODE</strong><small>CFX + Lua / JASS</small></button>
+    </nav>
+
+    <section class="effects-view active" data-effects-panel="designer">
+      <div class="effects-designer-grid">
+        <aside class="effects-card effects-tree-card">
+          <div class="effects-card-head"><div><strong>PROJECT STRUCTURE</strong><small id="effectsProjectPath">New EPF project</small></div><span class="effects-badge">EPF</span></div>
+          <div class="effects-project-actions"><button class="btn tiny" id="effectsNewProjectBtn">New</button><button class="btn tiny" id="effectsAddLayerBtn">+ Layer</button><button class="btn tiny" id="effectsDeleteLayerBtn">Delete</button></div>
+          <div class="effects-tree" id="effectsLayerTree"></div>
+          <div class="effects-card-subhead"><strong>STUFF / OBJECTS</strong><button class="btn tiny" id="effectsAddStuffBtn">+ Object</button></div>
+          <div class="effects-stuff-list" id="effectsStuffList"></div>
+        </aside>
+
+        <main class="effects-card effects-preview-card">
+          <div class="effects-card-head"><div><strong>MOTION / PHASE PREVIEW</strong><small>Visualize the selected layer equation before generating code.</small></div><span class="effects-badge" id="effectsMotionBadge">LINE</span></div>
+          <div class="effects-preview-toolbar">
+            <label>Motion<select id="effectsMotionPreset"><option>None</option><option selected>Line</option><option>Circle</option><option>Parabola</option><option>Helix</option><option>Spiral rise</option></select></label>
+            <label>Init shape<select id="effectsInitPreset"><option>None</option><option>Random point</option><option>Circle</option><option>Helix</option><option>Sphere</option><option>Parabolic</option></select></label>
+            <label>Radius<input id="effectsMotionRadius" type="number" step="0.1" min="0" value="1.0"/></label>
+            <label>Height<input id="effectsMotionHeight" type="number" step="0.1" value="1.5"/></label>
+            <label>Turns<input id="effectsMotionTurns" type="number" step="0.25" value="2.5"/></label>
+          </div>
+          <div class="effects-preview-stage"><canvas id="effectsMotionCanvas" width="960" height="520"></canvas><div class="effects-axis-note">drag-less schematic · X/Y plane + Z elevation</div></div>
+          <div class="effects-script-strip"><div><strong>Generated trigger starter</strong><span id="effectsScriptMeta">Lua · 0 layers</span></div><div><button class="btn tiny active" data-effects-script-lang="lua">Lua</button><button class="btn tiny" data-effects-script-lang="jass">JASS</button><button class="btn tiny" id="effectsCopyScriptBtn">Copy</button><button class="btn tiny" id="effectsSaveScriptBtn">Save</button></div></div>
+          <textarea class="effects-code-mini" id="effectsGeneratedScript" spellcheck="false"></textarea>
+        </main>
+
+        <aside class="effects-card effects-inspector-card">
+          <div class="effects-card-head"><div><strong>PROJECT / LAYER</strong><small>EPF project and layer settings.</small></div><span class="effects-badge">INSPECTOR</span></div>
+          <div class="effects-form-grid">
+            <label class="span2">Effect name<input id="effectsProjectName" value="NewEffect"/></label>
+            <label>Refresh cycle<input id="effectsPeriod" type="number" min="0.01" step="0.01" value="0.03"/></label>
+            <label>Probability<input id="effectsProbability" type="number" min="0" max="100" step="1" value="100"/></label>
+            <label>Trigger<select id="effectsTriggerType"><option value="0">Cast</option><option value="1">Attack</option><option value="2">Attacked</option><option value="3">Damaged</option><option value="4">Dead</option><option value="5">Use item</option></select></label>
+            <label>Target<select id="effectsTargetType"><option value="0">Point</option><option value="1">Units</option><option value="2">Immediate</option></select></label>
+            <label>Ability ID<input id="effectsAbilityId" value="A000" maxlength="4"/></label>
+            <label>Hashtable<input id="effectsHashtable" value="ht"/></label>
+          </div>
+          <div class="effects-divider"></div>
+          <div class="effects-form-grid" id="effectsLayerInspector">
+            <label class="span2">Layer name<input id="effectsLayerName"/></label>
+            <label>Layer type<select id="effectsLayerType"><option value="0">Independent</option><option value="1">Related</option></select></label>
+            <label>Reference<select id="effectsRefPoint"><option value="0">Default</option><option value="1">Target</option><option value="2">Caster</option><option value="3">Inherit previous</option></select></label>
+            <label>Start<input id="effectsLayerStart" type="number" step="0.01"/></label>
+            <label>Duration<input id="effectsLayerDuration" type="number" step="0.01"/></label>
+            <label>Interval<input id="effectsLayerInterval" type="number" min="0.01" step="0.01"/></label>
+            <label>Related layer<input id="effectsCorrLayer"/></label>
+          </div>
+          <div class="effects-divider"></div>
+          <div class="effects-card-subhead"><strong>OBJECT</strong><span id="effectsStuffSection">—</span></div>
+          <div class="effects-form-grid" id="effectsStuffInspector">
+            <label>Type<select id="effectsStuffType"></select></label>
+            <label>Scale<input id="effectsStuffScale" type="number" step="0.05" value="1"/></label>
+            <label class="span2">Model / resource path<input id="effectsStuffPath" placeholder="Abilities\\Spells\\…"/></label>
+            <label>Life span<input id="effectsStuffLife" type="number" step="0.05" value="2"/></label>
+            <label>Animation<input id="effectsStuffAnim" value="stand"/></label>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section class="effects-view" data-effects-panel="cfx">
+      <div class="effects-cfx-layout">
+        <aside class="effects-card effects-cfx-tools">
+          <div class="effects-card-head"><div><strong>CFX / PKB PIPELINE</strong><small>Warcraft III Reforged particle FX round-trip.</small></div><span class="effects-badge">PKB ⇄ CFX</span></div>
+          <button class="effects-big-action" id="effectsNewBundleBtn"><span>＋</span><div><strong>New CFX Bundle</strong><small>Start from a Warcraft-ready template</small></div></button>
+          <button class="effects-big-action" id="effectsOpenBundleBtn"><span>▤</span><div><strong>Open .cfxb Folder</strong><small>Load editable text bundle</small></div></button>
+          <button class="effects-big-action primary" id="effectsDecompileBtn"><span>↓</span><div><strong>Open PKB / .particles</strong><small>Decompile to an editable CFX bundle</small></div></button>
+          <button class="effects-big-action" id="effectsSaveBundleBtn"><span>✓</span><div><strong>Save CFX Bundle</strong><small>Write edited source files</small></div></button>
+          <button class="effects-big-action primary" id="effectsBuildBtn"><span>↑</span><div><strong>Build PKB</strong><small>Compile current .cfxb back to Warcraft</small></div></button>
+        </aside>
+        <main class="effects-card effects-cfx-summary">
+          <div class="effects-card-head"><div><strong>BUNDLE OVERVIEW</strong><small id="effectsBundlePath">No CFX bundle loaded.</small></div><span class="effects-badge" id="effectsBundleState">EMPTY</span></div>
+          <div class="effects-metric-grid"><div><span>Layers</span><strong id="effectsMetricLayers">0</strong></div><div><span>Renderers</span><strong id="effectsMetricRenderers">0</strong></div><div><span>Samplers</span><strong id="effectsMetricSamplers">0</strong></div><div><span>Attributes</span><strong id="effectsMetricAttrs">0</strong></div></div>
+          <div class="effects-flow-summary" id="effectsFlowSummary">Open a .pkb, .particles or .cfxb bundle to inspect its effect graph.</div>
+          <div class="effects-file-grid" id="effectsBundleFiles"></div>
+          <pre class="effects-console" id="effectsToolConsole">Effects backend status will appear here.</pre>
+        </main>
+      </div>
+    </section>
+
+    <section class="effects-view" data-effects-panel="graph">
+      <div class="effects-dual-grid"><aside class="effects-card"><div class="effects-card-head"><div><strong>LAYERS</strong><small>code.cfx</small></div><span class="effects-badge" id="effectsGraphLayerCount">0</span></div><div class="effects-list" id="effectsCfxLayerList"></div></aside><main class="effects-card"><div class="effects-card-head"><div><strong>SPAWN / EVENT GRAPH</strong><small>effect.cfx</small></div><span class="effects-badge">FLOW</span></div><div class="effects-graph-stage" id="effectsGraphStage"></div></main></div>
+    </section>
+    <section class="effects-view" data-effects-panel="samplers">
+      <div class="effects-editor-grid"><aside class="effects-card"><div class="effects-card-head"><div><strong>SAMPLERS</strong><small>Curves · shapes · turbulence · event streams</small></div><span class="effects-badge" id="effectsSamplerCount">0</span></div><div class="effects-list" id="effectsSamplerList"></div></aside><main class="effects-card effects-raw-card"><div class="effects-card-head"><div><strong>SAMPLER SOURCE</strong><small>Edit selected block. Apply updates samplers.cfx.</small></div><button class="btn tiny" id="effectsApplySamplerBtn">Apply block</button></div><textarea id="effectsSamplerSource" class="effects-source-editor" spellcheck="false"></textarea><canvas id="effectsCurveCanvas" width="900" height="180"></canvas></main></div>
+    </section>
+    <section class="effects-view" data-effects-panel="renderers">
+      <div class="effects-editor-grid"><aside class="effects-card"><div class="effects-card-head"><div><strong>RENDERERS</strong><small>Billboard · Ribbon · Light · Mesh</small></div><span class="effects-badge" id="effectsRendererCount">0</span></div><div class="effects-list" id="effectsRendererList"></div></aside><main class="effects-card effects-raw-card"><div class="effects-card-head"><div><strong>RENDERER MATERIAL</strong><small>Blend, diffuse map, atlas and geometry.</small></div><button class="btn tiny" id="effectsApplyRendererBtn">Apply block</button></div><div class="effects-renderer-summary" id="effectsRendererSummary">Select a renderer.</div><textarea id="effectsRendererSource" class="effects-source-editor" spellcheck="false"></textarea></main></div>
+    </section>
+    <section class="effects-view" data-effects-panel="code">
+      <div class="effects-code-layout"><div class="effects-code-tabs" id="effectsCodeTabs"></div><textarea class="effects-source-editor effects-code-editor" id="effectsCfxCode" spellcheck="false"></textarea><footer><span id="effectsCodeMeta">No bundle loaded.</span><div><button class="btn" id="effectsFormatCodeBtn">Normalize EOL</button><button class="btn primary" id="effectsApplyCodeBtn">Apply to bundle</button></div></footer></div>
+    </section>
+  </section>
+</div>
+
 <div class="hidden" id="sanityPanels">
 <section class="sanity-sidebar-panel">
   <div class="sanity-brand">
@@ -381,10 +567,13 @@
   <div class="sanity-primary-actions">
     <button class="btn primary" id="sanityFilesBtn" type="button">Check Files</button>
     <button class="btn" id="sanityZipBtn" type="button">Check ZIP</button>
+    <button class="btn sanity-fix-action" id="sanityFixBtn" type="button" disabled>Auto Fix Models</button>
   </div>
+  <div class="sanity-fix-note"><strong>Smart Auto Fix v4.1 · Verified spatial repair</strong><span>Buried rest-pose models can now be recentered automatically only when the checker proves the coordinate-basis transform preserves the authored animation: geometry and pivots move together exactly once, the common root translation receives the inverse offset, and skin bindings / non-root transform tracks stay unchanged. Standalone MDX/MDL files now search their local model folder for referenced textures using the same resolver as Model Lab; a custom texture becomes Severe only after that automatic lookup actually fails. ZIP/package checks still validate package contents directly. Animation boundary keys and rig/binding repairs remain optional. Every FIX/SKIP is logged with before/after values and proof details. Originals are never overwritten.</span></div>
+  <label class="sanity-conservative-toggle"><input type="checkbox" id="sanityConservativeFixes"><span><strong>Conservative animation / rig fixes</strong><small>Optional. Allows opening/closing animation keys, missing pivots, hierarchy/binding cleanup and invalid weighted SKIN influences. Keep OFF when preserving an existing animation is more important than forcing every warning away.</small></span></label>
   <div class="sanity-drop-zone" id="sanityDropZone">
     <strong>Drop files or a ZIP package</strong>
-    <span>Models + their custom textures can be checked together so texture references are validated too.</span>
+    <span>Standalone models automatically search nearby texture files; ZIP/packages are validated from their included contents.</span>
     <small>MDX · MDL · BLP · TGA · DDS · PNG · JPG · ZIP</small>
   </div>
   <div class="sanity-summary" id="sanitySummary">
@@ -555,10 +744,10 @@
 
 
 <dialog class="modal" id="missingTextureGameSearchDialog"><form class="modal-card wide" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Missing textures</div><div class="modal-subtitle">Some textures were not found locally. Search Warcraft CASC / Blizzard CDN now?</div></div><span class="safe-badge">WARCRAFT</span></div><p id="missingTextureGameSearchCount">Referenced textures are missing.</p><pre class="pro-pre" id="missingTextureGameSearchList"></pre><div class="modal-subtitle">Search tries the authored path first, then searches the CASC index by texture filename when needed. Game assets are accessed only after you choose Search CASC.</div><div class="modal-actions"><button class="btn" value="cancel">Not Now</button><button class="btn primary" value="search">Search CASC</button></div></form></dialog>
-<dialog class="modal" id="creditsDialog"><form class="modal-card wide credits-modal" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Credits</div><div class="modal-subtitle">WC3 Asset Studio v1.3</div></div><span class="safe-badge">THANKS</span></div><div class="credits-grid"><section class="credits-section"><h3>Project credit</h3><p><strong>DarkSir#1620</strong> — project direction, testing, feature requests and Warcraft III workflow vision.</p></section><section class="credits-section"><h3>Free projects used</h3><ul><li><strong>mdx-m3-viewer</strong> — Warcraft III model-format behavior and implementation concepts by Chananya Freiman and contributors (MIT).</li><li><strong>Warcraft Sanity Checker / Sanity Tester</strong> — validation rules adapted from the sanity tester in <strong>mdx-m3-viewer</strong>. GitHub: <a href="https://github.com/flowtsohg/mdx-m3-viewer" target="_blank" rel="noopener noreferrer">github.com/flowtsohg/mdx-m3-viewer</a></li><li><strong>JPEG decoder core</strong> — adapted from notmasteryet / pdf.js lineage for BLP1 raw B,G,R,A decoding (Apache-2.0).</li></ul></section><section class="credits-section"><h3>Notes</h3><p>This build keeps the attribution for the free/open projects used in the app. Full notices are available in <code>THIRD_PARTY_LICENSES.md</code>.</p></section></div><div class="modal-actions"><button class="btn primary" value="default">Close</button></div></form></dialog>
+<dialog class="modal" id="creditsDialog"><form class="modal-card wide credits-modal" method="dialog"><div class="modal-title-row"><div><div class="modal-title">Credits</div><div class="modal-subtitle">WC3 Asset Studio v1.4</div></div><span class="safe-badge">THANKS</span></div><div class="credits-grid"><section class="credits-section"><h3>Project credit</h3><p><strong>DarkSir#1620</strong> — project direction, testing, feature requests and Warcraft III workflow vision.</p></section><section class="credits-section"><h3>Free projects used</h3><ul><li><strong>mdx-m3-viewer</strong> — Warcraft III model-format behavior and implementation concepts by Chananya Freiman and contributors (MIT).</li><li><strong>WC3 Model Explorer</strong> — visual model-browser and progressive thumbnail workflow reference by Jaccouille (MIT).</li><li><strong>Warcraft Sanity Checker / Sanity Tester</strong> — validation rules adapted from the sanity tester in <strong>mdx-m3-viewer</strong>. GitHub: <a href="https://github.com/flowtsohg/mdx-m3-viewer" target="_blank" rel="noopener noreferrer">github.com/flowtsohg/mdx-m3-viewer</a></li><li><strong>JPEG decoder core</strong> — adapted from notmasteryet / pdf.js lineage for BLP1 raw B,G,R,A decoding (Apache-2.0).</li></ul></section><section class="credits-section"><h3>Notes</h3><p>This build keeps the attribution for the free/open projects used in the app. Full notices are available in <code>THIRD_PARTY_LICENSES.md</code>.</p></section></div><div class="modal-actions"><button class="btn primary" value="default">Close</button></div></form></dialog>
 
 <div class="busy-overlay hidden" id="busyOverlay"><div class="spinner"></div><strong id="busyText">Processing…</strong></div>
-<script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v2-quality-20260918"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v2-quality-20260918"></script><script src="js/editor.js?v3-texture-scroll-stage-20260920"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v6-full-autotest-coverage-20260920"></script><script src="js/war3-model-core.js?v1-credits-20260912"></script><script src="js/model-animation-save.js?v1-animation-editor-20260919"></script><script src="js/model-save.js?v4-animation-editor-20260919"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
-<script src="js/model-lab.js?v9-full-autotest-save-fx-20260920"></script><script src="js/model-lab-pro.js?v3-v13-history-apply-fix-20260920"></script><script src="js/model-lab-autotest.js?v6-v13-sanity-workspace-fix-20260920"></script><script src="js/buttons-studio.js?v3-buttons-frame-20260918"></script><script src="js/sanity.js?v3-workspace-sync-20260920"></script><script src="js/workspace-ui.js?v1-credits-20260912"></script>
+<script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v2-quality-20260918"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v2-quality-20260918"></script><script src="js/editor.js?v3-texture-scroll-stage-20260920"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v6-full-autotest-coverage-20260920"></script><script src="js/war3-model-core.js?v3-mdx1800-skin16-20260926"></script><script src="js/model-animation-save.js?v1-animation-editor-20260919"></script><script src="js/model-save.js?v5-mdx1800-skin16-20260926"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
+<script src="js/effects-lab-core.js?v2-effects-autotest-20260925"></script><script src="js/effects-lab.js?v4-layout-reflow-20260927"></script><script src="js/effects-lab-autotest.js?v4-layout-reflow-20260927"></script><script src="js/model-lab.js?v13-artset-refresh-20260927"></script><script src="js/model-lab-pro.js?v6-artset-refresh-20260927"></script><script src="js/model-lab-autotest.js?v15-effects-layout-20260927"></script><script src="js/buttons-studio.js?v3-buttons-frame-20260918"></script><script src="js/sanity.js?v5-pe2-fix-order-20260927"></script><script src="js/workspace-ui.js?v2-casc-workspace-20260923"></script>
 </body>
 </html>

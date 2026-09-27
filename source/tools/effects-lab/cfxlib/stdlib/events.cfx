@@ -1,0 +1,242 @@
+// stdlib/events.cfx — building and firing an event's payload.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "payload.cfx";
+
+namespace events {
+
+    /// @brief_en Open a payload on the tick this particle dies, and on no other tick.
+    /// @brief_es Abre una carga útil en el tick en que muere esta partícula, y en ningún otro.
+    /// @brief_pt Abre uma carga no tick em que esta partícula morre, e em nenhum outro.
+    /// @brief_fr Ouvre une charge utile au tick où cette particule meurt, et à aucun autre.
+    /// @brief_it Apre un payload nel tick in cui questa particella muore, e in nessun altro.
+    /// @brief_de Öffnet eine Nutzlast in dem Tick, in dem dieses Partikel stirbt, und in keinem anderen.
+    /// @brief_ru Открывает полезную нагрузку на том тике, когда частица умирает, и ни на каком другом.
+    /// @brief_zh 在这个粒子死亡的那个 tick 打开一份负载，其他 tick 都不会。
+    /// @brief_ja このパーティクルが死ぬティックにだけペイロードを開きます。
+    /// @brief_ko 이 파티클이 죽는 틱에만 페이로드를 엽니다.
+    ///
+    /// @param_en event The event the payload is opened on. Taken by reference because kicking it writes through to the caller's own declaration.
+    /// @param_es event El evento sobre el que se abre la carga. Se toma por referencia porque dispararlo escribe en la declaración del llamador.
+    /// @param_pt event O evento em que a carga é aberta. Tomado por referência porque dispará-lo escreve na declaração de quem chama.
+    /// @param_fr event L'événement sur lequel la charge est ouverte. Pris par référence, car le déclencher écrit dans la déclaration de l'appelant.
+    /// @param_it event L'evento su cui il payload viene aperto. Preso per riferimento perché attivarlo scrive nella dichiarazione del chiamante.
+    /// @param_de event Das Ereignis, auf dem die Nutzlast geöffnet wird. Per Referenz, weil das Auslösen in die Deklaration des Aufrufers schreibt.
+    /// @param_ru event Событие, на котором открывается нагрузка. Берётся по ссылке, потому что его запуск пишет в объявление вызывающего.
+    /// @param_zh event 打开负载所用的事件。按引用传入，因为触发它会写回调用方自己的声明。
+    /// @param_ja event ペイロードを開く対象のイベント。発火が呼び出し側の宣言に書き戻るため、参照で受け取ります。
+    /// @param_ko event 페이로드를 여는 이벤트. 발생시키면 호출부의 선언에 기록되므로 참조로 받습니다.
+    ///
+    /// @result_en The payload triple, with the key in lane 0. Null on every tick the particle is still alive.
+    /// @result_es La terna de la carga, con la clave en el carril 0. Nula en todos los ticks en que la partícula sigue viva.
+    /// @result_pt A tripla da carga, com a chave na faixa 0. Nula em todos os ticks em que a partícula ainda está viva.
+    /// @result_fr Le triplet de la charge, avec la clé en voie 0. Nul à chaque tick où la particule est encore vivante.
+    /// @result_it La terna del payload, con la chiave nella corsia 0. Nulla in ogni tick in cui la particella è ancora viva.
+    /// @result_de Das Nutzlast-Tripel mit dem Schlüssel in Spur 0. Null in jedem Tick, in dem das Partikel noch lebt.
+    /// @result_ru Тройка нагрузки с ключом в дорожке 0. Ноль на каждом тике, пока частица жива.
+    /// @result_zh 负载三元组，键位于通道 0。粒子仍存活的每个 tick 都为空。
+    /// @result_ja ペイロードの三つ組。キーはレーン 0 です。パーティクルが生きている間は毎ティック null になります。
+    /// @result_ko 페이로드 삼중값. 키는 레인 0에 있습니다. 파티클이 살아 있는 틱에는 null입니다.
+    fn trigger_on_death(event: &particleEvent) -> i32x3 {
+        needs {
+            "self.lifeRatio" : f32;
+        }
+        let onDeath : i32x3 = trigger(self.lifeRatio >= 1.0, 1.0);
+        let payloadId : i32 = event.initPayload(0, onDeath);
+        let result : i32x3 = #i32x3(payloadId, 0, 0);
+        // null when alive.
+        result
+    }
+
+    /// @brief_en Append one value to an open payload, advancing the element index. Build `semantic` with `payloads.PackSemantics` rather than writing the number, or the next reader has to decode it by hand.
+    /// @brief_es Añade un valor a una carga abierta y avanza el índice de elemento. Construye `semantic` con `payloads.PackSemantics` en lugar de escribir el número, o el siguiente lector tendrá que descifrarlo a mano.
+    /// @brief_pt Acrescenta um valor a uma carga aberta e avança o índice do elemento. Construa `semantic` com `payloads.PackSemantics` em vez de escrever o número, ou o próximo leitor terá de decodificá-lo à mão.
+    /// @brief_fr Ajoute une valeur à une charge ouverte et fait avancer l'indice d'élément. Construisez `semantic` avec `payloads.PackSemantics` plutôt que d'écrire le nombre, sinon le lecteur suivant devra le décoder à la main.
+    /// @brief_it Aggiunge un valore a un payload aperto e fa avanzare l'indice dell'elemento. Costruisci `semantic` con `payloads.PackSemantics` invece di scrivere il numero, altrimenti il prossimo lettore dovrà decodificarlo a mano.
+    /// @brief_de Hängt einen Wert an eine offene Nutzlast an und rückt den Elementindex vor. Baue `semantic` mit `payloads.PackSemantics`, statt die Zahl zu schreiben, sonst muss der nächste Leser sie von Hand entschlüsseln.
+    /// @brief_ru Добавляет одно значение к открытой нагрузке и продвигает индекс элемента. Стройте `semantic` через `payloads.PackSemantics`, а не пишите число, иначе следующему читателю придётся расшифровывать его вручную.
+    /// @brief_zh 向已打开的负载追加一个值，并推进元素索引。请用 `payloads.PackSemantics` 构造 `semantic`，不要直接写数字，否则下一个读代码的人得手工解码。
+    /// @brief_ja 開いているペイロードに値を 1 つ追加し、要素インデックスを進めます。`semantic` は数値を直接書かず `payloads.PackSemantics` で組み立ててください。さもないと次に読む人が手で解読することになります。
+    /// @brief_ko 열려 있는 페이로드에 값 하나를 덧붙이고 요소 인덱스를 진행시킵니다. `semantic`은 숫자를 직접 쓰지 말고 `payloads.PackSemantics`로 만드세요. 그러지 않으면 다음 사람이 손으로 해독해야 합니다.
+    ///
+    /// @param_en event The event the payload belongs to.
+    /// @param_es event El evento al que pertenece la carga.
+    /// @param_pt event O evento a que a carga pertence.
+    /// @param_fr event L'événement auquel la charge appartient.
+    /// @param_it event L'evento a cui appartiene il payload.
+    /// @param_de event Das Ereignis, zu dem die Nutzlast gehört.
+    /// @param_ru event Событие, которому принадлежит нагрузка.
+    /// @param_zh event 该负载所属的事件。
+    /// @param_ja event ペイロードが属するイベント。
+    /// @param_ko event 페이로드가 속한 이벤트.
+    ///
+    /// @param_en payload The payload triple: key in lane 0, next element index in lane 1.
+    /// @param_es payload La terna de la carga: clave en el carril 0, índice del siguiente elemento en el carril 1.
+    /// @param_pt payload A tripla da carga: chave na faixa 0, índice do próximo elemento na faixa 1.
+    /// @param_fr payload Le triplet de la charge : clé en voie 0, indice de l'élément suivant en voie 1.
+    /// @param_it payload La terna del payload: chiave nella corsia 0, indice dell'elemento successivo nella corsia 1.
+    /// @param_de payload Das Nutzlast-Tripel: Schlüssel in Spur 0, nächster Elementindex in Spur 1.
+    /// @param_ru payload Тройка нагрузки: ключ в дорожке 0, индекс следующего элемента в дорожке 1.
+    /// @param_zh payload 负载三元组：通道 0 是键，通道 1 是下一个元素索引。
+    /// @param_ja payload ペイロードの三つ組。レーン 0 がキー、レーン 1 が次の要素インデックスです。
+    /// @param_ko payload 페이로드 삼중값. 레인 0은 키, 레인 1은 다음 요소 인덱스입니다.
+    ///
+    /// @param_en value The value each spawned child receives.
+    /// @param_es value El valor que recibe cada hija generada.
+    /// @param_pt value O valor que cada filha gerada recebe.
+    /// @param_fr value La valeur que reçoit chaque enfant engendré.
+    /// @param_it value Il valore che riceve ogni figlia generata.
+    /// @param_de value Der Wert, den jedes erzeugte Kind erhält.
+    /// @param_ru value Значение, которое получает каждый порождённый потомок.
+    /// @param_zh value 每个生成的子粒子所收到的值。
+    /// @param_ja value 生成される各子パーティクルが受け取る値。
+    /// @param_ko value 생성되는 각 자식 파티클이 받는 값.
+    ///
+    /// @param_en semantic The packed kind and interpolation word. Must be a compile-time constant — the engine registers it as a uniform.
+    /// @param_es semantic La palabra empaquetada de tipo e interpolación. Debe ser constante en compilación: el motor la registra como uniforme.
+    /// @param_pt semantic A palavra compactada de tipo e interpolação. Precisa ser constante de compilação — o motor a registra como uniforme.
+    /// @param_fr semantic Le mot compacté du genre et de l'interpolation. Doit être une constante de compilation — le moteur l'enregistre comme uniforme.
+    /// @param_it semantic La parola compattata di genere e interpolazione. Deve essere una costante di compilazione: il motore la registra come uniforme.
+    /// @param_de semantic Das gepackte Wort aus Art und Interpolation. Muss eine Compile-Zeit-Konstante sein — die Engine registriert es als Uniform.
+    /// @param_ru semantic Упакованное слово вида и интерполяции. Должно быть константой времени компиляции — движок регистрирует его как uniform.
+    /// @param_zh semantic 打包了种类与插值方式的字。必须是编译期常量 —— 引擎把它注册为 uniform。
+    /// @param_ja semantic 種別と補間方法を詰めた語。エンジンはこれを uniform として登録するため、コンパイル時定数でなければなりません。
+    /// @param_ko semantic 종류와 보간 방식을 담은 워드. 엔진이 uniform으로 등록하므로 컴파일 타임 상수여야 합니다.
+    ///
+    /// @result_en The new element handle. Thread it on rather than reusing the old one, or every appended element is dropped.
+    /// @result_es El nuevo manejador de elemento. Enlázalo en vez de reutilizar el anterior, o se perderá cada elemento añadido.
+    /// @result_pt O novo identificador de elemento. Encadeie-o em vez de reutilizar o antigo, ou todo elemento acrescentado é descartado.
+    /// @result_fr Le nouvel identifiant d'élément. Enchaînez-le au lieu de réutiliser l'ancien, sinon tout élément ajouté est perdu.
+    /// @result_it Il nuovo handle dell'elemento. Concatenalo invece di riusare il vecchio, altrimenti ogni elemento aggiunto viene scartato.
+    /// @result_de Der neue Element-Handle. Reiche ihn weiter, statt den alten wiederzuverwenden, sonst geht jedes angehängte Element verloren.
+    /// @result_ru Новый дескриптор элемента. Передавайте дальше именно его, а не старый, иначе все добавленные элементы теряются.
+    /// @result_zh 新的元素句柄。请把它继续往下传，不要复用旧的，否则所有追加的元素都会被丢弃。
+    /// @result_ja 新しい要素ハンドル。古いものを再利用せずこれを繋いでください。さもないと追加した要素がすべて失われます。
+    /// @result_ko 새 요소 핸들. 이전 것을 재사용하지 말고 이것을 이어서 넘기세요. 그러지 않으면 덧붙인 요소가 모두 버려집니다.
+    fn emplace_payload<T>(event: &particleEvent, payload: i32x3, value: T, semantic : i32) -> i32{
+        let payloadId : i32 = buildPayloadElement(payload.x, value, value, semantic);
+        let new_element : i32 = event.appendPayload(payload.x, payload.y, payloadId);
+        let result : i32x3 = #i32x3(payload.x, payload.y + 1, new_element);
+        result
+    }
+
+    /// @brief_en Append a spawn position, tagged so the engine's spawn transform recognises it.
+    /// @brief_es Añade una posición de nacimiento, etiquetada para que la transformación de generación del motor la reconozca.
+    /// @brief_pt Acrescenta uma posição de nascimento, marcada para que a transformação de geração do motor a reconheça.
+    /// @brief_fr Ajoute une position de naissance, étiquetée pour que la transformation d'engendrement du moteur la reconnaisse.
+    /// @brief_it Aggiunge una posizione di nascita, etichettata perché la trasformazione di generazione del motore la riconosca.
+    /// @brief_de Hängt eine Geburtsposition an, so ausgezeichnet, dass die Spawn-Transformation der Engine sie erkennt.
+    /// @brief_ru Добавляет позицию рождения, помеченную так, чтобы её распознало преобразование порождения движка.
+    /// @brief_zh 追加一个出生位置，并做好标记，让引擎的生成变换能够识别它。
+    /// @brief_ja 出生位置を追加します。エンジンのスポーン変換が認識できるようタグ付けされます。
+    /// @brief_ko 출생 위치를 덧붙입니다. 엔진의 스폰 변환이 알아볼 수 있도록 표시됩니다.
+    ///
+    /// @param_en event The event the payload belongs to.
+    /// @param_es event El evento al que pertenece la carga.
+    /// @param_pt event O evento a que a carga pertence.
+    /// @param_fr event L'événement auquel la charge appartient.
+    /// @param_it event L'evento a cui appartiene il payload.
+    /// @param_de event Das Ereignis, zu dem die Nutzlast gehört.
+    /// @param_ru event Событие, которому принадлежит нагрузка.
+    /// @param_zh event 该负载所属的事件。
+    /// @param_ja event ペイロードが属するイベント。
+    /// @param_ko event 페이로드가 속한 이벤트.
+    ///
+    /// @param_en payload The payload triple to append to.
+    /// @param_es payload La terna de la carga a la que se añade.
+    /// @param_pt payload A tripla da carga à qual se acrescenta.
+    /// @param_fr payload Le triplet de la charge auquel on ajoute.
+    /// @param_it payload La terna del payload a cui si aggiunge.
+    /// @param_de payload Das Nutzlast-Tripel, an das angehängt wird.
+    /// @param_ru payload Тройка нагрузки, к которой добавляют.
+    /// @param_zh payload 要追加到的负载三元组。
+    /// @param_ja payload 追加先のペイロードの三つ組。
+    /// @param_ko payload 덧붙일 대상 페이로드 삼중값.
+    ///
+    /// @param_en position Where the child is born.
+    /// @param_es position Dónde nace la hija.
+    /// @param_pt position Onde a filha nasce.
+    /// @param_fr position Où l'enfant naît.
+    /// @param_it position Dove nasce la figlia.
+    /// @param_de position Wo das Kind geboren wird.
+    /// @param_ru position Где рождается потомок.
+    /// @param_zh position 子粒子出生的位置。
+    /// @param_ja position 子パーティクルが生まれる位置。
+    /// @param_ko position 자식 파티클이 태어나는 위치.
+    ///
+    /// @result_en The payload triple with its element index advanced.
+    /// @result_es La terna de la carga con su índice de elemento avanzado.
+    /// @result_pt A tripla da carga com o índice de elemento avançado.
+    /// @result_fr Le triplet de la charge, son indice d'élément ayant avancé.
+    /// @result_it La terna del payload con l'indice dell'elemento avanzato.
+    /// @result_de Das Nutzlast-Tripel mit vorgerücktem Elementindex.
+    /// @result_ru Тройка нагрузки с продвинутым индексом элемента.
+    /// @result_zh 元素索引已前进的负载三元组。
+    /// @result_ja 要素インデックスが進んだペイロードの三つ組。
+    /// @result_ko 요소 인덱스가 진행된 페이로드 삼중값.
+    fn emplace_position(event: &particleEvent, payload: i32x3, position: f32x3) -> i32x3 {
+        emplace_payload(event, payload, position,
+            payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Position))
+    }
+
+    /// @brief_en Append a plain value of any width, with no special meaning attached — the ordinary case.
+    /// @brief_es Añade un valor corriente de cualquier anchura, sin significado especial: el caso habitual.
+    /// @brief_pt Acrescenta um valor comum de qualquer largura, sem significado especial — o caso habitual.
+    /// @brief_fr Ajoute une valeur ordinaire de n'importe quelle largeur, sans signification particulière — le cas courant.
+    /// @brief_it Aggiunge un valore qualunque di qualsiasi larghezza, senza significato speciale: il caso normale.
+    /// @brief_de Hängt einen gewöhnlichen Wert beliebiger Breite an, ohne besondere Bedeutung — der Normalfall.
+    /// @brief_ru Добавляет обычное значение любой ширины без особого смысла — рядовой случай.
+    /// @brief_zh 追加一个任意宽度的普通值，不带特殊含义 —— 这是最常见的情形。
+    /// @brief_ja 特別な意味を持たない任意の幅の値を追加します。もっとも一般的なケースです。
+    /// @brief_ko 특별한 의미가 없는 임의 폭의 값을 덧붙입니다. 가장 흔한 경우입니다.
+    ///
+    /// @param_en event The event the payload belongs to.
+    /// @param_es event El evento al que pertenece la carga.
+    /// @param_pt event O evento a que a carga pertence.
+    /// @param_fr event L'événement auquel la charge appartient.
+    /// @param_it event L'evento a cui appartiene il payload.
+    /// @param_de event Das Ereignis, zu dem die Nutzlast gehört.
+    /// @param_ru event Событие, которому принадлежит нагрузка.
+    /// @param_zh event 该负载所属的事件。
+    /// @param_ja event ペイロードが属するイベント。
+    /// @param_ko event 페이로드가 속한 이벤트.
+    ///
+    /// @param_en payload The payload triple to append to.
+    /// @param_es payload La terna de la carga a la que se añade.
+    /// @param_pt payload A tripla da carga à qual se acrescenta.
+    /// @param_fr payload Le triplet de la charge auquel on ajoute.
+    /// @param_it payload La terna del payload a cui si aggiunge.
+    /// @param_de payload Das Nutzlast-Tripel, an das angehängt wird.
+    /// @param_ru payload Тройка нагрузки, к которой добавляют.
+    /// @param_zh payload 要追加到的负载三元组。
+    /// @param_ja payload 追加先のペイロードの三つ組。
+    /// @param_ko payload 덧붙일 대상 페이로드 삼중값.
+    ///
+    /// @param_en value The value each spawned child receives.
+    /// @param_es value El valor que recibe cada hija generada.
+    /// @param_pt value O valor que cada filha gerada recebe.
+    /// @param_fr value La valeur que reçoit chaque enfant engendré.
+    /// @param_it value Il valore che riceve ogni figlia generata.
+    /// @param_de value Der Wert, den jedes erzeugte Kind erhält.
+    /// @param_ru value Значение, которое получает каждый порождённый потомок.
+    /// @param_zh value 每个生成的子粒子所收到的值。
+    /// @param_ja value 生成される各子パーティクルが受け取る値。
+    /// @param_ko value 생성되는 각 자식 파티클이 받는 값.
+    ///
+    /// @result_en The payload triple with its element index advanced.
+    /// @result_es La terna de la carga con su índice de elemento avanzado.
+    /// @result_pt A tripla da carga com o índice de elemento avançado.
+    /// @result_fr Le triplet de la charge, son indice d'élément ayant avancé.
+    /// @result_it La terna del payload con l'indice dell'elemento avanzato.
+    /// @result_de Das Nutzlast-Tripel mit vorgerücktem Elementindex.
+    /// @result_ru Тройка нагрузки с продвинутым индексом элемента.
+    /// @result_zh 元素索引已前进的负载三元组。
+    /// @result_ja 要素インデックスが進んだペイロードの三つ組。
+    /// @result_ko 요소 인덱스가 진행된 페이로드 삼중값.
+    fn emplace_element<T>(event: &particleEvent, payload: i32x3, value: T) -> i32x3 {
+        emplace_payload(event, payload, value,
+            payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic))
+    }
+}

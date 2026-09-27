@@ -1,0 +1,235 @@
+// stdlib/random.cfx — random helpers.
+//
+// `rand(lo, hi)` is the engine intrinsic; a newborn gets an independent RandState, so `rand` in an
+// `init` program gives every particle its own values (CFX_GUIDE §9.2).
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "math.cfx";
+import "vec.cfx";
+
+namespace random {
+
+    /// @brief_en A random value in [-amount, +amount] — a symmetric wobble around zero.
+    /// @brief_es Un valor aleatorio en [-amount, +amount]: una oscilación simétrica alrededor de cero.
+    /// @brief_pt Um valor aleatório em [-amount, +amount] — uma oscilação simétrica em torno de zero.
+    /// @brief_fr Une valeur aléatoire dans [-amount, +amount] — une oscillation symétrique autour de zéro.
+    /// @brief_it Un valore casuale in [-amount, +amount]: un'oscillazione simmetrica attorno allo zero.
+    /// @brief_de Ein Zufallswert in [-amount, +amount] — ein symmetrisches Schwanken um null.
+    /// @brief_ru Случайное значение в [-amount, +amount] — симметричное колебание вокруг нуля.
+    /// @brief_zh 位于 [-amount, +amount] 的随机值 —— 围绕 0 的对称抖动。
+    /// @brief_ja [-amount, +amount] の範囲の乱数です。ゼロを中心とした対称なゆらぎになります。
+    /// @brief_ko [-amount, +amount] 범위의 난수입니다. 0을 중심으로 한 대칭 흔들림입니다.
+    ///
+    /// @param_en amount The half-width of the range, either side of zero.
+    /// @param_es amount La semiamplitud del rango, a cada lado de cero.
+    /// @param_pt amount A semiamplitude do intervalo, de cada lado de zero.
+    /// @param_fr amount La demi-largeur de l'intervalle, de part et d'autre de zéro.
+    /// @param_it amount La semiampiezza dell'intervallo, da entrambi i lati dello zero.
+    /// @param_de amount Die halbe Breite des Bereichs, zu beiden Seiten der Null.
+    /// @param_ru amount Полуширина диапазона по обе стороны от нуля.
+    /// @param_zh amount 区间的半宽，向 0 的两侧各延伸这么多。
+    /// @param_ja amount 範囲の半分の幅。ゼロの両側にこの分だけ広がります。
+    /// @param_ko amount 범위의 반폭. 0의 양쪽으로 이만큼씩 퍼집니다.
+    ///
+    /// @result_en A value between `-amount` and `+amount`.
+    /// @result_es Un valor entre `-amount` y `+amount`.
+    /// @result_pt Um valor entre `-amount` e `+amount`.
+    /// @result_fr Une valeur entre `-amount` et `+amount`.
+    /// @result_it Un valore fra `-amount` e `+amount`.
+    /// @result_de Ein Wert zwischen `-amount` und `+amount`.
+    /// @result_ru Значение между `-amount` и `+amount`.
+    /// @result_zh 一个介于 `-amount` 与 `+amount` 之间的值。
+    /// @result_ja `-amount` から `+amount` の間の値。
+    /// @result_ko `-amount`와 `+amount` 사이의 값.
+    fn rand_signed(amount: f32 = 1.0) -> f32 { rand(0.0 - amount, amount) }
+
+    /// @brief_en A random value around `center`, `spread` either side.
+    /// @brief_es Un valor aleatorio en torno a `center`, con `spread` a cada lado.
+    /// @brief_pt Um valor aleatório em torno de `center`, com `spread` de cada lado.
+    /// @brief_fr Une valeur aléatoire autour de `center`, avec `spread` de chaque côté.
+    /// @brief_it Un valore casuale attorno a `center`, con `spread` da entrambi i lati.
+    /// @brief_de Ein Zufallswert um `center` herum, mit `spread` zu beiden Seiten.
+    /// @brief_ru Случайное значение вокруг `center` с разбросом `spread` в обе стороны.
+    /// @brief_zh 围绕 `center` 的随机值，两侧各有 `spread` 的范围。
+    /// @brief_ja `center` を中心に、両側へ `spread` だけ広がる乱数です。
+    /// @brief_ko `center`를 중심으로 양쪽에 `spread`만큼 퍼지는 난수입니다.
+    ///
+    /// @param_en center The middle of the range.
+    /// @param_es center El centro del rango.
+    /// @param_pt center O centro do intervalo.
+    /// @param_fr center Le centre de l'intervalle.
+    /// @param_it center Il centro dell'intervallo.
+    /// @param_de center Die Mitte des Bereichs.
+    /// @param_ru center Середина диапазона.
+    /// @param_zh center 区间的中心。
+    /// @param_ja center 範囲の中心。
+    /// @param_ko center 범위의 중심.
+    ///
+    /// @param_en spread How far either side of `center` the value may land.
+    /// @param_es spread Cuánto puede alejarse el valor de `center` a cada lado.
+    /// @param_pt spread Quanto o valor pode se afastar de `center` para cada lado.
+    /// @param_fr spread Jusqu'où la valeur peut s'écarter de `center`, de chaque côté.
+    /// @param_it spread Quanto il valore può allontanarsi da `center` da ciascun lato.
+    /// @param_de spread Wie weit der Wert zu beiden Seiten von `center` landen darf.
+    /// @param_ru spread Насколько далеко от `center` может оказаться значение в каждую сторону.
+    /// @param_zh spread 数值可以偏离 `center` 的最大距离，两侧相同。
+    /// @param_ja spread `center` から両側にどこまで外れてよいか。
+    /// @param_ko spread `center`에서 양쪽으로 얼마나 벗어날 수 있는지.
+    ///
+    /// @result_en A value between `center - spread` and `center + spread`.
+    /// @result_es Un valor entre `center - spread` y `center + spread`.
+    /// @result_pt Um valor entre `center - spread` e `center + spread`.
+    /// @result_fr Une valeur entre `center - spread` et `center + spread`.
+    /// @result_it Un valore fra `center - spread` e `center + spread`.
+    /// @result_de Ein Wert zwischen `center - spread` und `center + spread`.
+    /// @result_ru Значение между `center - spread` и `center + spread`.
+    /// @result_zh 一个介于 `center - spread` 与 `center + spread` 之间的值。
+    /// @result_ja `center - spread` から `center + spread` の間の値。
+    /// @result_ko `center - spread`와 `center + spread` 사이의 값.
+    fn rand_around(center: f32, spread: f32) -> f32 { rand(center - spread, center + spread) }
+
+    /// @brief_en A random point in an axis-aligned box centred on the origin.
+    /// @brief_es Un punto aleatorio dentro de una caja alineada con los ejes y centrada en el origen.
+    /// @brief_pt Um ponto aleatório dentro de uma caixa alinhada aos eixos e centrada na origem.
+    /// @brief_fr Un point aléatoire dans une boîte alignée sur les axes et centrée sur l'origine.
+    /// @brief_it Un punto casuale in una scatola allineata agli assi e centrata nell'origine.
+    /// @brief_de Ein zufälliger Punkt in einem achsenparallelen Quader um den Ursprung.
+    /// @brief_ru Случайная точка в параллельном осям параллелепипеде с центром в начале координат.
+    /// @brief_zh 在以原点为中心、与坐标轴对齐的盒子内取一个随机点。
+    /// @brief_ja 原点を中心とした軸並行のボックス内のランダムな点です。
+    /// @brief_ko 원점을 중심으로 한 축 정렬 박스 안의 임의의 점입니다.
+    ///
+    /// @param_en half The box's half-extent on each axis.
+    /// @param_es half La semiextensión de la caja en cada eje.
+    /// @param_pt half A semiextensão da caixa em cada eixo.
+    /// @param_fr half La demi-étendue de la boîte sur chaque axe.
+    /// @param_it half La semiestensione della scatola su ogni asse.
+    /// @param_de half Die halbe Ausdehnung des Quaders auf jeder Achse.
+    /// @param_ru half Полуразмер параллелепипеда по каждой оси.
+    /// @param_zh half 盒子在每个轴向上的半长。
+    /// @param_ja half 各軸方向のボックスの半分の大きさ。
+    /// @param_ko half 각 축 방향으로의 박스 반크기.
+    ///
+    /// @result_en A point inside the box.
+    /// @result_es Un punto dentro de la caja.
+    /// @result_pt Um ponto dentro da caixa.
+    /// @result_fr Un point à l'intérieur de la boîte.
+    /// @result_it Un punto dentro la scatola.
+    /// @result_de Ein Punkt innerhalb des Quaders.
+    /// @result_ru Точка внутри параллелепипеда.
+    /// @result_zh 盒子内部的一个点。
+    /// @result_ja ボックス内部の点。
+    /// @result_ko 박스 내부의 한 점.
+    fn rand_box(half: f32x3) -> f32x3 {
+        #f32x3(rand(0.0 - half.x, half.x), rand(0.0 - half.y, half.y), rand(0.0 - half.z, half.z))
+    }
+
+    /// @brief_en A random direction in the horizontal plane, with an optional vertical component.
+    /// @brief_es Una dirección aleatoria en el plano horizontal, con una componente vertical opcional.
+    /// @brief_pt Uma direção aleatória no plano horizontal, com uma componente vertical opcional.
+    /// @brief_fr Une direction aléatoire dans le plan horizontal, avec une composante verticale facultative.
+    /// @brief_it Una direzione casuale nel piano orizzontale, con una componente verticale facoltativa.
+    /// @brief_de Eine zufällige Richtung in der Waagerechten, mit optionalem senkrechtem Anteil.
+    /// @brief_ru Случайное направление в горизонтальной плоскости с необязательной вертикальной составляющей.
+    /// @brief_zh 水平面内的随机方向，可以附加一个竖直分量。
+    /// @brief_ja 水平面内のランダムな方向です。垂直成分を任意で加えられます。
+    /// @brief_ko 수평면 안의 임의 방향입니다. 수직 성분을 선택적으로 더할 수 있습니다.
+    ///
+    /// @param_en y How much to tilt out of the plane before normalizing. 0 stays flat.
+    /// @param_es y Cuánto inclinar fuera del plano antes de normalizar. 0 se mantiene plano.
+    /// @param_pt y Quanto inclinar para fora do plano antes de normalizar. 0 mantém plano.
+    /// @param_fr y De combien s'écarter du plan avant la normalisation. 0 reste à plat.
+    /// @param_it y Quanto inclinare fuori dal piano prima di normalizzare. 0 resta piatto.
+    /// @param_de y Wie stark aus der Ebene geneigt wird, bevor normiert wird. 0 bleibt flach.
+    /// @param_ru y Насколько наклонить из плоскости перед нормировкой. 0 оставляет плоским.
+    /// @param_zh y 归一化之前离开平面的倾斜量。0 表示保持水平。
+    /// @param_ja y 正規化前に平面からどれだけ傾けるか。0 なら水平のままです。
+    /// @param_ko y 정규화 전에 평면에서 얼마나 기울일지. 0이면 수평을 유지합니다.
+    ///
+    /// @result_en A unit direction.
+    /// @result_es Una dirección unitaria.
+    /// @result_pt Uma direção unitária.
+    /// @result_fr Une direction unitaire.
+    /// @result_it Una direzione unitaria.
+    /// @result_de Eine Einheitsrichtung.
+    /// @result_ru Единичное направление.
+    /// @result_zh 一个单位方向向量。
+    /// @result_ja 単位方向ベクトル。
+    /// @result_ko 단위 방향 벡터.
+    fn rand_dir_xz(y: f32 = 0.0) -> f32x3 {
+        let a : f32 = rand(0.0, math.TAU);
+        vec.safe_normalize(#f32x3(radians.cos(a), y, radians.sin(a)), vec.FORWARD)
+    }
+
+    /// @brief_en A random unit direction. Rejection-free — it normalizes a box sample, so the distribution is slightly cube-biased toward the corners.
+    /// @brief_es Una dirección unitaria aleatoria. Sin rechazo: normaliza una muestra de caja, así que la distribución se sesga ligeramente hacia las esquinas del cubo.
+    /// @brief_pt Uma direção unitária aleatória. Sem rejeição: normaliza uma amostra de caixa, então a distribuição pende ligeiramente para os cantos do cubo.
+    /// @brief_fr Une direction unitaire aléatoire. Sans rejet : elle normalise un échantillon de boîte, donc la distribution est légèrement biaisée vers les coins du cube.
+    /// @brief_it Una direzione unitaria casuale. Senza rifiuto: normalizza un campione di scatola, quindi la distribuzione è leggermente sbilanciata verso gli angoli del cubo.
+    /// @brief_de Eine zufällige Einheitsrichtung. Ohne Verwerfen — sie normiert eine Quaderstichprobe, weshalb die Verteilung leicht zu den Würfelecken hin verzerrt ist.
+    /// @brief_ru Случайное единичное направление. Без отбраковки: нормируется выборка из куба, поэтому распределение слегка смещено к его углам.
+    /// @brief_zh 随机的单位方向。无需拒绝采样 —— 它对盒内采样做归一化，因此分布略微偏向立方体的角落。
+    /// @brief_ja ランダムな単位方向です。棄却法を使わずボックス内のサンプルを正規化するため、分布は立方体の角にわずかに偏ります。
+    /// @brief_ko 임의의 단위 방향입니다. 기각 없이 박스 표본을 정규화하므로 분포가 정육면체의 모서리 쪽으로 약간 치우칩니다.
+    ///
+    /// @result_en A unit direction, roughly uniform over the sphere.
+    /// @result_es Una dirección unitaria, aproximadamente uniforme sobre la esfera.
+    /// @result_pt Uma direção unitária, aproximadamente uniforme sobre a esfera.
+    /// @result_fr Une direction unitaire, à peu près uniforme sur la sphère.
+    /// @result_it Una direzione unitaria, all'incirca uniforme sulla sfera.
+    /// @result_de Eine Einheitsrichtung, in etwa gleichverteilt über die Kugel.
+    /// @result_ru Единичное направление, примерно равномерное по сфере.
+    /// @result_zh 一个单位方向，在球面上大致均匀分布。
+    /// @result_ja 球面上でおおむね一様な単位方向ベクトル。
+    /// @result_ko 구면에서 대체로 균일한 단위 방향 벡터.
+    fn rand_dir() -> f32x3 {
+        vec.safe_normalize(#f32x3(rand(-1.0, 1.0), rand(-1.0, 1.0), rand(-1.0, 1.0)), vec.UP)
+    }
+
+    /// @brief_en Displace a position by a random offset of at most `amount` on each axis.
+    /// @brief_es Desplaza una posición con un offset aleatorio de como mucho `amount` en cada eje.
+    /// @brief_pt Desloca uma posição por um offset aleatório de no máximo `amount` em cada eixo.
+    /// @brief_fr Décale une position d'un écart aléatoire d'au plus `amount` sur chaque axe.
+    /// @brief_it Sposta una posizione di uno scarto casuale di al più `amount` su ogni asse.
+    /// @brief_de Verschiebt eine Position um einen zufälligen Versatz von höchstens `amount` je Achse.
+    /// @brief_ru Смещает позицию случайным сдвигом не больше `amount` по каждой оси.
+    /// @brief_zh 以每个轴上不超过 `amount` 的随机偏移来扰动一个位置。
+    /// @brief_ja 各軸で最大 `amount` のランダムなずれを位置に加えます。
+    /// @brief_ko 각 축에서 최대 `amount`만큼의 임의 오프셋으로 위치를 흩뜨립니다.
+    ///
+    /// @param_en pos The position to displace.
+    /// @param_es pos La posición que se desplaza.
+    /// @param_pt pos A posição a deslocar.
+    /// @param_fr pos La position à décaler.
+    /// @param_it pos La posizione da spostare.
+    /// @param_de pos Die zu verschiebende Position.
+    /// @param_ru pos Смещаемая позиция.
+    /// @param_zh pos 要扰动的位置。
+    /// @param_ja pos ずらす位置。
+    /// @param_ko pos 흩뜨릴 위치.
+    ///
+    /// @param_en amount The largest displacement allowed on any one axis.
+    /// @param_es amount El mayor desplazamiento permitido en cualquiera de los ejes.
+    /// @param_pt amount O maior deslocamento permitido em qualquer um dos eixos.
+    /// @param_fr amount Le plus grand décalage autorisé sur un axe donné.
+    /// @param_it amount Il massimo spostamento consentito su un singolo asse.
+    /// @param_de amount Die größte zulässige Verschiebung auf einer Achse.
+    /// @param_ru amount Наибольшее смещение по одной оси.
+    /// @param_zh amount 单个轴上允许的最大偏移量。
+    /// @param_ja amount 1 つの軸で許される最大のずれ。
+    /// @param_ko amount 한 축에서 허용되는 최대 이동량.
+    ///
+    /// @result_en The jittered position.
+    /// @result_es La posición con el temblor aplicado.
+    /// @result_pt A posição com o tremor aplicado.
+    /// @result_fr La position perturbée.
+    /// @result_it La posizione perturbata.
+    /// @result_de Die verwackelte Position.
+    /// @result_ru Смещённая позиция.
+    /// @result_zh 抖动之后的位置。
+    /// @result_ja ゆらぎを加えた位置。
+    /// @result_ko 흔들림이 더해진 위치.
+    fn jitter(pos: f32x3, amount: f32) -> f32x3 { pos + rand_box(#f32x3(amount, amount, amount)) }
+}

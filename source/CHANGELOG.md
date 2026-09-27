@@ -1,3 +1,4 @@
+- v1.4: verified spatial Sanity repair with animation-invariance proof, Smart Auto Fix v4.1, standalone texture resolution, single-save/idempotency guards, Effects Lab reflow fixes, Effects Runtime packaging, expanded MDL/SKIN4/model-pack/parser regression coverage, and 1.4 build metadata cleanup.
 - v1.3: integrated Automatic Model Test suite for model/texture/geoset/animation/rig/PBR/outliner/camera/FX/CASC/save workflows with full Log reporting and safe state restoration.
 # Changelog
 

@@ -9,7 +9,7 @@ const { spawn } = require('child_process');
 
 const APP_SCHEME = 'wc3asset';
 const APP_HOST = 'app';
-const PRODUCT = 'WC3 Asset Studio v1.3';
+const PRODUCT = 'WC3 Asset Studio v1.4';
 const windowIcon = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 const ASSOCIATED_EXTENSIONS = new Set(['.blp','.tga','.mdl','.mdx']);
 const REGISTERED_APP_NAME = 'WC3 Asset Studio';
@@ -19,6 +19,8 @@ let pendingAssociatedPaths = [];
 let associatedRendererReady = false;
 let allowDirtyClose = false;
 let unsavedRendererState = { dirty:false, scopes:[], summary:'', lastChange:'' };
+let registeredDownloadSession = null;
+let registeredDownloadHandler = null;
 
 // CascLib is the preferred local backend for stock Warcraft assets and FX/Spells.
 // If a newer game build makes that native reader abort, WC3 Asset Studio can
@@ -47,9 +49,14 @@ const cascDataDir = path.join(portableData, 'CASC');
 const cascSettingsPath = path.join(cascDataDir, 'settings.json');
 fs.mkdirSync(portableData, { recursive: true });
 fs.mkdirSync(path.join(portableData, 'Session'), { recursive: true });
-fs.mkdirSync(path.join(portableData, 'Logs'), { recursive: true });
+const logsDir = path.join(portableData, 'Logs');
+fs.mkdirSync(logsDir, { recursive: true });
 fs.mkdirSync(cascDataDir, { recursive: true });
-const runtimeLogPath = path.join(portableData, 'Logs', 'runtime.log');
+function sessionLogStamp(date=new Date()){
+  const pad=(value,width=2)=>String(value).padStart(width,'0');
+  return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}-${pad(date.getMilliseconds(),3)}-p${process.pid}`;
+}
+const runtimeLogPath = path.join(logsDir, `session-${sessionLogStamp()}.log`);
 function logValue(value){
   if(value instanceof Error) return `${value.name||'Error'}: ${value.message||value}${value.stack?`\n${value.stack}`:''}`;
   if(typeof value==='string') return value;
@@ -326,7 +333,7 @@ function gitBlobSha1(buffer) {
 function downloadBuffer(url, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > 5) return reject(new Error('Too many redirects while downloading CASC support.'));
-    const req = https.get(url, { headers: { 'User-Agent': 'WC3-Asset-Studio/1.3' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': 'WC3-Asset-Studio/1.4' } }, res => {
       const status = res.statusCode || 0;
       if (status >= 300 && status < 400 && res.headers.location) {
         res.resume();
@@ -564,7 +571,8 @@ function allowedCascRequest(req) {
   // Keep these separate from generic effects, but allow the same stock MDX/MDL
   // files through the CASC safety filter instead of silently rejecting them.
   if (kind === 'model' || kind === 'effect-model' || kind === 'reference-model' || kind === 'unit-model') return ['.mdx', '.mdl'].includes(ext);
-  if (kind === 'texture' || kind === 'effect-texture') return ['.blp', '.dds', '.tga', '.png', '.jpg', '.jpeg', '.webp'].includes(ext);
+  if (kind === 'texture' || kind === 'effect-texture') return ['.blp', '.dds', '.tga', '.tif', '.tiff', '.png', '.jpg', '.jpeg', '.webp'].includes(ext);
+  if (kind === 'sound' || kind === 'audio') return ['.wav', '.mp3', '.ogg', '.flac', '.opus'].includes(ext);
   return false;
 }
 
@@ -582,10 +590,27 @@ function cascCandidates(req) {
     rels.push(rel0.replace(/\.tga$/i, '.blp'));
     rels.push(rel0.replace(/\.tga$/i, '.dds'));
   }
-  const hd = req.artSet === 'hd' || req.artSet === 'de' || req.artSet === 'auto-hd';
-  const prefixes = hd
-    ? ['war3.w3mod:_de.w3mod:', 'war3.w3mod:_hd.w3mod:', 'war3.w3mod:', 'war3sd.w3mod:', '']
-    : ['war3sd.w3mod:', 'war3.w3mod:', '', 'war3.w3mod:_hd.w3mod:', 'war3.w3mod:_de.w3mod:'];
+  // Reforged MDX commonly authors material references as .tif even though
+  // retail CASC stores the payload as DDS under _hd.w3mod.
+  if (/\.tiff?$/i.test(rel0)) {
+    rels.push(rel0.replace(/\.tiff?$/i, '.dds'));
+    rels.push(rel0.replace(/\.tiff?$/i, '.blp'));
+    rels.push(rel0.replace(/\.tiff?$/i, '.tga'));
+  }
+  const requestedArtSet = String(req.artSet || '').toLowerCase();
+  // "DE" here is the explicit _de.w3mod namespace requested by the CASC UI.
+  // Keep the three choices distinct; legacy callers still map classic/stock
+  // to SD and auto-hd to HD.
+  const artSet = requestedArtSet === 'hd' || requestedArtSet === 'auto-hd'
+    ? 'hd'
+    : requestedArtSet === 'de'
+      ? 'de'
+      : 'sd';
+  const prefixes = artSet === 'hd'
+    ? ['war3.w3mod:_hd.w3mod:', 'war3.w3mod:', 'war3sd.w3mod:', '', 'war3.w3mod:_de.w3mod:']
+    : artSet === 'de'
+      ? ['war3.w3mod:_de.w3mod:', 'war3.w3mod:', 'war3.w3mod:_hd.w3mod:', 'war3sd.w3mod:', '']
+      : ['war3sd.w3mod:', 'war3.w3mod:', '', 'war3.w3mod:_hd.w3mod:', 'war3.w3mod:_de.w3mod:'];
   const out = [];
   if (raw.includes(':')) out.push(raw);
   for (const rel of rels) for (const prefix of prefixes) out.push(prefix + rel);
@@ -744,13 +769,55 @@ async function searchCascAssets(payload={}) {
   const query=String(payload.query||'').trim();
   const type=String(payload.type||'all').toLowerCase();
   const limit=Math.max(1,Math.min(500,Number(payload.limit)||200));
+  const offset=Math.max(0,Math.min(100000,Number(payload.offset)||0));
+  const artSet=['sd','hd','de'].includes(String(payload.artSet||'').toLowerCase())?String(payload.artSet).toLowerCase():'sd';
   const settings=readCascSettings();
   const installPath=normalizeWarcraftRoot(settings.installPath||'');
   if(!validWarcraftRoot(installPath))throw new Error('Choose the Warcraft III installation folder before searching CASC assets.');
   const region=String(settings.storageParam||'').startsWith('cdn:w3:') ? String(settings.storageParam).split(':')[2]||'us' : 'us';
-  const result=await runCascCdnProcess([],false,region,{installPath,search:{query,type,limit}});
-  mainLog('info','CASC CDN','Asset search completed',{query,type,count:(result.results||[]).length});
-  return {backend:'cdn',region:result.region||region,results:Array.isArray(result.results)?result.results:[]};
+  const result=await runCascCdnProcess([],false,region,{installPath,search:{query,type,limit,offset,artSet}});
+  const results=Array.isArray(result.results)?result.results:[];
+  mainLog('info','CASC CDN','Asset search completed',{query,type,artSet,offset,limit,count:results.length,total:Number(result.total)||results.length});
+  return {backend:'cdn',region:result.region||region,artSet:result.artSet||artSet,results,total:Number(result.total)||results.length,offset:Number.isFinite(Number(result.offset))?Number(result.offset):offset,limit:Number.isFinite(Number(result.limit))?Number(result.limit):limit};
+}
+
+function cascExportRelative(assetPath, preservePath=true) {
+  const cleaned=cleanCascRelative(assetPath).replace(/\\/g,'/');
+  const parts=cleaned.split('/').filter(Boolean).filter(part=>part!=='.'&&part!=='..').map(part=>part.replace(/[<>:"|?*\x00-\x1F]/g,'_'));
+  const safe=parts.join(path.sep);
+  if(!safe)return 'warcraft_asset.bin';
+  return preservePath?safe:path.basename(safe);
+}
+
+function uniqueExportPath(targetPath, used) {
+  let out=targetPath, key=path.resolve(out).toLowerCase(), i=2;
+  if(!used.has(key)){used.add(key);return out;}
+  const ext=path.extname(out), base=out.slice(0,out.length-ext.length);
+  while(used.has(path.resolve(`${base}_${i}${ext}`).toLowerCase()))i++;
+  out=`${base}_${i}${ext}`;used.add(path.resolve(out).toLowerCase());return out;
+}
+
+async function exportCascAssets(payload={}) {
+  const preservePath=payload.preservePath!==false;
+  const requests=Array.isArray(payload.requests)?payload.requests.filter(allowedCascRequest).slice(0,64):[];
+  if(!requests.length)return {ok:false,canceled:false,files:[],error:'No supported Warcraft assets were selected for export.'};
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Export Warcraft game storage assets',properties:['openDirectory','createDirectory']});
+  if(pick.canceled||!pick.filePaths?.[0])return {ok:false,canceled:true,files:[]};
+  const folder=pick.filePaths[0];
+  const read=await readCascAssets({requests});
+  const used=new Set(),files=[];
+  for(const hit of read.results||[]){
+    if(!hit?.found||!hit.data)continue;
+    const req=requests[hit.requestIndex]||{};
+    const rel=cascExportRelative(hit.resolvedPath||hit.requestedPath||req.path,preservePath);
+    const target=uniqueExportPath(path.join(folder,rel),used);
+    await fs.promises.mkdir(path.dirname(target),{recursive:true});
+    const data=Buffer.from(hit.data instanceof ArrayBuffer?new Uint8Array(hit.data):hit.data);
+    await fs.promises.writeFile(target,data);
+    files.push({requestedPath:hit.requestedPath||req.path||'',resolvedPath:hit.resolvedPath||'',path:target,size:data.length});
+  }
+  mainLog('info','Game Storage','Export completed',{folder,preservePath,requested:requests.length,exported:files.length,totalBytes:files.reduce((n,f)=>n+f.size,0)});
+  return {ok:true,canceled:false,folder,files,missing:Math.max(0,requests.length-files.length)};
 }
 
 async function probeCascCdn(region='us', installPath='') {
@@ -1109,6 +1176,50 @@ async function readAssociatedFile(filePath){
   }catch(e){mainLog('error','Windows Association','Could not read associated file',{filePath:full,error:e.message||String(e)});return {ok:false,error:e.message||String(e)};}
 }
 
+
+function ipcBinaryBuffer(data){
+  if(Buffer.isBuffer(data)) return data;
+  if(data instanceof ArrayBuffer) return Buffer.from(new Uint8Array(data));
+  if(ArrayBuffer.isView(data)) return Buffer.from(data.buffer,data.byteOffset,data.byteLength);
+  if(Array.isArray(data)) return Buffer.from(data);
+  throw new Error('Binary save payload is missing or unsupported.');
+}
+async function saveBinaryFile(payload={}){
+  const requested=path.basename(String(payload.name||'export.bin')).replace(/[<>:"/\\|?*\x00-\x1f]/g,'_')||'export.bin';
+  const filters=Array.isArray(payload.filters)?payload.filters.map(f=>({name:String(f?.name||'File'),extensions:Array.isArray(f?.extensions)?f.extensions.map(x=>String(x||'').replace(/^\./,'').toLowerCase()).filter(Boolean):[]})).filter(f=>f.extensions.length):[];
+  const bytes=ipcBinaryBuffer(payload.data);
+  const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save export',defaultPath:requested,...(filters.length?{filters}: {})});
+  if(pick.canceled||!pick.filePath){mainLog('debug','Native Save','Save cancelled',{name:requested,bytes:bytes.length});return{canceled:true,name:requested,bytes:bytes.length};}
+  await fs.promises.writeFile(pick.filePath,bytes);
+  mainLog('info','Native Save','Binary export saved',{name:requested,path:pick.filePath,bytes:bytes.length});
+  return{canceled:false,path:pick.filePath,name:path.basename(pick.filePath),bytes:bytes.length};
+}
+function bindDownloadHandler(session){
+  if(!session)return;
+  if(registeredDownloadSession&&registeredDownloadHandler)registeredDownloadSession.removeListener('will-download',registeredDownloadHandler);
+  registeredDownloadSession=session;
+  registeredDownloadHandler=async (_event,item)=>{
+    const requestedName=item.getFilename();
+    const report=(state,filePath='')=>{
+      const payload={name:requestedName,state:String(state||''),path:String(filePath||'')};
+      if(mainWindow&&!mainWindow.isDestroyed())try{mainWindow.webContents.send('wc3-download:result',payload);}catch(_){}
+      mainLog(state==='completed'?'info':'debug','Download',`Download ${state||'unknown'}`,payload);
+    };
+    try{
+      item.pause();
+      const result=await dialog.showSaveDialog(mainWindow,{title:'Save export',defaultPath:requestedName});
+      if(result.canceled||!result.filePath){item.cancel();report('cancelled');return;}
+      item.setSavePath(result.filePath);
+      item.once('done',(_doneEvent,state)=>report(state,item.getSavePath()));
+      item.resume();
+    }catch(error){
+      mainLog('error','Download','Download handler error',error);console.error('[download]',error);report('interrupted');try{item.resume();}catch(_){}
+    }
+  };
+  session.on('will-download',registeredDownloadHandler);
+  mainLog('debug','Download','Download handler bound',{idempotent:true});
+}
+
 function registerIpc() {
   ipcMain.handle('wc3-file:renderer-ready', () => {
     // Initial-launch files are claimed by the renderer instead of being pushed
@@ -1122,6 +1233,7 @@ function registerIpc() {
   });
   ipcMain.handle('wc3-local:scan-model-textures', async (_event, payload) => scanModelTextureFiles(payload));
   ipcMain.handle('wc3-file:read-associated', async (_event, filePath) => readAssociatedFile(filePath));
+  ipcMain.handle('wc3-file:save-binary', async (_event, payload) => saveBinaryFile(payload||{}));
   ipcMain.handle('wc3-associations:open-settings', async () => openWindowsDefaultApps());
   ipcMain.handle('wc3-casc:status', () => cascStatus());
   ipcMain.handle('wc3-casc:install-folder-state', () => warcraftInstallFolderState());
@@ -1166,6 +1278,19 @@ function registerIpc() {
   });
   ipcMain.handle('wc3-casc:read-assets', async (_event, payload) => readCascAssets(payload));
   ipcMain.handle('wc3-casc:search-assets', async (_event, payload) => searchCascAssets(payload||{}));
+  ipcMain.handle('wc3-casc:export-assets', async (_event, payload) => exportCascAssets(payload||{}));
+  ipcMain.handle('wc3-effects:status', () => effectsStatus());
+  ipcMain.handle('wc3-effects:self-test', async () => effectsSelfTest());
+  ipcMain.handle('wc3-effects:launch-designer', async (_event,payload) => effectsLaunchDesigner(payload||{}));
+  ipcMain.handle('wc3-effects:choose-epf', async () => effectsChooseEpf());
+  ipcMain.handle('wc3-effects:save-epf', async (_event,payload) => effectsSaveEpf(payload||{}));
+  ipcMain.handle('wc3-effects:choose-pkb', async () => effectsChoosePkb());
+  ipcMain.handle('wc3-effects:choose-bundle', async () => effectsChooseBundle());
+  ipcMain.handle('wc3-effects:read-bundle', async (_event,bundlePath) => effectsReadBundle(bundlePath));
+  ipcMain.handle('wc3-effects:save-bundle', async (_event,payload) => effectsSaveBundle(payload||{}));
+  ipcMain.handle('wc3-effects:decompile', async (_event,payload) => effectsDecompile(payload||{}));
+  ipcMain.handle('wc3-effects:build', async (_event,payload) => effectsBuild(payload||{}));
+  ipcMain.handle('wc3-effects:save-code', async (_event,payload) => effectsSaveCode(payload||{}));
   ipcMain.handle('wc3-log:append', (_event, entry) => {
     if(!entry || typeof entry!=='object') return false;
     appendRuntimeLog(entry.level||'info',entry.source||'Renderer',entry.message||'',entry.detail||'',false);
@@ -1205,6 +1330,92 @@ function registerIpc() {
   });
 }
 
+
+const EFFECTS_CORE_BUNDLE_FILES = Object.freeze(['effect.cfx','code.cfx','samplers.cfx','renderers.cfx','events.cfx']);
+const EFFECTS_OPTIONAL_BUNDLE_FILES = Object.freeze(['functions.cfx']);
+const EFFECTS_BUNDLE_FILES = Object.freeze([...EFFECTS_CORE_BUNDLE_FILES,...EFFECTS_OPTIONAL_BUNDLE_FILES]);
+function effectsToolRoot(){
+  return app.isPackaged ? path.join(process.resourcesPath,'tools','effects-lab') : path.join(__dirname,'tools','effects-lab');
+}
+const EFFECTS_RUNTIME_EXECUTABLE = 'effects-runtime.exe';
+function effectsRuntimePath(){return path.join(effectsToolRoot(),EFFECTS_RUNTIME_EXECUTABLE);}
+function effectsDesignerPath(){return path.join(effectsToolRoot(),'effect-designer','Effect Designer.exe');}
+function effectsStatus(){
+  const runtimePath=effectsRuntimePath(),libraryPath=path.join(effectsToolRoot(),'cfxlib'),designer=effectsDesignerPath();
+  return {ready:fs.existsSync(runtimePath)&&fs.existsSync(libraryPath),runtimePath,libraryPath,legacyDesigner:designer,legacyDesignerReady:fs.existsSync(designer),toolRoot:effectsToolRoot(),platform:process.platform};
+}
+function effectsLaunchDesigner(payload={}){
+  const exe=effectsDesignerPath();if(!fs.existsSync(exe))throw new Error('Effect Designer backend is not packaged.');
+  const projectPath=String(payload.path||'').trim();const args=projectPath&&fs.existsSync(projectPath)?[projectPath]:[];const child=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:false,detached:true,stdio:'ignore'});child.unref();mainLog('info','Effects Lab','Original Effect Designer launched',{projectPath:args[0]||''});return{ok:true,path:exe,projectPath:args[0]||''};
+}
+
+function effectsReadBundle(bundlePath){
+  const root=path.resolve(String(bundlePath||''));
+  if(!root||!fs.existsSync(root)||!fs.statSync(root).isDirectory())throw new Error('CFX bundle folder was not found.');
+  const files={};
+  for(const name of EFFECTS_CORE_BUNDLE_FILES){const fp=path.join(root,name);files[name]=fs.existsSync(fp)?fs.readFileSync(fp,'utf8'):'';}
+  for(const name of EFFECTS_OPTIONAL_BUNDLE_FILES){const fp=path.join(root,name);if(fs.existsSync(fp))files[name]=fs.readFileSync(fp,'utf8');}
+  return {path:root,name:path.basename(root),files};
+}
+function effectsWriteBundle(bundlePath,files={}){
+  const root=path.resolve(String(bundlePath||''));if(!root)throw new Error('Choose a CFX bundle folder.');fs.mkdirSync(root,{recursive:true});
+  let written=0;
+  for(const name of EFFECTS_BUNDLE_FILES){if(!Object.prototype.hasOwnProperty.call(files,name))continue;fs.writeFileSync(path.join(root,name),String(files[name]??''),'utf8');written++;}
+  return {path:root,written,files:EFFECTS_BUNDLE_FILES.filter(n=>Object.prototype.hasOwnProperty.call(files,n))};
+}
+function runEffectsTool(args,{cwd='',timeout=120000}={}){
+  const st=effectsStatus();if(!st.ready)return Promise.reject(new Error('Effects Runtime backend is not packaged. Re-apply the Effects Lab patch.'));
+  return new Promise((resolve,reject)=>{
+    const child=spawn(st.runtimePath,args.map(x=>String(x)),{cwd:cwd||st.toolRoot,windowsHide:true});
+    let stdout='',stderr='',done=false;const cap=1024*1024;
+    const append=(cur,buf)=>{cur+=buf.toString();return cur.length>cap?cur.slice(-cap):cur;};
+    child.stdout.on('data',b=>stdout=append(stdout,b));child.stderr.on('data',b=>stderr=append(stderr,b));
+    const timer=setTimeout(()=>{if(done)return;done=true;try{child.kill();}catch(_){}reject(new Error(`Effects Runtime timed out after ${Math.round(timeout/1000)}s.`));},timeout);
+    child.on('error',err=>{if(done)return;done=true;clearTimeout(timer);reject(err);});
+    child.on('close',code=>{if(done)return;done=true;clearTimeout(timer);const result={ok:code===0,code,stdout:stdout.trim(),stderr:stderr.trim()};if(code===0)resolve(result);else reject(new Error(result.stderr||result.stdout||`Effects Runtime exited with code ${code}`));});
+  });
+}
+async function effectsSelfTest(){
+  const st=effectsStatus();if(!st.ready)return{ready:false,...st};
+  // The packaged Effects Runtime has no stable version verb. `help` is a harmless,
+  // read-only live probe and is explicitly advertised by the runtime itself.
+  const run=await runEffectsTool(['help'],{timeout:10000});
+  const output=(run.stdout||run.stderr||'').trim();
+  return{ready:true,...st,run,output,probe:'help'};
+}
+async function effectsChooseEpf(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open Effect Designer project',properties:['openFile'],filters:[{name:'Effect Designer Project',extensions:['epf']},{name:'All files',extensions:['*']}]});
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const filePath=pick.filePaths[0];return{canceled:false,path:filePath,name:path.basename(filePath),text:fs.readFileSync(filePath,'latin1')};
+}
+async function effectsSaveEpf(payload={}){
+  let target=String(payload.path||'');if(!target){const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save Effect Designer project',defaultPath:String(payload.name||'effect.epf'),filters:[{name:'Effect Designer Project',extensions:['epf']}]});if(pick.canceled||!pick.filePath)return{canceled:true};target=pick.filePath;}
+  fs.writeFileSync(target,Buffer.from(String(payload.text||''),'latin1'));return{canceled:false,path:target,name:path.basename(target),bytes:fs.statSync(target).size};
+}
+async function effectsChoosePkb(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open Warcraft PopcornFX effect',properties:['openFile'],filters:[{name:'Warcraft PopcornFX',extensions:['pkb','particles']},{name:'All files',extensions:['*']}]});
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const filePath=pick.filePaths[0];return{canceled:false,path:filePath,name:path.basename(filePath),bytes:fs.statSync(filePath).size};
+}
+async function effectsChooseBundle(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open CFX bundle folder',properties:['openDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};return{canceled:false,...effectsReadBundle(pick.filePaths[0])};
+}
+async function effectsDecompile(payload={}){
+  const input=path.resolve(String(payload.inputPath||''));if(!input||!fs.existsSync(input))throw new Error('Choose a valid .pkb / .particles file first.');
+  let out=String(payload.outputDir||'');if(!out){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination for the .cfxb bundle',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};out=path.join(pick.filePaths[0],`${path.basename(input,path.extname(input))}.cfxb`);}
+  out=path.resolve(out);fs.mkdirSync(out,{recursive:true});mainLog('info','Effects Lab','Effects Runtime decompile started',{input,out});const run=await runEffectsTool(['decompile',input,out],{timeout:180000});mainLog('info','Effects Lab','Effects Runtime decompile completed',{input,out,stdout:run.stdout});return{canceled:false,run,...effectsReadBundle(out)};
+}
+async function effectsBuild(payload={}){
+  const bundle=path.resolve(String(payload.bundlePath||''));if(!bundle||!fs.existsSync(bundle))throw new Error('Open or save a .cfxb folder first.');
+  let output=String(payload.outputPath||'');if(!output){const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Build Warcraft PopcornFX effect',defaultPath:path.basename(bundle).replace(/\.cfxb$/i,'')+'.pkb',filters:[{name:'Warcraft PopcornFX',extensions:['pkb']}]});if(pick.canceled||!pick.filePath)return{canceled:true};output=pick.filePath;}
+  output=path.resolve(output);mainLog('info','Effects Lab','Effects Runtime build started',{bundle,output});const run=await runEffectsTool(['build',bundle,output],{timeout:180000});const bytes=fs.existsSync(output)?fs.statSync(output).size:0;mainLog('info','Effects Lab','Effects Runtime build completed',{bundle,output,bytes,stdout:run.stdout});return{canceled:false,run,path:output,name:path.basename(output),bytes};
+}
+async function effectsSaveBundle(payload={}){
+  let bundlePath=String(payload.bundlePath||'');if(!bundlePath){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination folder for CFX bundle',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const safe=String(payload.name||'effect').replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/\.cfxb$/i,'');bundlePath=path.join(pick.filePaths[0],safe+'.cfxb');}
+  return{canceled:false,...effectsWriteBundle(bundlePath,payload.files||{})};
+}
+async function effectsSaveCode(payload={}){
+  const lang=String(payload.language||'lua').toLowerCase()==='jass'?'j':'lua';const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save generated effect script',defaultPath:String(payload.name||`effect.${lang}`),filters:[{name:lang==='j'?'JASS':'Lua',extensions:[lang]}]});if(pick.canceled||!pick.filePath)return{canceled:true};fs.writeFileSync(pick.filePath,String(payload.text||''),'utf8');return{canceled:false,path:pick.filePath,name:path.basename(pick.filePath),bytes:fs.statSync(pick.filePath).size};
+}
+
 function createWindow() {
   mainLog('info','Main','Creating application window',{product:PRODUCT,platform:process.platform,arch:process.arch});
   mainWindow = new BrowserWindow({
@@ -1234,34 +1445,7 @@ function createWindow() {
     if (!url.startsWith(`${APP_SCHEME}://${APP_HOST}/`)) event.preventDefault();
   });
 
-  mainWindow.webContents.session.on('will-download', async (_event, item) => {
-    const requestedName=item.getFilename();
-    const report=(state,filePath='')=>{
-      const payload={name:requestedName,state:String(state||''),path:String(filePath||'')};
-      if(mainWindow&&!mainWindow.isDestroyed())try{mainWindow.webContents.send('wc3-download:result',payload);}catch(_){}
-      mainLog(state==='completed'?'info':'debug','Download',`Download ${state||'unknown'}`,payload);
-    };
-    try {
-      item.pause();
-      const result = await dialog.showSaveDialog(mainWindow, {
-        title: 'Save export',
-        defaultPath: requestedName
-      });
-      if (result.canceled || !result.filePath) {
-        item.cancel();
-        report('cancelled');
-        return;
-      }
-      item.setSavePath(result.filePath);
-      item.once('done',(_doneEvent,state)=>report(state,item.getSavePath()));
-      item.resume();
-    } catch (error) {
-      mainLog('error','Download','Download handler error',error);
-      console.error('[download]', error);
-      report('interrupted');
-      try { item.resume(); } catch (_) {}
-    }
-  });
+  bindDownloadHandler(mainWindow.webContents.session);
 
   mainWindow.webContents.on('did-start-loading', () => { associatedRendererReady = false; });
   mainWindow.webContents.on('did-finish-load', () => {
@@ -1330,7 +1514,7 @@ if (!gotLock) {
   app.whenReady().then(async () => {
     await registerAppProtocol();
     registerIpc();
-    mainLog('info','Main','Application ready',{portableRoot,portableData,initialAssociatedPath:initialAssociatedPath||''});
+    mainLog('info','Main','Application ready',{portableRoot,portableData,runtimeLogPath,initialAssociatedPath:initialAssociatedPath||''});
     if(initialAssociatedPath)pendingAssociatedPaths.push(initialAssociatedPath);
     createWindow();
   });

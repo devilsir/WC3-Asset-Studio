@@ -1,0 +1,416 @@
+// stdlib/easing.cfx — easing curves over a normalized t in [0, 1].
+//
+// All of these take an ALREADY-normalized t (use `math.remap` from math.cfx to get one) and return
+// a value in [0, 1]. There is no control flow in CFX, so the "in/out" halves are blended with
+// `select` rather than branched.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "math.cfx";
+
+namespace easing {
+
+    /// @brief_en Accelerate from rest: slow at the start, fastest at the end. Quadratic.
+    /// @brief_es Acelera desde el reposo: lento al principio y más rápido al final. Cuadrática.
+    /// @brief_pt Acelera a partir do repouso: lento no início e mais rápido no fim. Quadrática.
+    /// @brief_fr Accélère depuis l'arrêt : lent au début, plus rapide à la fin. Quadratique.
+    /// @brief_it Accelera da fermo: lento all'inizio e più veloce alla fine. Quadratica.
+    /// @brief_de Beschleunigt aus dem Stand: langsam am Anfang, am schnellsten am Ende. Quadratisch.
+    /// @brief_ru Разгон с места: медленно в начале и быстрее всего в конце. Квадратичная.
+    /// @brief_zh 从静止开始加速：起步慢、结尾最快。二次曲线。
+    /// @brief_ja 静止から加速します。序盤はゆっくり、終盤がいちばん速くなります。二次曲線です。
+    /// @brief_ko 정지 상태에서 가속합니다. 시작은 느리고 끝이 가장 빠릅니다. 이차 곡선입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_in_quad(t: f32) -> f32 { let x : f32 = saturate(t); x * x }
+
+    /// @brief_en Decelerate to rest: fastest at the start, slow at the end. Quadratic.
+    /// @brief_es Desacelera hasta detenerse: más rápido al principio y lento al final. Cuadrática.
+    /// @brief_pt Desacelera até parar: mais rápido no início e lento no fim. Quadrática.
+    /// @brief_fr Décélère jusqu'à l'arrêt : plus rapide au début, lent à la fin. Quadratique.
+    /// @brief_it Decelera fino a fermarsi: più veloce all'inizio e lento alla fine. Quadratica.
+    /// @brief_de Bremst bis zum Stillstand ab: am schnellsten am Anfang, langsam am Ende. Quadratisch.
+    /// @brief_ru Торможение до остановки: быстрее всего в начале и медленно в конце. Квадратичная.
+    /// @brief_zh 减速至停止：起步最快、结尾变慢。二次曲线。
+    /// @brief_ja 減速して止まります。序盤がいちばん速く、終盤はゆっくりになります。二次曲線です。
+    /// @brief_ko 감속해서 멈춥니다. 시작이 가장 빠르고 끝이 느립니다. 이차 곡선입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_out_quad(t: f32) -> f32 { let x : f32 = 1.0 - saturate(t); 1.0 - x * x }
+
+    /// @brief_en Accelerate from rest, harder than the quadratic — the start is nearly flat. Cubic.
+    /// @brief_es Acelera desde el reposo, con más fuerza que la cuadrática: el arranque es casi plano. Cúbica.
+    /// @brief_pt Acelera a partir do repouso, com mais força que a quadrática: o início é quase plano. Cúbica.
+    /// @brief_fr Accélère depuis l'arrêt, plus fort que la quadratique : le départ est presque plat. Cubique.
+    /// @brief_it Accelera da fermo, più marcatamente della quadratica: l'avvio è quasi piatto. Cubica.
+    /// @brief_de Beschleunigt aus dem Stand, stärker als die quadratische — der Anfang ist fast flach. Kubisch.
+    /// @brief_ru Разгон с места, резче квадратичного: начало почти плоское. Кубическая.
+    /// @brief_zh 从静止开始加速，比二次曲线更猛，起步几乎是平的。三次曲线。
+    /// @brief_ja 静止から加速します。二次より強く、序盤はほぼ平坦です。三次曲線です。
+    /// @brief_ko 정지 상태에서 가속합니다. 이차보다 강해 시작이 거의 평평합니다. 삼차 곡선입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_in_cubic(t: f32) -> f32 { let x : f32 = saturate(t); x * x * x }
+
+    /// @brief_en Decelerate to rest, harder than the quadratic — the end is nearly flat. Cubic.
+    /// @brief_es Desacelera hasta detenerse, con más fuerza que la cuadrática: el final es casi plano. Cúbica.
+    /// @brief_pt Desacelera até parar, com mais força que a quadrática: o fim é quase plano. Cúbica.
+    /// @brief_fr Décélère jusqu'à l'arrêt, plus fort que la quadratique : la fin est presque plate. Cubique.
+    /// @brief_it Decelera fino a fermarsi, più marcatamente della quadratica: la fine è quasi piatta. Cubica.
+    /// @brief_de Bremst bis zum Stillstand ab, stärker als die quadratische — das Ende ist fast flach. Kubisch.
+    /// @brief_ru Торможение до остановки, резче квадратичного: конец почти плоский. Кубическая.
+    /// @brief_zh 减速至停止，比二次曲线更猛，结尾几乎是平的。三次曲线。
+    /// @brief_ja 減速して止まります。二次より強く、終盤はほぼ平坦です。三次曲線です。
+    /// @brief_ko 감속해서 멈춥니다. 이차보다 강해 끝이 거의 평평합니다. 삼차 곡선입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_out_cubic(t: f32) -> f32 { let x : f32 = 1.0 - saturate(t); 1.0 - x * x * x }
+
+    /// @brief_en Accelerate out of rest and decelerate back into it, meeting at half speed in the middle. Quadratic both halves.
+    /// @brief_es Acelera desde el reposo y desacelera de vuelta a él, encontrándose a media velocidad en el centro. Cuadrática en ambas mitades.
+    /// @brief_pt Acelera a partir do repouso e desacelera de volta a ele, encontrando-se a meia velocidade no centro. Quadrática nas duas metades.
+    /// @brief_fr Accélère depuis l'arrêt puis décélère jusqu'à lui, en se rejoignant à mi-vitesse au milieu. Quadratique des deux côtés.
+    /// @brief_it Accelera da fermo e decelera fino a fermarsi, incontrandosi a metà velocità al centro. Quadratica in entrambe le metà.
+    /// @brief_de Beschleunigt aus dem Stand und bremst wieder ab, in der Mitte treffen sich beide bei halber Geschwindigkeit. Beide Hälften quadratisch.
+    /// @brief_ru Разгоняется с места и снова тормозит, встречаясь посередине на половинной скорости. Обе половины квадратичные.
+    /// @brief_zh 先从静止加速再减速回到静止，在中点以半速衔接。两半都是二次曲线。
+    /// @brief_ja 静止から加速し、再び減速して止まります。中間で半分の速さで両者がつながります。前後半とも二次曲線です。
+    /// @brief_ko 정지에서 가속했다가 다시 감속해 멈춥니다. 중간에서 절반 속도로 이어집니다. 두 구간 모두 이차 곡선입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_in_out_quad(t: f32) -> f32 {
+        let x : f32 = saturate(t);
+        select(x < 0.5, 2.0 * x * x, 1.0 - 2.0 * (1.0 - x) * (1.0 - x))
+    }
+
+    /// @brief_en Sine ease-in-out — the smoothest of the cheap ones, with no visible corner at either end.
+    /// @brief_es Suavizado senoidal de entrada y salida: el más suave de los baratos, sin esquina visible en ninguno de los extremos.
+    /// @brief_pt Suavização senoidal de entrada e saída — a mais suave das baratas, sem canto visível em nenhuma das pontas.
+    /// @brief_fr Adoucissement sinusoïdal entrée-sortie — le plus doux des peu coûteux, sans angle visible aux extrémités.
+    /// @brief_it Attenuazione sinusoidale in entrata e uscita: la più morbida fra quelle economiche, senza spigoli visibili alle estremità.
+    /// @brief_de Sinusförmiges Ein- und Ausblenden — die weichste der günstigen Kurven, ohne sichtbare Ecke an den Enden.
+    /// @brief_ru Синусоидальное сглаживание на входе и выходе — самое мягкое из дешёвых, без заметного излома на концах.
+    /// @brief_zh 正弦缓入缓出 —— 廉价缓动里最平滑的一种，两端都看不到折角。
+    /// @brief_ja サイン波によるイーズインアウト。軽い曲線のなかで最も滑らかで、両端に角が見えません。
+    /// @brief_ko 사인 이즈인아웃 — 가벼운 곡선 중 가장 부드럽고 양 끝에 각이 보이지 않습니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1. Saturated first, so anything outside clamps.
+    /// @param_es t La posición normalizada, de 0 a 1. Se satura antes, así que lo de fuera se recorta.
+    /// @param_pt t A posição normalizada, de 0 a 1. É saturada antes, então o que está fora é recortado.
+    /// @param_fr t La position normalisée, de 0 à 1. Saturée d'abord : ce qui dépasse est borné.
+    /// @param_it t La posizione normalizzata, da 0 a 1. Viene saturata prima, quindi ciò che esce viene limitato.
+    /// @param_de t Die normierte Position von 0 bis 1. Wird zuerst gesättigt, alles darüber hinaus wird begrenzt.
+    /// @param_ru t Нормированная позиция от 0 до 1. Сначала насыщается, поэтому выходящее за пределы обрезается.
+    /// @param_zh t 归一化位置，0 到 1。会先 saturate，超出范围的值被截断。
+    /// @param_ja t 0 から 1 の正規化された位置。先に飽和されるため、範囲外はクランプされます。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치. 먼저 saturate되므로 범위를 벗어나면 잘립니다.
+    ///
+    /// @result_en The eased value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 缓动后的值，0 到 1。
+    /// @result_ja イージング後の値。0 から 1 です。
+    /// @result_ko 이징된 값. 0에서 1 사이입니다.
+    fn ease_sine(t: f32) -> f32 { 0.5 - 0.5 * radians.cos(saturate(t) * math.PI) }
+
+    /// @brief_en A 0 → 1 → 0 hump: rises over [0, peak], falls over [peak, 1]. The classic fade-in/fade-out.
+    /// @brief_es Una joroba 0 → 1 → 0: sube en [0, peak] y baja en [peak, 1]. El clásico aparecer y desaparecer.
+    /// @brief_pt Uma corcova 0 → 1 → 0: sobe em [0, peak] e desce em [peak, 1]. O clássico surgir e sumir.
+    /// @brief_fr Une bosse 0 → 1 → 0 : monte sur [0, peak], descend sur [peak, 1]. Le fondu d'entrée-sortie classique.
+    /// @brief_it Una gobba 0 → 1 → 0: sale su [0, peak] e scende su [peak, 1]. Il classico apparire e sparire.
+    /// @brief_de Ein Buckel 0 → 1 → 0: steigt über [0, peak], fällt über [peak, 1]. Das klassische Ein- und Ausblenden.
+    /// @brief_ru Горб 0 → 1 → 0: растёт на [0, peak] и падает на [peak, 1]. Классическое появление и исчезновение.
+    /// @brief_zh 一个 0 → 1 → 0 的驼峰：在 [0, peak] 上升，在 [peak, 1] 下降。经典的淡入淡出。
+    /// @brief_ja 0 → 1 → 0 の山です。[0, peak] で立ち上がり、[peak, 1] で下がります。定番のフェードイン・フェードアウトです。
+    /// @brief_ko 0 → 1 → 0 형태의 봉우리입니다. [0, peak]에서 올라가고 [peak, 1]에서 내려옵니다. 전형적인 페이드인·페이드아웃입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1.
+    /// @param_es t La posición normalizada, de 0 a 1.
+    /// @param_pt t A posição normalizada, de 0 a 1.
+    /// @param_fr t La position normalisée, de 0 à 1.
+    /// @param_it t La posizione normalizzata, da 0 a 1.
+    /// @param_de t Die normierte Position von 0 bis 1.
+    /// @param_ru t Нормированная позиция от 0 до 1.
+    /// @param_zh t 归一化位置，0 到 1。
+    /// @param_ja t 0 から 1 の正規化された位置。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치.
+    ///
+    /// @param_en peak Where the hump reaches 1. Move it earlier for a quick flash with a long tail.
+    /// @param_es peak Dónde la joroba llega a 1. Adelántalo para un destello rápido con una cola larga.
+    /// @param_pt peak Onde a corcova chega a 1. Antecipe-o para um clarão rápido com cauda longa.
+    /// @param_fr peak L'endroit où la bosse atteint 1. Avancez-le pour un éclat bref suivi d'une longue traîne.
+    /// @param_it peak Dove la gobba raggiunge 1. Anticipalo per un lampo rapido con una coda lunga.
+    /// @param_de peak Wo der Buckel 1 erreicht. Früher gesetzt ergibt einen kurzen Blitz mit langem Nachlauf.
+    /// @param_ru peak Где горб достигает 1. Сдвиньте раньше — получится быстрая вспышка с длинным хвостом.
+    /// @param_zh peak 驼峰到达 1 的位置。往前挪可以做出快速闪光加长尾巴的效果。
+    /// @param_ja peak 山が 1 に達する位置。前に寄せると、短い閃光と長い余韻になります。
+    /// @param_ko peak 봉우리가 1에 도달하는 위치. 앞으로 당기면 짧은 섬광에 긴 여운이 남습니다.
+    ///
+    /// @result_en The hump's value at `t`, 0 to 1.
+    /// @result_es El valor de la joroba en `t`, de 0 a 1.
+    /// @result_pt O valor da corcova em `t`, de 0 a 1.
+    /// @result_fr La valeur de la bosse en `t`, de 0 à 1.
+    /// @result_it Il valore della gobba in `t`, da 0 a 1.
+    /// @result_de Der Wert des Buckels bei `t`, von 0 bis 1.
+    /// @result_ru Значение горба в точке `t`, от 0 до 1.
+    /// @result_zh 驼峰在 `t` 处的值，0 到 1。
+    /// @result_ja `t` における山の値。0 から 1 です。
+    /// @result_ko `t`에서의 봉우리 값. 0에서 1 사이입니다.
+    fn pulse(t: f32, peak: f32 = 0.5) -> f32 {
+        let x : f32 = saturate(t);
+        min(math.remap(x, 0.0, peak), math.remap(x, 1.0, peak))
+    }
+
+    /// @brief_en Hold at 1 through `hold`, then fade to 0 by t = 1.
+    /// @brief_es Se mantiene en 1 hasta `hold` y luego se desvanece a 0 en t = 1.
+    /// @brief_pt Mantém-se em 1 até `hold` e depois esmaece a 0 em t = 1.
+    /// @brief_fr Reste à 1 jusqu'à `hold`, puis s'estompe jusqu'à 0 à t = 1.
+    /// @brief_it Resta a 1 fino a `hold`, poi sfuma a 0 entro t = 1.
+    /// @brief_de Hält bis `hold` den Wert 1 und blendet dann bis t = 1 auf 0 ab.
+    /// @brief_ru Держится на 1 до `hold`, затем гаснет до 0 к t = 1.
+    /// @brief_zh 在 `hold` 之前保持为 1，然后在 t = 1 之前淡到 0。
+    /// @brief_ja `hold` までは 1 を保ち、その後 t = 1 までに 0 へフェードします。
+    /// @brief_ko `hold`까지는 1을 유지하다가 t = 1까지 0으로 사라집니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1.
+    /// @param_es t La posición normalizada, de 0 a 1.
+    /// @param_pt t A posição normalizada, de 0 a 1.
+    /// @param_fr t La position normalisée, de 0 à 1.
+    /// @param_it t La posizione normalizzata, da 0 a 1.
+    /// @param_de t Die normierte Position von 0 bis 1.
+    /// @param_ru t Нормированная позиция от 0 до 1.
+    /// @param_zh t 归一化位置，0 到 1。
+    /// @param_ja t 0 から 1 の正規化された位置。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치.
+    ///
+    /// @param_en hold How long full strength lasts before the fade starts.
+    /// @param_es hold Cuánto dura la intensidad plena antes de empezar el desvanecido.
+    /// @param_pt hold Quanto tempo a intensidade máxima dura antes de começar o esmaecimento.
+    /// @param_fr hold Combien de temps la pleine intensité dure avant le début du fondu.
+    /// @param_it hold Quanto dura la piena intensità prima che inizi la dissolvenza.
+    /// @param_de hold Wie lange die volle Stärke anhält, bevor das Ausblenden beginnt.
+    /// @param_ru hold Сколько держится полная величина до начала затухания.
+    /// @param_zh hold 淡出开始之前维持满强度的时长。
+    /// @param_ja hold フェードが始まるまで最大値を保つ長さ。
+    /// @param_ko hold 페이드가 시작되기 전 최대 값을 유지하는 길이.
+    ///
+    /// @result_en 1 while held, then falling to 0.
+    /// @result_es 1 mientras se mantiene y luego cae a 0.
+    /// @result_pt 1 enquanto se mantém e depois cai a 0.
+    /// @result_fr 1 pendant le maintien, puis descend jusqu'à 0.
+    /// @result_it 1 durante il mantenimento, poi scende a 0.
+    /// @result_de 1 während des Haltens, danach fallend bis 0.
+    /// @result_ru 1 во время удержания, затем падение до 0.
+    /// @result_zh 保持期间为 1，之后降到 0。
+    /// @result_ja 保持中は 1、その後 0 まで下がります。
+    /// @result_ko 유지되는 동안 1이고 이후 0까지 내려갑니다.
+    fn fade_out_after(t: f32, hold: f32 = 0.6) -> f32 { 1.0 - math.remap(t, hold, 1.0) }
+
+    /// @brief_en Ramp in over `in_end`, hold, ramp out from `out_start` — a trapezoid instead of a peak.
+    /// @brief_es Entra en rampa hasta `in_end`, se mantiene y sale en rampa desde `out_start`: un trapecio en vez de un pico.
+    /// @brief_pt Sobe em rampa até `in_end`, mantém-se e desce em rampa a partir de `out_start` — um trapézio em vez de um pico.
+    /// @brief_fr Monte en rampe jusqu'à `in_end`, se maintient, puis redescend depuis `out_start` — un trapèze plutôt qu'un pic.
+    /// @brief_it Sale a rampa fino a `in_end`, si mantiene e scende a rampa da `out_start`: un trapezio invece di un picco.
+    /// @brief_de Steigt bis `in_end` an, hält, und fällt ab `out_start` wieder — ein Trapez statt einer Spitze.
+    /// @brief_ru Нарастает до `in_end`, держится и спадает начиная с `out_start` — трапеция, а не пик.
+    /// @brief_zh 在 `in_end` 之前上升，保持，然后从 `out_start` 开始下降 —— 是梯形而不是尖峰。
+    /// @brief_ja `in_end` まで立ち上がり、保持し、`out_start` から下がります。ピークではなく台形です。
+    /// @brief_ko `in_end`까지 올라가 유지하다가 `out_start`부터 내려옵니다. 뾰족한 봉우리가 아니라 사다리꼴입니다.
+    ///
+    /// @param_en t The normalized position, 0 to 1.
+    /// @param_es t La posición normalizada, de 0 a 1.
+    /// @param_pt t A posição normalizada, de 0 a 1.
+    /// @param_fr t La position normalisée, de 0 à 1.
+    /// @param_it t La posizione normalizzata, da 0 a 1.
+    /// @param_de t Die normierte Position von 0 bis 1.
+    /// @param_ru t Нормированная позиция от 0 до 1.
+    /// @param_zh t 归一化位置，0 到 1。
+    /// @param_ja t 0 から 1 の正規化された位置。
+    /// @param_ko t 0에서 1 사이의 정규화된 위치.
+    ///
+    /// @param_en in_end Where the ramp in finishes and the hold begins.
+    /// @param_es in_end Dónde termina la rampa de entrada y empieza el sostenimiento.
+    /// @param_pt in_end Onde a rampa de entrada termina e o sustento começa.
+    /// @param_fr in_end Où la montée s'achève et où le maintien commence.
+    /// @param_it in_end Dove finisce la rampa d'ingresso e inizia il mantenimento.
+    /// @param_de in_end Wo der Anstieg endet und das Halten beginnt.
+    /// @param_ru in_end Где заканчивается нарастание и начинается удержание.
+    /// @param_zh in_end 上升段结束、保持段开始的位置。
+    /// @param_ja in_end 立ち上がりが終わり、保持が始まる位置。
+    /// @param_ko in_end 상승이 끝나고 유지가 시작되는 위치.
+    ///
+    /// @param_en out_start Where the hold ends and the ramp out begins.
+    /// @param_es out_start Dónde acaba el sostenimiento y empieza la rampa de salida.
+    /// @param_pt out_start Onde o sustento acaba e a rampa de saída começa.
+    /// @param_fr out_start Où le maintien s'achève et où la descente commence.
+    /// @param_it out_start Dove finisce il mantenimento e inizia la rampa d'uscita.
+    /// @param_de out_start Wo das Halten endet und der Abfall beginnt.
+    /// @param_ru out_start Где заканчивается удержание и начинается спад.
+    /// @param_zh out_start 保持段结束、下降段开始的位置。
+    /// @param_ja out_start 保持が終わり、下降が始まる位置。
+    /// @param_ko out_start 유지가 끝나고 하강이 시작되는 위치.
+    ///
+    /// @result_en The trapezoid's value at `t`, 0 to 1.
+    /// @result_es El valor del trapecio en `t`, de 0 a 1.
+    /// @result_pt O valor do trapézio em `t`, de 0 a 1.
+    /// @result_fr La valeur du trapèze en `t`, de 0 à 1.
+    /// @result_it Il valore del trapezio in `t`, da 0 a 1.
+    /// @result_de Der Wert des Trapezes bei `t`, von 0 bis 1.
+    /// @result_ru Значение трапеции в точке `t`, от 0 до 1.
+    /// @result_zh 梯形在 `t` 处的值，0 到 1。
+    /// @result_ja `t` における台形の値。0 から 1 です。
+    /// @result_ko `t`에서의 사다리꼴 값. 0에서 1 사이입니다.
+    fn fade_in_out(t: f32, in_end: f32 = 0.15, out_start: f32 = 0.8) -> f32 {
+        min(math.remap(t, 0.0, in_end), math.remap(t, 1.0, out_start))
+    }
+
+    /// @brief_en Exponential decay to 0 — halves every `half_life`, and never quite reaches zero.
+    /// @brief_es Decaimiento exponencial hacia 0: se reduce a la mitad cada `half_life` y nunca llega del todo a cero.
+    /// @brief_pt Decaimento exponencial até 0 — cai pela metade a cada `half_life` e nunca chega totalmente a zero.
+    /// @brief_fr Décroissance exponentielle vers 0 — divisée par deux à chaque `half_life`, sans jamais tout à fait atteindre zéro.
+    /// @brief_it Decadimento esponenziale verso 0: si dimezza a ogni `half_life` e non raggiunge mai davvero lo zero.
+    /// @brief_de Exponentieller Abfall gegen 0 — halbiert sich alle `half_life` und erreicht die Null nie ganz.
+    /// @brief_ru Экспоненциальное затухание к 0: уменьшается вдвое каждые `half_life` и никогда не достигает нуля точно.
+    /// @brief_zh 指数衰减到 0 —— 每经过一个 `half_life` 就减半，且永远不会真正归零。
+    /// @brief_ja 0 に向かう指数減衰です。`half_life` ごとに半分になり、厳密にゼロにはなりません。
+    /// @brief_ko 0을 향한 지수 감쇠입니다. `half_life`마다 절반이 되며 정확히 0에는 닿지 않습니다.
+    ///
+    /// @param_en t How far along the decay is, in the same units as `half_life`.
+    /// @param_es t Cuánto se ha avanzado en el decaimiento, en las mismas unidades que `half_life`.
+    /// @param_pt t Quanto o decaimento já avançou, nas mesmas unidades de `half_life`.
+    /// @param_fr t L'avancement de la décroissance, dans les mêmes unités que `half_life`.
+    /// @param_it t Quanto è avanzato il decadimento, nelle stesse unità di `half_life`.
+    /// @param_de t Wie weit der Abfall fortgeschritten ist, in denselben Einheiten wie `half_life`.
+    /// @param_ru t Насколько продвинулось затухание, в тех же единицах, что и `half_life`.
+    /// @param_zh t 衰减已进行的程度，单位与 `half_life` 相同。
+    /// @param_ja t 減衰がどこまで進んだか。単位は `half_life` と同じです。
+    /// @param_ko t 감쇠가 얼마나 진행됐는지. 단위는 `half_life`와 같습니다.
+    ///
+    /// @param_en half_life How long the value takes to halve. Smaller decays faster.
+    /// @param_es half_life Cuánto tarda el valor en reducirse a la mitad. Cuanto menor, más rápido decae.
+    /// @param_pt half_life Quanto tempo o valor leva para cair pela metade. Menor decai mais rápido.
+    /// @param_fr half_life Le temps que met la valeur à être divisée par deux. Plus petit, plus rapide.
+    /// @param_it half_life Quanto tempo impiega il valore a dimezzarsi. Più piccolo, più rapido.
+    /// @param_de half_life Wie lange der Wert zum Halbieren braucht. Kleiner heißt schneller.
+    /// @param_ru half_life За сколько значение уменьшается вдвое. Меньше — быстрее.
+    /// @param_zh half_life 数值减半所需的时长。越小衰减越快。
+    /// @param_ja half_life 値が半分になるまでの長さ。小さいほど速く減衰します。
+    /// @param_ko half_life 값이 절반이 되는 데 걸리는 길이. 작을수록 빨리 감쇠합니다.
+    ///
+    /// @result_en The remaining fraction, 1 at t = 0 and approaching 0.
+    /// @result_es La fracción restante: 1 en t = 0 y acercándose a 0.
+    /// @result_pt A fração restante: 1 em t = 0 e aproximando-se de 0.
+    /// @result_fr La fraction restante : 1 à t = 0, tendant vers 0.
+    /// @result_it La frazione rimanente: 1 a t = 0 e tendente a 0.
+    /// @result_de Der verbleibende Anteil: 1 bei t = 0, gegen 0 strebend.
+    /// @result_ru Оставшаяся доля: 1 при t = 0 и стремится к 0.
+    /// @result_zh 剩余的比例：t = 0 时为 1，之后趋近 0。
+    /// @result_ja 残っている割合。t = 0 で 1、以後 0 に近づきます。
+    /// @result_ko 남은 비율. t = 0에서 1이고 점차 0에 가까워집니다.
+    fn decay(t: f32, half_life: f32 = 0.25) -> f32 { exp2(0.0 - t * rcp(half_life)) }
+}

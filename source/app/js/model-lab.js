@@ -67,9 +67,11 @@
     teamColorIndex: 0,
     fxPreviewMode: false,
     fxPreviewStartedAt: 0,
+    fxLastStatsCheck: 0,
     fxLastStatsLog: 0,
+    fxLastStatsSignature: '',
     photoMode: false,
-    casc: { enabled:false, loading:false, verified:false, userRequested:false, status:null, loaded:new Map(), effectModels:new Map(), effectRuntimes:new Map(), effectPreviews:new Map(), effectTextures:new Map(), missing:new Set(), lastError:'' },
+    casc: { enabled:false, loading:false, verified:false, userRequested:false, status:null, loaded:new Map(), effectModels:new Map(), effectRuntimes:new Map(), effectPreviews:new Map(), effectTextures:new Map(), referenceTextures:new Map(), missing:new Set(), lastError:'' },
     nextNodeId: 1,
     activeViewCameraId: '',
     textureDiscovery: { localFound:0, cascFound:0, cascAttempted:0, missing:[], scannedFiles:0, truncated:false, source:'' },
@@ -777,8 +779,10 @@
   function modelGeosetRenderState(model,geoIndex,seq,frame,elapsedMs){
     const ga=(model&&model.geosetAnimations||[]).find(x=>x.geosetId===geoIndex);if(!ga)return{alpha:1,color:[1,1,1]};
     const alpha=modelTrackScalar(ga.tracks&&ga.tracks.KGAO,model,seq,frame,elapsedMs,ga.alpha==null?1:ga.alpha);
-    const color=sampleModelTrack(ga.tracks&&ga.tracks.KGAC,model,seq,frame,elapsedMs,false,ga.color||[1,1,1]);
-    return{alpha:clamp(alpha,0,1),color:color||ga.color||[1,1,1]};
+    const hasColorTrack=!!(ga.tracks&&ga.tracks.KGAC),hasStaticColor=!!(Number(ga.flags||0)&2);
+    const staticColor=hasStaticColor?(ga.color||[1,1,1]):[1,1,1];
+    const color=hasColorTrack?sampleModelTrack(ga.tracks.KGAC,model,seq,frame,elapsedMs,false,staticColor):staticColor;
+    return{alpha:clamp(alpha,0,1),color:color||staticColor};
   }
   function modelLayerState(model,mat,layer,geoIndex,seq,frame,elapsedMs){
     const tracks=layer&&layer.tracks||{};
@@ -796,6 +800,18 @@
     }
     return{textureId,alpha:alpha*gs.alpha,color:gs.color,composite,mode,uvTrans,uvScale,uvAngle,unshaded:!!((layer&&layer.unshaded)||mat.unshaded)};
   }
+  const particleSpriteCache=new WeakMap();
+  function particleCompositeMode(n){const name=String(n?.filterModeName||'').toLowerCase(),mode=Number(n?.filterMode);if(name==='additive'||name==='addalpha'||mode===1)return'lighter';if(name==='modulate'||name==='modulate2x'||mode===2||mode===3)return'multiply';return'source-over';}
+  function particleSpriteTexture(n,tex){
+    if(!tex||particleCompositeMode(n)!=='lighter')return tex;
+    const cached=particleSpriteCache.get(tex);if(cached)return cached;
+    try{
+      const w=Math.max(1,tex.width|0),h=Math.max(1,tex.height|0),c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d',{willReadFrequently:true});x.clearRect(0,0,w,h);x.drawImage(tex,0,0,w,h);const im=x.getImageData(0,0,w,h),d=im.data;
+      for(let i=0;i<d.length;i+=4){const peak=Math.max(d[i],d[i+1],d[i+2]);d[i+3]=peak<=3?0:Math.min(d[i+3],peak);}
+      x.putImageData(im,0,0);particleSpriteCache.set(tex,c);return c;
+    }catch(_){return tex;}
+  }
+
   function effectAnchorMatrix(parentMatrix,pivot){
     const m=parentMatrix||matIdentity(),p=pivot||{x:0,y:0,z:0},world=matPoint(m,p);
     return[m[0],m[1],m[2],world.x, m[4],m[5],m[6],world.y, m[8],m[9],m[10],world.z, 0,0,0,1];
@@ -1343,7 +1359,22 @@
     diag('info','CASC Animation','Real CASC effect model ready',{effect:meta.path,resolvedPath:meta.resolvedPath||'',sequences:(model.sequences||[]).map(s=>s.name),sequenceCount:(model.sequences||[]).length,nodeTracks:runtime.trackCount,geosets:(model.geosets||[]).length,particleEmitters2:(model.particleEmitters2||[]).length,texturesDecoded:textures.filter(Boolean).length,texturesTotal:textures.length});
     return runtime;
   }
-  async function prepareReferenceModelRuntime(model,path=''){
+  function rememberReferenceTexture(key,canvas){
+    const k=normalizePath(key||'');if(!k||!canvas)return canvas;
+    const cache=state.casc.referenceTextures||(state.casc.referenceTextures=new Map());
+    if(cache.has(k))cache.delete(k);cache.set(k,canvas);
+    while(cache.size>96)cache.delete(cache.keys().next().value);
+    return canvas;
+  }
+  function cachedReferenceTexture(key){
+    const k=normalizePath(key||'');if(!k)return null;
+    const cache=state.casc.referenceTextures;if(!cache)return null;
+    const hit=cache.get(k)||null;
+    if(hit){cache.delete(k);cache.set(k,hit);}
+    return hit;
+  }
+
+  async function prepareReferenceModelRuntime(model,path='',artSet='stock'){
     if(!model)return null;
     const bridge=cascBridge();if(!bridge)throw new Error('CASC bridge is unavailable.');
     const status=await ensureCascOnDemand({enableEffects:false,resolveTextures:false,reason:'reference-model-runtime'});
@@ -1351,7 +1382,7 @@
     const defs=model.textureDefs||[],requests=[],seen=new Set();
     for(const def of defs){
       const rep=textureReplaceableInfo(def),rid=rep.rid,ref=String(def&&def.path||'').trim();
-      if(!ref||rid===1||rid===2)continue;const key=normalizePath(ref);if(seen.has(key))continue;seen.add(key);requests.push({path:ref,kind:'effect-texture',artSet:'stock'});
+      if(!ref||rid===1||rid===2)continue;const key=normalizePath(ref);if(seen.has(key)||cachedReferenceTexture(key))continue;seen.add(key);requests.push({path:ref,kind:'effect-texture',artSet});
     }
     const results=requests.length?await readCascRequests(requests):[],assets=new Map();
     for(const a of results){if(!a||!a.found||!a.data)continue;assets.set(normalizePath(a.requestedPath||''),a);}
@@ -1360,13 +1391,69 @@
       const def=defs[i]||{},rep=textureReplaceableInfo(def),rid=rep.rid;
       if(rid===1||rid===2){textures[i]=makeTeamReplaceableCanvas(rid===2,rep.index);continue;}
       const ref=String(def.path||'').trim();if(!ref){textures[i]=null;continue;}
-      const asset=assets.get(normalizePath(ref));if(!asset){textures[i]=null;continue;}
-      try{const ab=arrayBufferFromIpc(asset.data),img=await imageDataFromArrayBuffer(asset.resolvedPath||ref,ab);textures[i]=img?imageDataToCanvas(img):null;}
+      const key=normalizePath(ref),cached=cachedReferenceTexture(key);if(cached){textures[i]=cached;continue;}
+      const asset=assets.get(key);if(!asset){textures[i]=null;continue;}
+      try{
+        const ab=arrayBufferFromIpc(asset.data),img=await imageDataFromArrayBuffer(asset.resolvedPath||ref,ab),canvas=img?imageDataToCanvas(img):null;
+        textures[i]=canvas;if(canvas){rememberReferenceTexture(key,canvas);rememberReferenceTexture(asset.resolvedPath||'',canvas);}
+      }
       catch(e){textures[i]=null;diag('warn','Reference Model','Reference texture decode failed',{model:path,texture:ref,error:e});}
     }
     const runtime=makeModelRuntime({path:String(path||model.sourceName||'reference'),resolvedPath:String(path||''),parsed:model,reference:true},textures);
     diag('info','Reference Model','Full CASC reference runtime ready',{path:runtime.path,geosets:(model.geosets||[]).length,sequences:(model.sequences||[]).length,nodeTracks:runtime.trackCount,texturesDecoded:textures.filter(Boolean).length,texturesTotal:defs.length});
     return runtime;
+  }
+
+  async function prepareReferenceModelRuntimesBatch(items=[],artSet='stock'){
+    const list=(Array.isArray(items)?items:[]).slice(0,8).map((item,index)=>({
+      index,
+      model:item?.model||item?.m||null,
+      path:String(item?.path||item?.model?.sourceName||'reference')
+    })).filter(x=>x.model);
+    if(!list.length)return [];
+    const bridge=cascBridge();if(!bridge)throw new Error('CASC bridge is unavailable.');
+    const status=await ensureCascOnDemand({enableEffects:false,resolveTextures:false,reason:'reference-model-gallery-batch'});
+    if(!status||status.ready===false)throw new Error((status&&status.message)||'Warcraft CASC is not ready.');
+
+    const requests=[],seen=new Set(),decoded=new Map();
+    for(const item of list){
+      for(const def of (item.model.textureDefs||[])){
+        const rep=textureReplaceableInfo(def),rid=rep.rid,ref=String(def&&def.path||'').trim();
+        if(!ref||rid===1||rid===2)continue;
+        const key=normalizePath(ref),cached=cachedReferenceTexture(key);
+        if(cached){decoded.set(key,cached);continue;}
+        if(seen.has(key))continue;
+        seen.add(key);requests.push({path:ref,kind:'effect-texture',artSet});
+      }
+    }
+    const results=requests.length?await readCascRequests(requests):[];
+    for(const a of results){
+      if(!a||!a.found||!a.data)continue;
+      const key=normalizePath(a.requestedPath||'');if(decoded.has(key))continue;
+      try{
+        const ab=arrayBufferFromIpc(a.data),img=await imageDataFromArrayBuffer(a.resolvedPath||a.requestedPath||'',ab),canvas=img?imageDataToCanvas(img):null;
+        decoded.set(key,canvas);if(canvas){rememberReferenceTexture(key,canvas);rememberReferenceTexture(a.resolvedPath||'',canvas);}
+      }catch(e){decoded.set(key,null);diag('warn','Reference Model','Gallery batch texture decode failed',{texture:a.requestedPath||'',error:e});}
+    }
+
+    const output=[];
+    for(const item of list){
+      const model=item.model,defs=model.textureDefs||[],textures=[];
+      for(let i=0;i<defs.length;i++){
+        const def=defs[i]||{},rep=textureReplaceableInfo(def),rid=rep.rid;
+        if(rid===1||rid===2){textures[i]=makeTeamReplaceableCanvas(rid===2,rep.index);continue;}
+        const ref=String(def.path||'').trim();textures[i]=ref?(decoded.get(normalizePath(ref))||null):null;
+      }
+      const runtime=makeModelRuntime({path:item.path,resolvedPath:item.path,parsed:model,reference:true},textures);
+      output.push({path:item.path,runtime});
+    }
+    diag('info','Reference Model','CASC gallery runtime batch ready',{
+      models:output.length,
+      requestedTextures:requests.length,
+      cachedOrDecodedTextures:decoded.size,
+      texturesDecoded:[...decoded.values()].filter(Boolean).length
+    });
+    return output;
   }
   async function loadCascEffectAssets(force=false){
     if(!state.model||!state.casc.enabled||state.casc.loading)return;
@@ -1464,6 +1551,9 @@
     state.casc.lastError='';
     state.fxPreviewMode=false;
     state.fxPreviewStartedAt=0;
+    state.fxLastStatsCheck=0;
+    state.fxLastStatsLog=0;
+    state.fxLastStatsSignature='';
     state.paintHistory=[];state.paintRedo=[];
     state.geosetHistory=[];state.geosetRedo=[];state.modelHistory=[];state.modelRedo=[];state.hiddenGeosets=new Set();
     state.selectedGeosetIndex=-1;state.geosetDrag=null;state.geosetHover='';state.geometryRevision=0;
@@ -1520,6 +1610,10 @@
     state.animation.elapsedMs = 0;
     setDefaultViewportDisplay();
     state.gizmoVisible = false;
+    // A newly opened model must never inherit a sequence selected in the previous
+    // document. Sequence names/indices are model-local and stale selection can make
+    // a valid model look missing, buried or wildly transformed on first render.
+    const sequenceSelect=$('#modelSequenceSelect');if(sequenceSelect)sequenceSelect.value='';
     resetCamera();
     renderEverything();
     markDirty();
@@ -1754,7 +1848,7 @@
     let sx=Math.hypot(x.x,x.y,x.z)||1,sy=Math.hypot(y.x,y.y,y.z)||1,sz=Math.hypot(z.x,z.y,z.z)||1;
     x={x:x.x/sx,y:x.y/sx,z:x.z/sx};
     const dxy=x.x*y.x+x.y*y.y+x.z*y.z;y={x:y.x-dxy*x.x,y:y.y-dxy*x.y,z:y.z-dxy*x.z};
-    const yl=Math.hypot(y.x,y.y,y.z)||1;y={x:y.x/yl,y:y.y/yl,z:y.z/yl};sy*=yl;
+    const yl=Math.hypot(y.x,y.y,y.z)||1;y={x:y.x/yl,y:y.y/yl,z:y.z/yl};sy=yl;
     let nz={x:x.y*y.z-x.z*y.y,y:x.z*y.x-x.x*y.z,z:x.x*y.y-x.y*y.x};
     const sign=(nz.x*z.x+nz.y*z.y+nz.z*z.z)<0?-1:1;z={x:nz.x*sign,y:nz.y*sign,z:nz.z*sign};sz*=sign;
     return {t,r:[x.x,y.x,z.x,0,x.y,y.y,z.y,0,x.z,y.z,z.z,0,0,0,0,1],s:{x:sx,y:sy,z:sz}};
@@ -2034,7 +2128,7 @@
     if(!r||!r.gl||!ref?.runtime?.parsed)return null;const model=ref.runtime.parsed,gl=r.gl,old=r.referenceResources;
     if(old&&old.model===model&&old.runtime===ref.runtime)return old;clearGlReferenceResources(r);
     const rr={model,runtime:ref.runtime,batches:[],textures:[],geometryKey:'',anim:null,logged:false};
-    rr.batches=(model.geosets||[]).map((geo,gi)=>{const pos=gl.createBuffer(),normal=gl.createBuffer(),bone=gl.createBuffer(),index=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pos);gl.bufferData(gl.ARRAY_BUFFER,makeFloat3(geo.vertices||[]),gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,normal);gl.bufferData(gl.ARRAY_BUFFER,makeNormals(geo),gl.STATIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,bone);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array((geo.vertices||[]).length),gl.STATIC_DRAW);const flat=[];let maxIndex=0;for(const f of geo.faces||geo.triangles||[]){const ids=Array.isArray(f)?f:[f?.a,f?.b,f?.c];if(ids?.length<3)continue;flat.push(ids[0],ids[1],ids[2]);maxIndex=Math.max(maxIndex,ids[0],ids[1],ids[2]);}const use32=maxIndex>65535,idx=use32?new Uint32Array(flat):new Uint16Array(flat);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);const uv=[];for(let si=0;si<Math.max(1,(geo.uvSets||[]).length);si++){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,makeUv(geo,si),gl.STATIC_DRAW);uv.push(b);}return{geo,gi,pos,normal,bone,index,uv,indexCount:idx.length,indexType:use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,positionArray:new Float32Array((geo.vertices||[]).length*3)};});
+    rr.batches=modelRenderableGeosetEntries(model).map(({geo,index:gi,lod})=>{const pos=gl.createBuffer(),normal=gl.createBuffer(),bone=gl.createBuffer(),index=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pos);gl.bufferData(gl.ARRAY_BUFFER,makeFloat3(geo.vertices||[]),gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,normal);gl.bufferData(gl.ARRAY_BUFFER,makeNormals(geo),gl.STATIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,bone);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array((geo.vertices||[]).length),gl.STATIC_DRAW);const flat=[];let maxIndex=0;for(const f of geo.faces||geo.triangles||[]){const ids=Array.isArray(f)?f:[f?.a,f?.b,f?.c];if(ids?.length<3)continue;flat.push(ids[0],ids[1],ids[2]);maxIndex=Math.max(maxIndex,ids[0],ids[1],ids[2]);}const use32=maxIndex>65535,idx=use32?new Uint32Array(flat):new Uint16Array(flat);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);const uv=[];for(let si=0;si<Math.max(1,(geo.uvSets||[]).length);si++){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,makeUv(geo,si),gl.STATIC_DRAW);uv.push(b);}return{geo,gi,lod,pos,normal,bone,index,uv,indexCount:idx.length,indexType:use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,positionArray:new Float32Array((geo.vertices||[]).length*3)};});
     r.referenceResources=rr;return rr;
   }
   function uploadGlReferenceTexture(r,rr,index){
@@ -2044,8 +2138,8 @@
     const runtime=rr.runtime,model=rr.model,anim=cascEffectFrame(runtime,nowMs),off=ref.offset||{x:0,y:0,z:0},key=`${anim.seq?.name||''}|${Math.round(anim.frame*1000)}|${off.x||0}|${off.y||0}|${off.z||0}`;rr.anim=anim;if(rr.geometryKey===key)return;const nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),gl=r.gl;for(const b of rr.batches){const a=b.positionArray,geo=b.geo;for(let vi=0,j=0;vi<(geo.vertices||[]).length;vi++){const base=geo.vertices[vi],v=skinModelVertex(model,geo,vi,nodeMatrices)||base;a[j++]=(v.x||0)+(off.x||0);a[j++]=(v.y||0)+(off.y||0);a[j++]=(v.z||0)+(off.z||0);}gl.bindBuffer(gl.ARRAY_BUFFER,b.pos);gl.bufferSubData(gl.ARRAY_BUFFER,0,a);}rr.geometryKey=key;runtime.lastSequenceName=anim.seq?.name||'Rest';runtime.lastFrame=anim.frame;
   }
   function renderGlReferenceModel(r){
-    r.referenceRendered=false;const ref=state.referenceModel;if(!r?.gl||!ref?.model||ref.visible===false||!ref.runtime?.parsed||state.photoMode)return false;const rr=initGlReferenceModel(r,ref);if(!rr)return false;updateGlReferenceGeometry(r,rr,ref,performance.now());const gl=r.gl,u=r.uni,model=rr.model,anim=rr.anim,opacity=clamp(Number(ref.opacity)||1,.08,1),entries=[],stackPolicy=referenceLayerStackPolicy(),stats={layers:0,texturedLayers:0,missingExpectedTextures:0,replaceableLayers:0,multiLayerGeosets:0,depthFunc:stackPolicy.depthFunc};
-    rr.batches.forEach((batch,gi)=>{const mat=(model.materials||[])[batch.geo.materialId]||{id:batch.geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:batch.geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,coordId:0,tracks:{}}];if(layers.length>1)stats.multiLayerGeosets++;layers.forEach((layer,li)=>{const ls=modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs);if(ls.alpha<=.001)return;const policy=referenceLayerPolicy(ls.mode,layer.flags||0,opacity);entries.push({batch,gi,mat,layer,li,ls,policy,priority:(mat.priorityPlane||0)*100+li});});});
+    r.referenceRendered=false;const ref=state.referenceModel;if(!r?.gl||!ref?.model||ref.visible===false||!ref.runtime?.parsed||state.photoMode)return false;const rr=initGlReferenceModel(r,ref);if(!rr)return false;updateGlReferenceGeometry(r,rr,ref,performance.now());const gl=r.gl,u=r.uni,model=rr.model,anim=rr.anim,opacity=clamp(Number(ref.opacity)||1,.08,1),entries=[],stackPolicy=referenceLayerStackPolicy(),stats={layers:0,texturedLayers:0,missingExpectedTextures:0,replaceableLayers:0,multiLayerGeosets:0,lod:modelLodSummary(model),depthFunc:stackPolicy.depthFunc};
+    rr.batches.forEach(batch=>{const gi=batch.gi,mat=(model.materials||[])[batch.geo.materialId]||{id:batch.geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:batch.geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,coordId:0,tracks:{}}];if(layers.length>1)stats.multiLayerGeosets++;layers.forEach((layer,li)=>{const ls=modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs);if(ls.alpha<=.001)return;const policy=referenceLayerPolicy(ls.mode,layer.flags||0,opacity);entries.push({batch,gi,mat,layer,li,ls,policy,priority:(mat.priorityPlane||0)*100+li});});});
     entries.sort((a,b)=>(a.policy.blend&&!a.policy.depthWrite)-(b.policy.blend&&!b.policy.depthWrite)||a.priority-b.priority);
     gl.depthFunc(gl.LEQUAL);
     for(const e of entries){const {batch,gi,mat,layer,ls,policy}=e;bindGlBatch(r,batch,layer.coordId||0);gl.uniform1i(u.u_mode,0);gl.uniform1f(u.u_alpha,ls.alpha*opacity);gl.uniform3f(u.u_color,ls.color?.[0]??1,ls.color?.[1]??1,ls.color?.[2]??1);gl.uniform1i(u.u_lit,0);gl.uniform1f(u.u_alphaCut,policy.alphaCut);const angle=ls.uvAngle||0;gl.uniform2f(u.u_uvTrans,ls.uvTrans[0],ls.uvTrans[1]);gl.uniform2f(u.u_uvScale,ls.uvScale[0],ls.uvScale[1]);gl.uniform2f(u.u_uvRot,Math.cos(angle),Math.sin(angle));const tex=uploadGlReferenceTexture(r,rr,ls.textureId),def=(model.textureDefs||[])[ls.textureId],rid=Number(def?.replaceableId||0);stats.layers++;if(tex)stats.texturedLayers++;else if(def)stats.missingExpectedTextures++;if(rid===1||rid===2)stats.replaceableLayers++;gl.uniform1i(u.u_hasTexture,!!tex);if(tex){gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);}const maskInfo=teamMaskForLayer(layer),maskTex=maskInfo?uploadGlReferenceTexture(r,rr,maskInfo.textureId):null;gl.uniform1i(u.u_hasTeamMask,!!maskTex);gl.uniform1i(u.u_teamMaskChannel,maskInfo?maskInfo.channel:0);if(maskTex){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,maskTex);gl.activeTexture(gl.TEXTURE0);}if($('#modelBackfaceCulling')?.checked&&!mat.twoSided&&!layer.twoSided){gl.enable(gl.CULL_FACE);gl.cullFace(gl.BACK);gl.frontFace(gl.CW);}else gl.disable(gl.CULL_FACE);applyReferenceLayerPolicy(gl,policy);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,batch.index);gl.drawElements(gl.TRIANGLES,batch.indexCount,batch.indexType,0);}
@@ -2076,10 +2170,9 @@
   }
   function teamMaskForLayer(layer){
     if(!layer)return null;
-    // Prefer an explicit team-color map when a newer material layout exposes
-    // one. Reforged/Definitive normally stores the team-color coverage in the
-    // alpha channel of the ORM map, which remains the fallback.
-    if(Number.isInteger(layer.teamColorTextureId)&&layer.teamColorTextureId>=0)return {textureId:layer.teamColorTextureId,channel:1};
+    // Combined Reforged/DE materials store team-color coverage in ORM alpha.
+    // Slot 4 is the team *color* texture itself and must never be interpreted as
+    // a coverage mask (doing that turns the whole material into a flat tint).
     if(Number.isInteger(layer.ormTextureId)&&layer.ormTextureId>=0)return {textureId:layer.ormTextureId,channel:0};
     return null;
   }
@@ -2464,7 +2557,7 @@
     // This warning only belongs to the Effects property tab. Keeping it out of
     // the other Model Lab tabs prevents CASC/FX diagnostics from covering the
     // viewport while the user is painting, rigging, editing UVs, materials, etc.
-    if(state.activePropPanel!=='effects'||!state.model){el.hidden=true;return;}
+    if(!['effects','particles'].includes(state.activePropPanel)||!state.model){el.hidden=true;return;}
     const relevant=(state.model.nodes||[]).filter(n=>n.type==='ParticleEmitter2'||((n.type==='Attachment'||n.type==='ParticleEmitter'||n.type==='ParticleEmitterPopcorn')&&n.path));
     if(!relevant.length){el.hidden=true;return;}
     const sources=relevant.map(n=>effectSourceForNode(n)),non=sources.filter(x=>x!=='casc'),fallback=sources.filter(x=>x==='fallback').length,local=sources.filter(x=>x==='local').length;
@@ -2550,9 +2643,9 @@
     if(!runtime||!runtime.parsed)return false;
     const opacity=clamp(Number(options.opacity==null?1:options.opacity),0,1),drawMeshes=options.meshes!==false,drawEmitters=options.emitters!==false;
     const model=runtime.parsed,anim=cascEffectFrame(runtime,nowMs),nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),anchor=effectAnchorMatrix(hostMatrix,hostNode.pivot||{x:0,y:0,z:0});
-    const tris=[],geosets=model.geosets||[],maxFaces=performanceMode()==='quality'?16000:7000;let faceBudget=maxFaces;
-    if(drawMeshes)for(let gi=0;gi<geosets.length&&faceBudget>0;gi++){
-      const geo=geosets[gi],mat=(model.materials||[])[geo.materialId]||{id:geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,tracks:{}}];
+    const tris=[],geosets=modelRenderableGeosetEntries(model),maxFaces=performanceMode()==='quality'?16000:7000;let faceBudget=maxFaces;
+    if(drawMeshes)for(let vi=0;vi<geosets.length&&faceBudget>0;vi++){
+      const ge=geosets[vi],geo=ge.geo,gi=ge.index,mat=(model.materials||[])[geo.materialId]||{id:geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,tracks:{}}];
       const states=layers.map(layer=>({layer,ls:modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs)}));
       if(!states.some(x=>x.ls.alpha>.001))continue;
       const verts=(geo.vertices||[]).map((v,vi)=>matPoint(anchor,skinModelVertex(model,geo,vi,nodeMatrices)||v)),projected=verts.map(v=>projectPoint(v,canvas));
@@ -2568,9 +2661,72 @@
     runtime.lastSequenceName=anim.seq&&anim.seq.name||'Rest';runtime.lastFrame=anim.frame;return tris.length>0||(drawEmitters&&(model.particleEmitters2||[]).length>0);
   }
 
+
+  function modelPrimaryLod(model){
+    const geosets=(model&&model.geosets)||[],lods=[];
+    for(const geo of geosets){
+      const lod=Number(geo&&geo.lod);
+      if(Number.isFinite(lod)&&lod>=0)lods.push(lod|0);
+    }
+    if(!lods.length)return -1;
+    if(lods.includes(0))return 0;
+    return Math.min(...lods);
+  }
+  function modelRenderableGeosetEntries(model){
+    const geosets=(model&&model.geosets)||[],primary=modelPrimaryLod(model);
+    const entries=[];
+    for(let index=0;index<geosets.length;index++){
+      const geo=geosets[index],raw=Number(geo&&geo.lod);
+      const lod=Number.isFinite(raw)?raw|0:-1;
+      // Reforged/DE store alternate LOD meshes as extra geosets. They are not
+      // additive geometry. Warcraft renders the default/no-LOD geosets together
+      // with the primary LOD only; drawing every LOD simultaneously produces the
+      // oversized/jagged blob that HD/DE showed in the CASC viewer.
+      if(lod<0||primary<0||lod===primary)entries.push({geo,index,lod});
+    }
+    // Malformed/custom assets sometimes contain only unusual positive LODs.
+    // modelPrimaryLod() already chooses the smallest one, but never blank the
+    // viewer if a parser/client hands us inconsistent metadata.
+    if(!entries.length){
+      for(let index=0;index<geosets.length;index++)entries.push({geo:geosets[index],index,lod:Number(geosets[index]?.lod)||-1});
+    }
+    return entries;
+  }
+  function modelLodSummary(model){
+    const all=(model&&model.geosets)||[],visible=modelRenderableGeosetEntries(model),primary=modelPrimaryLod(model);
+    return{total:all.length,rendered:visible.length,skipped:Math.max(0,all.length-visible.length),primary};
+  }
+  function renderableModelBounds(model){
+    const entries=modelRenderableGeosetEntries(model);
+    if(entries.length)return computeBounds(entries.map(x=>x.geo));
+    return rawModelBounds(model);
+  }
+
+  function hdMaterialInfo(model,mat,preferredLayer=null){
+    const layers=(mat&&mat.layers)||[],shader=String(mat&&mat.shader||'');
+    const combined=preferredLayer&&((preferredLayer.isHdCombined===true)||Number(preferredLayer.shaderTypeId)===1||Number(preferredLayer.slotTableUnknown)===1)
+      ? preferredLayer
+      : layers.find(layer=>layer&&((layer.isHdCombined===true)||Number(layer.shaderTypeId)===1||Number(layer.slotTableUnknown)===1));
+    if(combined){
+      const slots=combined.textureSlots||{};
+      const pick=(slot,fallback=-1)=>Number.isInteger(Number(slots[slot]))?Number(slots[slot]):fallback;
+      return{isHd:true,combined:true,baseLayer:combined,slots:{diffuse:pick(0,Number(combined.textureId)),normal:pick(1,Number(combined.normalTextureId)),orm:pick(2,Number(combined.ormTextureId)),emissive:pick(3,Number(combined.emissiveTextureId)),team:pick(4,Number(combined.teamColorTextureId)),reflections:pick(5,Number(combined.reflectionsTextureId))}};
+    }
+    // Reforged 900/1000 used the material shader string and six ordinal layers.
+    if(/^Shader_HD_DefaultUnit$/i.test(shader)&&layers.length){
+      const tid=i=>Number.isInteger(Number(layers[i]?.textureId))?Number(layers[i].textureId):-1;
+      return{isHd:true,combined:false,baseLayer:layers[0],slots:{diffuse:tid(0),normal:tid(1),orm:tid(2),emissive:tid(3),team:tid(4),reflections:tid(5)}};
+    }
+    return null;
+  }
+  function hdMaterialSample(base=[.58,.61,.66,1],orm=[1,.5,0,0],team=[1,0,0,1],emissive=[0,0,0,1],normal=[.5,.5,1,1],emissiveGain=1){
+    const mask=clamp(Number(orm[3])||0,0,1),ao=clamp(Number(orm[0])||1,.12,1),rough=clamp(Number(orm[1])||.5,0,1),metal=clamp(Number(orm[2])||0,0,1);
+    const nx=(Number(normal[0])||.5)*2-1,ny=(Number(normal[1])||.5)*2-1,nz=Math.sqrt(Math.max(0,1-nx*nx-ny*ny)),light=Math.max(.18,nx*.24+ny*.38+nz*.89);
+    const out=[0,0,0];for(let i=0;i<3;i++){const tc=(1-mask)+clamp(Number(team[i])||0,0,1)*mask,diff=(Number(base[i])||0)*tc,lit=diff*(.30+.70*light)*(.42+.58*ao),spec=(.04+.22*metal)*(1-rough)*Math.pow(light,5);out[i]=clamp(lit+spec+(Number(emissive[i])||0)*Math.max(0,Number(emissiveGain)||1),0,4);}return[out[0],out[1],out[2],clamp(Number(base[3])||1,0,1)];
+  }
   function clearAssetPreviewGlRenderer(r){
     if(!r?.gl)return;const gl=r.gl;
-    for(const b of r.batches||[]){if(b.pos)gl.deleteBuffer(b.pos);if(b.index)gl.deleteBuffer(b.index);for(const u of b.uv||[])if(u)gl.deleteBuffer(u);}
+    for(const b of r.batches||[]){if(b.pos)gl.deleteBuffer(b.pos);if(b.normal)gl.deleteBuffer(b.normal);if(b.index)gl.deleteBuffer(b.index);for(const u of b.uv||[])if(u)gl.deleteBuffer(u);}
     for(const t of r.textures||[])if(t?.tex)gl.deleteTexture(t.tex);
     r.batches=[];r.textures=[];r.model=null;r.runtime=null;r.geometryKey='';r.logged=false;r.lastStats=null;
   }
@@ -2579,74 +2735,119 @@
     const gl=canvas.getContext('webgl2',{alpha:false,antialias:true,depth:true,premultipliedAlpha:false,preserveDrawingBuffer:true,powerPreference:'high-performance'});if(!gl){assetPreviewGlRenderers.set(canvas,{canvas,gl:null,failed:true});return assetPreviewGlRenderers.get(canvas);}
     const vs=`#version 300 es
       precision highp float;
-      in vec3 a_position; in vec2 a_uv;
+      in vec3 a_position; in vec3 a_normal; in vec2 a_uv;
       uniform vec2 u_uvTrans; uniform vec2 u_uvScale; uniform vec2 u_uvRot;
-      out vec2 v_uv;
+      out vec2 v_uv; out vec3 v_normal;
       void main(){
         gl_Position=vec4(a_position,1.0);
         vec2 uv=(a_uv-0.5)*u_uvScale;
         uv=vec2(uv.x*u_uvRot.x-uv.y*u_uvRot.y,uv.x*u_uvRot.y+uv.y*u_uvRot.x)+0.5+u_uvTrans;
-        v_uv=uv;
+        v_uv=uv;v_normal=normalize(a_normal);
       }`;
     const fs=`#version 300 es
       precision highp float;
-      uniform sampler2D u_tex; uniform bool u_hasTexture; uniform float u_alpha; uniform float u_alphaCut; uniform vec3 u_color;
-      in vec2 v_uv; out vec4 outColor;
+      uniform sampler2D u_tex; uniform sampler2D u_normalTex; uniform sampler2D u_ormTex; uniform sampler2D u_emissiveTex; uniform sampler2D u_teamTex; uniform sampler2D u_reflectionTex;
+      uniform bool u_hasTexture; uniform bool u_hasNormal; uniform bool u_hasOrm; uniform bool u_hasEmissive; uniform bool u_hasTeam; uniform bool u_hasReflection; uniform bool u_hd;
+      uniform float u_alpha; uniform float u_alphaCut; uniform float u_emissiveGain; uniform vec3 u_color; uniform vec3 u_teamColor;
+      in vec2 v_uv; in vec3 v_normal; out vec4 outColor;
       void main(){
-        vec4 c=u_hasTexture?texture(u_tex,v_uv):vec4(0.58,0.61,0.66,1.0);
-        c.rgb*=u_color; c.a*=u_alpha;
-        if(u_alphaCut>0.0 && c.a<u_alphaCut) discard;
+        vec4 base=u_hasTexture?texture(u_tex,v_uv):vec4(0.58,0.61,0.66,1.0);
+        vec4 c=base;
+        if(u_hd){
+          vec4 orm=u_hasOrm?texture(u_ormTex,v_uv):vec4(1.0,0.5,0.0,0.0);
+          vec3 tc=u_hasTeam?texture(u_teamTex,v_uv).rgb:u_teamColor;
+          float teamMask=clamp(orm.a,0.0,1.0);
+          vec3 n=normalize(v_normal);
+          if(u_hasNormal){vec2 xy=texture(u_normalTex,v_uv).rg*2.0-1.0;float zz=sqrt(max(0.0,1.0-dot(xy,xy)));n=normalize(vec3(xy,zz));}
+          vec3 lightDir=normalize(vec3(0.24,0.38,0.89));float lam=max(0.18,dot(n,lightDir));
+          float ao=clamp(orm.r,0.12,1.0),rough=clamp(orm.g,0.0,1.0),metal=clamp(orm.b,0.0,1.0);
+          vec3 rgb=base.rgb*mix(vec3(1.0),tc,teamMask);rgb*=mix(0.30,1.0,lam)*mix(0.42,1.0,ao);
+          float spec=(0.04+0.22*metal)*(1.0-rough)*pow(lam,5.0);rgb+=vec3(spec);
+          if(u_hasReflection){vec3 env=texture(u_reflectionTex,v_uv).rgb;rgb+=env*metal*(1.0-rough)*0.08;}
+          if(u_hasEmissive)rgb+=texture(u_emissiveTex,v_uv).rgb*max(0.0,u_emissiveGain);
+          c=vec4(rgb,base.a);
+        }
+        c.rgb*=u_color;c.a*=u_alpha;
+        if(u_alphaCut>0.0&&c.a<u_alphaCut)discard;
         outColor=c;
       }`;
     let program;try{program=createGlProgram(gl,vs,fs);}catch(e){diag('warn','Unit / Effect Viewer','WebGL preview shader failed',{error:String(e)});assetPreviewGlRenderers.set(canvas,{canvas,gl:null,failed:true,error:e});return assetPreviewGlRenderers.get(canvas);}
-    const attrib={pos:gl.getAttribLocation(program,'a_position'),uv:gl.getAttribLocation(program,'a_uv')},uni={};
-    ['u_uvTrans','u_uvScale','u_uvRot','u_tex','u_hasTexture','u_alpha','u_alphaCut','u_color'].forEach(n=>uni[n]=gl.getUniformLocation(program,n));
+    const attrib={pos:gl.getAttribLocation(program,'a_position'),normal:gl.getAttribLocation(program,'a_normal'),uv:gl.getAttribLocation(program,'a_uv')},uni={};
+    ['u_uvTrans','u_uvScale','u_uvRot','u_tex','u_normalTex','u_ormTex','u_emissiveTex','u_teamTex','u_reflectionTex','u_hasTexture','u_hasNormal','u_hasOrm','u_hasEmissive','u_hasTeam','u_hasReflection','u_hd','u_alpha','u_alphaCut','u_emissiveGain','u_color','u_teamColor'].forEach(n=>uni[n]=gl.getUniformLocation(program,n));
     r={canvas,gl,program,attrib,uni,model:null,runtime:null,batches:[],textures:[],geometryKey:'',logged:false,lastStats:null};assetPreviewGlRenderers.set(canvas,r);return r;
   }
   function initAssetPreviewGlModel(r,runtime){
     if(!r?.gl||!runtime?.parsed)return null;const model=runtime.parsed;if(r.model===model&&r.runtime===runtime)return r;clearAssetPreviewGlRenderer(r);r.model=model;r.runtime=runtime;const gl=r.gl;
-    r.batches=(model.geosets||[]).map((geo,gi)=>{const pos=gl.createBuffer(),index=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array((geo.vertices||[]).length*3),gl.DYNAMIC_DRAW);const flat=[];let maxIndex=0;for(const f of geo.faces||geo.triangles||[]){const ids=Array.isArray(f)?f:[f?.a,f?.b,f?.c];if(!ids||ids.length<3)continue;flat.push(ids[0],ids[1],ids[2]);maxIndex=Math.max(maxIndex,ids[0],ids[1],ids[2]);}const use32=maxIndex>65535,idx=use32?new Uint32Array(flat):new Uint16Array(flat);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);const uv=[];for(let si=0;si<Math.max(1,(geo.uvSets||[]).length);si++){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,makeUv(geo,si),gl.STATIC_DRAW);uv.push(b);}return{geo,gi,pos,index,uv,indexCount:idx.length,indexType:use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,positionArray:new Float32Array((geo.vertices||[]).length*3)};});return r;
+    r.batches=modelRenderableGeosetEntries(model).map(({geo,index:gi,lod})=>{const pos=gl.createBuffer(),normal=gl.createBuffer(),index=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,pos);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array((geo.vertices||[]).length*3),gl.DYNAMIC_DRAW);gl.bindBuffer(gl.ARRAY_BUFFER,normal);gl.bufferData(gl.ARRAY_BUFFER,makeNormals(geo),gl.STATIC_DRAW);const flat=[];let maxIndex=0;for(const f of geo.faces||geo.triangles||[]){const ids=Array.isArray(f)?f:[f?.a,f?.b,f?.c];if(!ids||ids.length<3)continue;flat.push(ids[0],ids[1],ids[2]);maxIndex=Math.max(maxIndex,ids[0],ids[1],ids[2]);}const use32=maxIndex>65535,idx=use32?new Uint32Array(flat):new Uint16Array(flat);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,index);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idx,gl.STATIC_DRAW);const uv=[];for(let si=0;si<Math.max(1,(geo.uvSets||[]).length);si++){const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,makeUv(geo,si),gl.STATIC_DRAW);uv.push(b);}return{geo,gi,lod,pos,normal,index,uv,indexCount:idx.length,indexType:use32?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,positionArray:new Float32Array((geo.vertices||[]).length*3)};});return r;
   }
   function uploadAssetPreviewGlTexture(r,index){
     const gl=r.gl,source=r.runtime?.textures?.[index];if(!source)return null;let rec=r.textures[index];if(!rec){rec={tex:gl.createTexture(),source:null};r.textures[index]=rec;}if(rec.source===source)return rec.tex;gl.bindTexture(gl.TEXTURE_2D,rec.tex);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false);gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);const def=r.model?.textureDefs?.[index];gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,def?.wrapWidth?gl.REPEAT:gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,def?.wrapHeight?gl.REPEAT:gl.CLAMP_TO_EDGE);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,source);rec.source=source;return rec.tex;
   }
-  function updateAssetPreviewGlGeometry(r,nowMs){
-    const runtime=r.runtime,model=r.model,anim=cascEffectFrame(runtime,nowMs),key=`${canvasSizeKey(r.canvas)}|${anim.seq?.name||''}|${Math.round(anim.frame*1000)}`;r.anim=anim;if(r.geometryKey===key)return;const matrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=rawModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),yaw=.72,pitch=.32,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),px=Math.min(r.canvas.width,r.canvas.height)*.72/size,halfW=Math.max(1,r.canvas.width*.5),halfH=Math.max(1,r.canvas.height*.5),gl=r.gl;
-    for(const batch of r.batches){const a=batch.positionArray,geo=batch.geo;for(let vi=0,j=0;vi<(geo.vertices||[]).length;vi++){const v=skinModelVertex(model,geo,vi,matrices)||geo.vertices[vi]||{x:0,y:0,z:0},dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp,dep=ry*cp+dz*sp;a[j++]=rx*px/halfW;a[j++]=vy*px/halfH;a[j++]=clamp(-dep/(size*2),-.98,.98);}gl.bindBuffer(gl.ARRAY_BUFFER,batch.pos);gl.bufferSubData(gl.ARRAY_BUFFER,0,a);}r.geometryKey=key;runtime.lastSequenceName=anim.seq?.name||'Rest';runtime.lastFrame=anim.frame;
+  function updateAssetPreviewGlGeometry(r,nowMs,view={}){
+    const runtime=r.runtime,model=r.model,anim=cascEffectFrame(runtime,nowMs),yaw=Number.isFinite(+view.yaw)?+view.yaw:.72,pitch=Number.isFinite(+view.pitch)?+view.pitch:.32,zoom=clamp(Number.isFinite(+view.zoom)?+view.zoom:1,.25,6),panX=(Number.isFinite(+view.panX)?+view.panX:0)*r.canvas.width,panY=(Number.isFinite(+view.panY)?+view.panY:0)*r.canvas.height,key=`${canvasSizeKey(r.canvas)}|${anim.seq?.name||''}|${Math.round(anim.frame*1000)}|${yaw.toFixed(4)}|${pitch.toFixed(4)}|${zoom.toFixed(4)}|${panX.toFixed(2)}|${panY.toFixed(2)}`;r.anim=anim;if(r.geometryKey===key)return;const matrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=renderableModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),px=Math.min(r.canvas.width,r.canvas.height)*.72/size*zoom,halfW=Math.max(1,r.canvas.width*.5),halfH=Math.max(1,r.canvas.height*.5),gl=r.gl;
+    for(const batch of r.batches){const a=batch.positionArray,geo=batch.geo;for(let vi=0,j=0;vi<(geo.vertices||[]).length;vi++){const v=skinModelVertex(model,geo,vi,matrices)||geo.vertices[vi]||{x:0,y:0,z:0},dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp,dep=ry*cp+dz*sp;a[j++]=(rx*px+panX)/halfW;a[j++]=(vy*px-panY)/halfH;a[j++]=clamp(-dep/(size*2),-.98,.98);}gl.bindBuffer(gl.ARRAY_BUFFER,batch.pos);gl.bufferSubData(gl.ARRAY_BUFFER,0,a);}r.geometryKey=key;runtime.lastSequenceName=anim.seq?.name||'Rest';runtime.lastFrame=anim.frame;
   }
   function canvasSizeKey(canvas){return `${canvas?.width||0}x${canvas?.height||0}`;}
-  function bindAssetPreviewBatch(r,batch,uvSet=0){const gl=r.gl,a=r.attrib;gl.bindBuffer(gl.ARRAY_BUFFER,batch.pos);gl.enableVertexAttribArray(a.pos);gl.vertexAttribPointer(a.pos,3,gl.FLOAT,false,0,0);const uv=batch.uv[Math.max(0,Math.min(batch.uv.length-1,uvSet|0))]||batch.uv[0];gl.bindBuffer(gl.ARRAY_BUFFER,uv);gl.enableVertexAttribArray(a.uv);gl.vertexAttribPointer(a.uv,2,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,batch.index);}
-  function renderRuntimeAssetPreviewGl(canvas,runtime,nowMs=performance.now()){
-    if(!canvas||!runtime?.parsed)return false;const r=ensureAssetPreviewGlRenderer(canvas);if(!r?.gl)return false;initAssetPreviewGlModel(r,runtime);updateAssetPreviewGlGeometry(r,nowMs);const gl=r.gl,u=r.uni,model=r.model,anim=r.anim,entries=[],stack=referenceLayerStackPolicy(),stats={layers:0,texturedLayers:0,missingExpectedTextures:0,replaceableLayers:0,multiLayerGeosets:0,depthFunc:stack.depthFunc,gpuDepth:true};
-    gl.viewport(0,0,canvas.width,canvas.height);gl.clearColor(9/255,15/255,21/255,1);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(r.program);gl.uniform1i(u.u_tex,0);gl.disable(gl.CULL_FACE);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.depthFunc(gl.LEQUAL);
-    r.batches.forEach((batch,gi)=>{const mat=(model.materials||[])[batch.geo.materialId]||{id:batch.geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:batch.geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,coordId:0,tracks:{}}];if(layers.length>1)stats.multiLayerGeosets++;for(let li=0;li<layers.length;li++){const layer=layers[li],ls=modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs);if(ls.alpha<=.001)continue;entries.push({batch,gi,mat,layer,li,ls,policy:referenceLayerPolicy(ls.mode,layer.flags||0,1),priority:(mat.priorityPlane||0)*100+li});}});
+  function bindAssetPreviewBatch(r,batch,uvSet=0){const gl=r.gl,a=r.attrib;gl.bindBuffer(gl.ARRAY_BUFFER,batch.pos);gl.enableVertexAttribArray(a.pos);gl.vertexAttribPointer(a.pos,3,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ARRAY_BUFFER,batch.normal);gl.enableVertexAttribArray(a.normal);gl.vertexAttribPointer(a.normal,3,gl.FLOAT,false,0,0);const uv=batch.uv[Math.max(0,Math.min(batch.uv.length-1,uvSet|0))]||batch.uv[0];gl.bindBuffer(gl.ARRAY_BUFFER,uv);gl.enableVertexAttribArray(a.uv);gl.vertexAttribPointer(a.uv,2,gl.FLOAT,false,0,0);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,batch.index);}
+  function renderRuntimeAssetPreviewGl(canvas,runtime,nowMs=performance.now(),view={}){
+    if(!canvas||!runtime?.parsed)return false;const r=ensureAssetPreviewGlRenderer(canvas);if(!r?.gl)return false;initAssetPreviewGlModel(r,runtime);updateAssetPreviewGlGeometry(r,nowMs,view);const gl=r.gl,u=r.uni,model=r.model,anim=r.anim,entries=[],stack=referenceLayerStackPolicy(),stats={layers:0,texturedLayers:0,missingExpectedTextures:0,replaceableLayers:0,multiLayerGeosets:0,hdMaterials:0,hdPasses:0,pbrTexturesBound:0,lod:modelLodSummary(model),depthFunc:stack.depthFunc,gpuDepth:true};
+    gl.viewport(0,0,canvas.width,canvas.height);gl.clearColor(9/255,15/255,21/255,1);gl.clearDepth(1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.useProgram(r.program);gl.disable(gl.CULL_FACE);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.depthFunc(gl.LEQUAL);const tc=hexRgb01(teamColorInfo().hex);gl.uniform3f(u.u_teamColor,tc[0],tc[1],tc[2]);
+    r.batches.forEach(batch=>{const gi=batch.gi,mat=(model.materials||[])[batch.geo.materialId]||{id:batch.geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:batch.geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,coordId:0,tracks:{}}],hd=hdMaterialInfo(model,mat);if(hd){const layer=hd.baseLayer||layers[0],ls=modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs);if(ls.alpha>.001){entries.push({batch,gi,mat,layer,li:0,ls,hd,policy:referenceLayerPolicy(ls.mode,layer.flags||0,1),priority:(mat.priorityPlane||0)*100});stats.hdMaterials++;}return;}if(layers.length>1)stats.multiLayerGeosets++;for(let li=0;li<layers.length;li++){const layer=layers[li],ls=modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs);if(ls.alpha<=.001)continue;entries.push({batch,gi,mat,layer,li,ls,hd:null,policy:referenceLayerPolicy(ls.mode,layer.flags||0,1),priority:(mat.priorityPlane||0)*100+li});}});
     entries.sort((a,b)=>(a.policy.blend&&!a.policy.depthWrite)-(b.policy.blend&&!b.policy.depthWrite)||a.priority-b.priority);
-    for(const e of entries){const {batch,layer,ls,policy}=e;bindAssetPreviewBatch(r,batch,layer.coordId||0);gl.uniform1f(u.u_alpha,ls.alpha);gl.uniform1f(u.u_alphaCut,policy.alphaCut);gl.uniform3f(u.u_color,ls.color?.[0]??1,ls.color?.[1]??1,ls.color?.[2]??1);const angle=ls.uvAngle||0;gl.uniform2f(u.u_uvTrans,ls.uvTrans[0],ls.uvTrans[1]);gl.uniform2f(u.u_uvScale,ls.uvScale[0],ls.uvScale[1]);gl.uniform2f(u.u_uvRot,Math.cos(angle),Math.sin(angle));const tex=uploadAssetPreviewGlTexture(r,ls.textureId),def=(model.textureDefs||[])[ls.textureId],rid=Number(def?.replaceableId||0);stats.layers++;if(tex)stats.texturedLayers++;else if(def)stats.missingExpectedTextures++;if(rid===1||rid===2)stats.replaceableLayers++;gl.uniform1i(u.u_hasTexture,!!tex);if(tex){gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);}applyReferenceLayerPolicy(gl,policy);gl.drawElements(gl.TRIANGLES,batch.indexCount,batch.indexType,0);}
+    const bindTex=(unit,uniform,index,hasUniform)=>{const tex=Number.isInteger(index)&&index>=0?uploadAssetPreviewGlTexture(r,index):null;if(hasUniform)gl.uniform1i(hasUniform,!!tex);if(tex){gl.activeTexture(gl.TEXTURE0+unit);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(uniform,unit);}return tex;};
+    for(const e of entries){const {batch,layer,ls,policy,hd}=e;bindAssetPreviewBatch(r,batch,layer.coordId||0);gl.uniform1f(u.u_alpha,ls.alpha);gl.uniform1f(u.u_alphaCut,policy.alphaCut);gl.uniform1f(u.u_emissiveGain,Number.isFinite(+layer.emissiveGain)?Math.max(0,+layer.emissiveGain):1);gl.uniform3f(u.u_color,ls.color?.[0]??1,ls.color?.[1]??1,ls.color?.[2]??1);const angle=ls.uvAngle||0;gl.uniform2f(u.u_uvTrans,ls.uvTrans[0],ls.uvTrans[1]);gl.uniform2f(u.u_uvScale,ls.uvScale[0],ls.uvScale[1]);gl.uniform2f(u.u_uvRot,Math.cos(angle),Math.sin(angle));gl.uniform1i(u.u_hd,!!hd);
+      let diffuseId=ls.textureId,normalId=-1,ormId=-1,emissiveId=-1,teamId=-1,reflectionsId=-1;if(hd){diffuseId=hd.slots.diffuse;normalId=hd.slots.normal;ormId=hd.slots.orm;emissiveId=hd.slots.emissive;teamId=hd.slots.team;reflectionsId=hd.slots.reflections;stats.hdPasses++;}
+      const tex=bindTex(0,u.u_tex,diffuseId,u.u_hasTexture),normal=bindTex(1,u.u_normalTex,normalId,u.u_hasNormal),orm=bindTex(2,u.u_ormTex,ormId,u.u_hasOrm),emissive=bindTex(3,u.u_emissiveTex,emissiveId,u.u_hasEmissive),team=bindTex(4,u.u_teamTex,teamId,u.u_hasTeam),reflection=bindTex(5,u.u_reflectionTex,reflectionsId,u.u_hasReflection);gl.activeTexture(gl.TEXTURE0);
+      stats.layers++;if(tex)stats.texturedLayers++;else{const def=(model.textureDefs||[])[diffuseId];if(def)stats.missingExpectedTextures++;}const def=(model.textureDefs||[])[diffuseId],rid=Number(def?.replaceableId||0);if(rid===1||rid===2)stats.replaceableLayers++;if(hd)stats.pbrTexturesBound+=[tex,normal,orm,emissive,team,reflection].filter(Boolean).length;applyReferenceLayerPolicy(gl,policy);gl.drawElements(gl.TRIANGLES,batch.indexCount,batch.indexType,0);}
     gl.depthFunc(gl.LESS);gl.disable(gl.BLEND);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);r.lastStats=stats;runtime.previewGpuDepthRendered=true;runtime.previewLayerStats=stats;if(!r.logged){r.logged=true;diag('info','Unit / Effect Viewer','GPU depth-buffer preview renderer active',{model:runtime.path||model.sourceName||'',geosets:r.batches.length,textures:(runtime.textures||[]).filter(Boolean).length,layerStack:stats});}return true;
   }
-  function drawRuntimeAssetPreviewOverlay(canvas,runtime,nowMs=performance.now()){
-    if(!canvas||!runtime?.parsed)return false;const ctx=canvas.getContext('2d'),model=runtime.parsed,anim=cascEffectFrame(runtime,nowMs),nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=rawModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),yaw=.72,pitch=.32,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),scale=Math.min(canvas.width,canvas.height)*.72/size,project=v=>{const dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp;return{x:canvas.width/2+rx*scale,y:canvas.height/2-vy*scale};};ctx.clearRect(0,0,canvas.width,canvas.height);
-    for(const n of model.particleEmitters2||[]){const local=nodeMatrices.get(n.id)||matIdentity(),origin=matPoint(local,n.pivot||{x:0,y:0,z:0}),tex=runtime.textures?.[n.textureId]||null,life=Math.max(.12,+n.lifeSpan||1),rate=Math.max(1,Math.min(60,+n.emissionRate||8)),count=Math.max(4,Math.min(18,Math.ceil(rate*life*.12))),speed=Math.max(-200,Math.min(200,+n.speed||20)),gravity=Math.max(-240,Math.min(240,+n.gravity||0)),rows=Math.max(1,n.rows|0),cols=Math.max(1,n.columns|0),sim=Math.max(0,anim.elapsedMs/1000);for(let i=0;i<count;i++){const seed=(n.id+1)*117+i*23.7,age=fxFrac(sim/life+i/count+fxRand(seed)*.4)*life,t=age/life,q=project({x:origin.x+(fxRand(seed+3)-.5)*(+n.width||12),y:origin.y+(fxRand(seed+6)-.5)*(+n.length||12),z:origin.z+speed*age*.16-.5*gravity*age*age*.018}),sz=Math.max(2,Math.min(30,Math.max(.03,fxSegmentValue(n.segmentScaling||[.25,.4,.1],t,n.timeMiddle))*scale*5)),a=clamp(fxSegmentValue((n.segmentAlphas||[255,180,0]).map(v=>v/255),t,n.timeMiddle),0,1);if(tex&&tex.width&&tex.height){const frame=fxEmitterFrame(n,t),cw=tex.width/cols,ch=tex.height/rows,sx=(frame%cols)*cw,sy=Math.floor(frame/cols)*ch;ctx.save();ctx.globalAlpha=a;ctx.drawImage(tex,sx,sy,cw,ch,q.x-sz/2,q.y-sz/2,sz,sz);ctx.restore();}}}
-    ctx.save();ctx.fillStyle='rgba(235,242,248,.92)';ctx.font='11px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText(`${(model.geosets||[]).length} geosets · ${(model.nodes||[]).length} nodes · ${runtime.textures?.filter(Boolean).length||0}/${runtime.textures?.length||0} textures · ${anim.seq?.name||'Rest'}`,10,18);ctx.restore();return true;
+  function drawRuntimeAssetPreviewOverlay(canvas,runtime,nowMs=performance.now(),view={}){
+    if(!canvas||!runtime?.parsed)return false;const ctx=canvas.getContext('2d'),model=runtime.parsed,anim=cascEffectFrame(runtime,nowMs),nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=renderableModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),yaw=Number.isFinite(+view.yaw)?+view.yaw:.72,pitch=Number.isFinite(+view.pitch)?+view.pitch:.32,zoom=clamp(Number.isFinite(+view.zoom)?+view.zoom:1,.25,6),panX=(Number.isFinite(+view.panX)?+view.panX:0)*canvas.width,panY=(Number.isFinite(+view.panY)?+view.panY:0)*canvas.height,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),scale=Math.min(canvas.width,canvas.height)*.72/size*zoom,project=v=>{const dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp;return{x:canvas.width/2+panX+rx*scale,y:canvas.height/2+panY-vy*scale};};ctx.clearRect(0,0,canvas.width,canvas.height);
+    for(const n of model.particleEmitters2||[]){const local=nodeMatrices.get(n.id)||matIdentity(),origin=matPoint(local,n.pivot||{x:0,y:0,z:0}),tex=runtime.textures?.[n.textureId]||null,life=Math.max(.12,+n.lifeSpan||1),rate=Math.max(1,Math.min(60,+n.emissionRate||8)),count=Math.max(4,Math.min(18,Math.ceil(rate*life*.12))),speed=Math.max(-200,Math.min(200,+n.speed||20)),gravity=Math.max(-240,Math.min(240,+n.gravity||0)),rows=Math.max(1,n.rows|0),cols=Math.max(1,n.columns|0),sim=Math.max(0,anim.elapsedMs/1000);for(let i=0;i<count;i++){const seed=(n.id+1)*117+i*23.7,age=fxFrac(sim/life+i/count+fxRand(seed)*.4)*life,t=age/life,q=project({x:origin.x+(fxRand(seed+3)-.5)*(+n.width||12),y:origin.y+(fxRand(seed+6)-.5)*(+n.length||12),z:origin.z+speed*age*.16-.5*gravity*age*age*.018}),sz=Math.max(2,Math.min(30,Math.max(.03,fxSegmentValue(n.segmentScaling||[.25,.4,.1],t,n.timeMiddle))*scale*5)),a=clamp(fxSegmentValue((n.segmentAlphas||[255,180,0]).map(v=>v/255),t,n.timeMiddle),0,1);if(tex&&tex.width&&tex.height){const frame=fxEmitterFrame(n,t),cw=tex.width/cols,ch=tex.height/rows,sx=(frame%cols)*cw,sy=Math.floor(frame/cols)*ch;ctx.save();ctx.globalCompositeOperation=particleCompositeMode(n);ctx.globalAlpha=a;const sprite=particleSpriteTexture(n,tex);ctx.drawImage(sprite,sx,sy,cw,ch,q.x-sz/2,q.y-sz/2,sz,sz);ctx.restore();}}}
+    const lod=modelLodSummary(model),geoLabel=lod.skipped?`${lod.rendered}/${lod.total} geosets · LOD ${lod.primary}`:`${lod.total} geosets`;ctx.save();ctx.fillStyle='rgba(235,242,248,.92)';ctx.font='11px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText(`${geoLabel} · ${(model.nodes||[]).length} nodes · ${runtime.textures?.filter(Boolean).length||0}/${runtime.textures?.length||0} textures · ${anim.seq?.name||'Rest'}`,10,18);ctx.restore();return true;
   }
-  function drawRuntimeAssetPreview2D(canvas,runtime,nowMs=performance.now()){
-    if(!canvas||!runtime||!runtime.parsed)return false;const ctx=canvas.getContext('2d'),model=runtime.parsed,anim=cascEffectFrame(runtime,nowMs),nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=rawModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),yaw=.72,pitch=.32,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),scale=Math.min(canvas.width,canvas.height)*.72/size;
-    const project=v=>{const dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp,dep=ry*cp+dz*sp;return{x:canvas.width/2+rx*scale,y:canvas.height/2-vy*scale,z:dep};};
+  function drawRuntimeAssetPreview2D(canvas,runtime,nowMs=performance.now(),view={}){
+    if(!canvas||!runtime||!runtime.parsed)return false;const ctx=canvas.getContext('2d'),model=runtime.parsed,anim=cascEffectFrame(runtime,nowMs),nodeMatrices=buildModelNodeMatrices(model,anim.seq,anim.frame,anim.elapsedMs),b=renderableModelBounds(model),center=b.center||{x:0,y:0,z:0},size=Math.max(1,b.size||1),yaw=Number.isFinite(+view.yaw)?+view.yaw:.72,pitch=Number.isFinite(+view.pitch)?+view.pitch:.32,zoom=clamp(Number.isFinite(+view.zoom)?+view.zoom:1,.25,6),panX=(Number.isFinite(+view.panX)?+view.panX:0)*canvas.width,panY=(Number.isFinite(+view.panY)?+view.panY:0)*canvas.height,cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),scale=Math.min(canvas.width,canvas.height)*.72/size*zoom;
+    const project=v=>{const dx=(v.x||0)-center.x,dy=(v.y||0)-center.y,dz=(v.z||0)-center.z,rx=dx*cy-dy*sy,ry=dx*sy+dy*cy,vy=dz*cp-ry*sp,dep=ry*cp+dz*sp;return{x:canvas.width/2+panX+rx*scale,y:canvas.height/2+panY-vy*scale,z:dep};};
     ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#090f15';ctx.fillRect(0,0,canvas.width,canvas.height);const tris=[];let budget=9000;
-    for(let gi=0;gi<(model.geosets||[]).length&&budget>0;gi++){
-      const geo=model.geosets[gi],mat=(model.materials||[])[geo.materialId]||{id:geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,tracks:{}}],states=layers.map(layer=>({layer,ls:modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs)}));if(!states.some(x=>x.ls.alpha>.001))continue;
+    for(const ge of modelRenderableGeosetEntries(model)){if(budget<=0)break;const gi=ge.index;
+      const geo=ge.geo,mat=(model.materials||[])[geo.materialId]||{id:geo.materialId,layers:[]},layers=(mat.layers&&mat.layers.length)?mat.layers:[{id:0,textureId:geo.textureId||mat.textureId||0,filterMode:mat.filterMode||'None',alpha:1,tracks:{}}],states=layers.map(layer=>({layer,ls:modelLayerState(model,mat,layer,gi,anim.seq,anim.frame,anim.elapsedMs)}));if(!states.some(x=>x.ls.alpha>.001))continue;
       const world=(geo.vertices||[]).map((v,vi)=>skinModelVertex(model,geo,vi,nodeMatrices)||v),pv=world.map(project),faces=geo.faces||geo.triangles||[];
       for(const face of faces){if(--budget<0)break;const ids=Array.isArray(face)?face:[face?.a,face?.b,face?.c],p0=pv[ids?.[0]],p1=pv[ids?.[1]],p2=pv[ids?.[2]];if(!p0||!p1||!p2||Math.abs(signedArea2(p0,p1,p2))<.03)continue;states.forEach(({layer,ls},li)=>{if(ls.alpha<=.001)return;const uvSet=(geo.uvSets&&geo.uvSets[layer.coordId||0])||(geo.uvSets&&geo.uvSets[0])||geo.tverts||[],uv=[uvSet[ids[0]]||{u:0,v:0},uvSet[ids[1]]||{u:1,v:0},uvSet[ids[2]]||{u:1,v:1}].map(u=>transformUv(u,ls));tris.push({p:[p0,p1,p2],uv,tex:runtime.textures?.[ls.textureId]||null,alpha:ls.alpha,color:ls.color||[1,1,1],composite:ls.composite,priority:(mat.priorityPlane||0)*100+li,z:(p0.z+p1.z+p2.z)/3});});}
     }
     tris.sort((a,b)=>a.priority-b.priority||a.z-b.z);for(const tri of tris){const [p0,p1,p2]=tri.p,tex=tri.tex;ctx.save();ctx.globalAlpha=tri.alpha;ctx.globalCompositeOperation=tri.composite||'source-over';if(tex&&tex.width&&tex.height){const [u0,u1,u2]=tri.uv,s0={x:u0.u*(tex.width-1),y:u0.v*(tex.height-1)},s1={x:u1.u*(tex.width-1),y:u1.v*(tex.height-1)},s2={x:u2.u*(tex.width-1),y:u2.v*(tex.height-1)};drawTexturedTriangle(ctx,tex,s0,s1,s2,p0,p1,p2);}else{ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.closePath();ctx.fillStyle=`rgb(${Math.round((tri.color[0]||1)*190)},${Math.round((tri.color[1]||1)*200)},${Math.round((tri.color[2]||1)*215)})`;ctx.fill();}ctx.restore();}
-    for(const n of model.particleEmitters2||[]){const local=nodeMatrices.get(n.id)||matIdentity(),origin=matPoint(local,n.pivot||{x:0,y:0,z:0}),tex=runtime.textures?.[n.textureId]||null,life=Math.max(.12,+n.lifeSpan||1),rate=Math.max(1,Math.min(60,+n.emissionRate||8)),count=Math.max(4,Math.min(18,Math.ceil(rate*life*.12))),speed=Math.max(-200,Math.min(200,+n.speed||20)),gravity=Math.max(-240,Math.min(240,+n.gravity||0)),rows=Math.max(1,n.rows|0),cols=Math.max(1,n.columns|0),sim=Math.max(0,anim.elapsedMs/1000);for(let i=0;i<count;i++){const seed=(n.id+1)*117+i*23.7,age=fxFrac(sim/life+i/count+fxRand(seed)*.4)*life,t=age/life,q=project({x:origin.x+(fxRand(seed+3)-.5)*(+n.width||12),y:origin.y+(fxRand(seed+6)-.5)*(+n.length||12),z:origin.z+speed*age*.16-.5*gravity*age*age*.018}),sz=Math.max(2,Math.min(30,Math.max(.03,fxSegmentValue(n.segmentScaling||[.25,.4,.1],t,n.timeMiddle))*scale*5)),a=clamp(fxSegmentValue((n.segmentAlphas||[255,180,0]).map(v=>v/255),t,n.timeMiddle),0,1);if(tex&&tex.width&&tex.height){const frame=fxEmitterFrame(n,t),cw=tex.width/cols,ch=tex.height/rows,sx=(frame%cols)*cw,sy=Math.floor(frame/cols)*ch;ctx.save();ctx.globalAlpha=a;ctx.drawImage(tex,sx,sy,cw,ch,q.x-sz/2,q.y-sz/2,sz,sz);ctx.restore();}}
+    for(const n of model.particleEmitters2||[]){const local=nodeMatrices.get(n.id)||matIdentity(),origin=matPoint(local,n.pivot||{x:0,y:0,z:0}),tex=runtime.textures?.[n.textureId]||null,life=Math.max(.12,+n.lifeSpan||1),rate=Math.max(1,Math.min(60,+n.emissionRate||8)),count=Math.max(4,Math.min(18,Math.ceil(rate*life*.12))),speed=Math.max(-200,Math.min(200,+n.speed||20)),gravity=Math.max(-240,Math.min(240,+n.gravity||0)),rows=Math.max(1,n.rows|0),cols=Math.max(1,n.columns|0),sim=Math.max(0,anim.elapsedMs/1000);for(let i=0;i<count;i++){const seed=(n.id+1)*117+i*23.7,age=fxFrac(sim/life+i/count+fxRand(seed)*.4)*life,t=age/life,q=project({x:origin.x+(fxRand(seed+3)-.5)*(+n.width||12),y:origin.y+(fxRand(seed+6)-.5)*(+n.length||12),z:origin.z+speed*age*.16-.5*gravity*age*age*.018}),sz=Math.max(2,Math.min(30,Math.max(.03,fxSegmentValue(n.segmentScaling||[.25,.4,.1],t,n.timeMiddle))*scale*5)),a=clamp(fxSegmentValue((n.segmentAlphas||[255,180,0]).map(v=>v/255),t,n.timeMiddle),0,1);if(tex&&tex.width&&tex.height){const frame=fxEmitterFrame(n,t),cw=tex.width/cols,ch=tex.height/rows,sx=(frame%cols)*cw,sy=Math.floor(frame/cols)*ch;ctx.save();ctx.globalCompositeOperation=particleCompositeMode(n);ctx.globalAlpha=a;const sprite=particleSpriteTexture(n,tex);ctx.drawImage(sprite,sx,sy,cw,ch,q.x-sz/2,q.y-sz/2,sz,sz);ctx.restore();}}
     }
-    ctx.save();ctx.fillStyle='rgba(235,242,248,.92)';ctx.font='11px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText(`${(model.geosets||[]).length} geosets · ${(model.nodes||[]).length} nodes · ${runtime.textures?.filter(Boolean).length||0}/${runtime.textures?.length||0} textures · ${anim.seq?.name||'Rest'}`,10,18);ctx.restore();runtime.lastSequenceName=anim.seq&&anim.seq.name||'Rest';runtime.lastFrame=anim.frame;return true;
+    const lod=modelLodSummary(model),geoLabel=lod.skipped?`${lod.rendered}/${lod.total} geosets · LOD ${lod.primary}`:`${lod.total} geosets`;ctx.save();ctx.fillStyle='rgba(235,242,248,.92)';ctx.font='11px system-ui,sans-serif';ctx.textAlign='left';ctx.fillText(`${geoLabel} · ${(model.nodes||[]).length} nodes · ${runtime.textures?.filter(Boolean).length||0}/${runtime.textures?.length||0} textures · ${anim.seq?.name||'Rest'}`,10,18);ctx.restore();runtime.lastSequenceName=anim.seq&&anim.seq.name||'Rest';runtime.lastFrame=anim.frame;return true;
   }
-  function drawRuntimeAssetPreview(glCanvas,overlayCanvas,runtime,nowMs=performance.now()){
-    if(renderRuntimeAssetPreviewGl(glCanvas,runtime,nowMs)){drawRuntimeAssetPreviewOverlay(overlayCanvas,runtime,nowMs);return true;}
+  function drawRuntimeAssetPreview(glCanvas,overlayCanvas,runtime,nowMs=performance.now(),view={}){
+    if(renderRuntimeAssetPreviewGl(glCanvas,runtime,nowMs,view)){drawRuntimeAssetPreviewOverlay(overlayCanvas,runtime,nowMs,view);return true;}
     if(runtime){runtime.previewGpuDepthRendered=false;runtime.previewLayerStats=null;}
-    return drawRuntimeAssetPreview2D(overlayCanvas||glCanvas,runtime,nowMs);
+    return drawRuntimeAssetPreview2D(overlayCanvas||glCanvas,runtime,nowMs,view);
+  }
+
+  function particleHeartbeatSignature(stats){
+    const c=stats?.canvas||{};
+    return [String(stats?.model||''),Number(stats?.particleEmitters2||0),Number(stats?.decodedCascTextures||0),Number(stats?.withTexture||0),Number(stats?.fallback||0),Number(c.width||0),Number(c.height||0),String(stats?.performanceMode||'')].join('|');
+  }
+  function particleHeartbeatDecision(stats,now=performance.now(),lastSignature='',lastAt=0,keepaliveMs=60000){
+    const signature=particleHeartbeatSignature(stats),changed=signature!==String(lastSignature||''),keepalive=Number(now)-Number(lastAt||0)>=Math.max(1000,Number(keepaliveMs)||60000);
+    return{log:changed||keepalive,signature,changed,keepalive};
+  }
+  function particleHeartbeatStats(canvas,effects){
+    const p2=(effects||[]).filter(n=>n.type==='ParticleEmitter2');let withTexture=0;
+    for(const n of p2)if(getEmitterTextureCanvas(n))withTexture++;
+    return{model:state.model?.sourceName||state.model?.displayName||state.model?.name||'',particleEmitters2:p2.length,decodedCascTextures:[...new Set(state.casc.effectTextures.values())].length,withTexture,fallback:Math.max(0,p2.length-withTexture),canvas:{width:canvas?.width||0,height:canvas?.height||0},performanceMode:performanceMode()};
+  }
+  function maybeLogParticleHeartbeat(canvas,effects,now=performance.now()){
+    if(!state.fxPreviewMode)return false;
+    if(now-(state.fxLastStatsCheck||0)<5000)return false;
+    state.fxLastStatsCheck=now;
+    const stats=particleHeartbeatStats(canvas,effects),decision=particleHeartbeatDecision(stats,now,state.fxLastStatsSignature,state.fxLastStatsLog,60000);
+    if(!decision.log)return false;
+    state.fxLastStatsLog=now;state.fxLastStatsSignature=decision.signature;
+    diag('debug','FX Renderer','Particle render heartbeat',{...stats,reason:decision.changed?'changed':'keepalive'});
+    return true;
   }
 
   function drawEffectsOverlay(ctx,canvas,nodeMatrices){
@@ -2654,11 +2855,7 @@
     const matrices=nodeMatrices||getDeformedGeometry().nodeMatrices;
     const showCollision=$('#modelShowCollision') && $('#modelShowCollision').checked;
     const effects=(state.model.nodes||[]).filter(n=>['ParticleEmitter','ParticleEmitter2','ParticleEmitterPopcorn','RibbonEmitter','Light','Attachment','EventObject','CollisionShape'].includes(n.type));
-    if(state.fxPreviewMode && performance.now()-(state.fxLastStatsLog||0)>5000){
-      state.fxLastStatsLog=performance.now();
-      const p2=effects.filter(n=>n.type==='ParticleEmitter2'),decoded=[...new Set(state.casc.effectTextures.values())].length;
-      diag('debug','FX Renderer','Particle render heartbeat',{particleEmitters2:p2.length,decodedCascTextures:decoded,withTexture:p2.filter(n=>!!getEmitterTextureCanvas(n)).length,fallback:p2.filter(n=>!getEmitterTextureCanvas(n)).length,canvas:{width:canvas.width,height:canvas.height},performanceMode:performanceMode()});
-    }
+    maybeLogParticleHeartbeat(canvas,effects);
     ctx.save();
     ctx.font='10px system-ui, sans-serif';
     for(const n of effects){
@@ -2763,7 +2960,7 @@
     return{min,max,center:{x:(min.x+max.x)/2,y:(min.y+max.y)/2,z:(min.z+max.z)/2},size:Math.max(max.x-min.x,max.y-min.y,max.z-min.z,1)};
   }
   function defaultReferenceOffset(refModel){
-    const main=currentDisplayBounds(),rb=rawModelBounds(refModel),gap=Math.max(main.size,rb.size)*.18;
+    const main=currentDisplayBounds(),rb=renderableModelBounds(refModel),gap=Math.max(main.size,rb.size)*.18;
     const targetY=(main.min?.y||0)-gap-rb.size*.52;
     return{x:(main.center?.x||0)-(rb.center?.x||0),y:targetY-(rb.center?.y||0),z:(main.min?.z||0)-(rb.min?.z||0)};
   }
@@ -2777,7 +2974,7 @@
   function clearReferenceModel(){state.referenceModel={model:null,runtime:null,name:'',path:'',source:'',visible:true,opacity:1,offset:{x:0,y:0,z:0},selectedKind:'',selectedIndex:-1};markDirty();try{window.dispatchEvent(new CustomEvent('wc3-reference-model-change',{detail:referenceModelState()}));}catch(_){}return true;}
   function setReferenceTransform(values={}){const r=state.referenceModel;if(!r||!r.model)return false;if(values.offset){for(const k of ['x','y','z'])if(Number.isFinite(+values.offset[k]))r.offset[k]=+values.offset[k];}if(values.visible!=null)r.visible=!!values.visible;if(Number.isFinite(+values.opacity))r.opacity=clamp(+values.opacity,.08,1);markDirty();try{window.dispatchEvent(new CustomEvent('wc3-reference-model-change',{detail:referenceModelState()}));}catch(_){}return true;}
   function selectReferenceItem(kind,index){const r=state.referenceModel;if(!r||!r.model)return false;r.selectedKind=String(kind||'');r.selectedIndex=Number.isFinite(+index)?+index:-1;markDirty();return true;}
-  function referenceSceneBounds(){const main=currentDisplayBounds(),r=state.referenceModel;if(!r?.model||r.visible===false)return main;return unionBounds(main,offsetBounds(rawModelBounds(r.model),r.offset));}
+  function referenceSceneBounds(){const main=currentDisplayBounds(),r=state.referenceModel;if(!r?.model||r.visible===false)return main;return unionBounds(main,offsetBounds(renderableModelBounds(r.model),r.offset));}
   function frameReferenceScene(){
     const canvas=$('#model3dCanvas');if(!canvas||!state.model)return false;const b=referenceSceneBounds();setCameraTargetFromBounds(b);state.camera.panX=0;state.camera.panY=0;
     const corners=[{x:b.min.x,y:b.min.y,z:b.min.z},{x:b.max.x,y:b.min.y,z:b.min.z},{x:b.min.x,y:b.max.y,z:b.min.z},{x:b.max.x,y:b.max.y,z:b.min.z},{x:b.min.x,y:b.min.y,z:b.max.z},{x:b.max.x,y:b.min.y,z:b.max.z},{x:b.min.x,y:b.max.y,z:b.max.z},{x:b.max.x,y:b.max.y,z:b.max.z}];
@@ -4937,7 +5134,12 @@
 
   function loop(ts){
     ts = ts || performance.now();
-    if(state.mode === 'model'){
+    // Do not keep the heavy Model Lab / ParticleEmitter2 renderer alive while
+    // another workspace (Effects Lab, CASC, Log, etc.) is active. The old loop
+    // could continue rendering dozens of emitters behind hidden panels and was
+    // visible in runtime logs as 250-300 ms frames after leaving Model Lab.
+    const modelWorkspaceActive = document.body?.dataset?.module === 'model';
+    if(state.mode === 'model' && modelWorkspaceActive){
       tickAnimation(ts);
       const nowFast=fastPreviewActive();
       if(state.lastFastPreview && !nowFast) state.needsRender=true;
@@ -4961,7 +5163,7 @@
           setLoadStatus(`Preview paused to keep the page responsive (${Math.round(spent)} ms frame).`, 'info');
         }
       }
-    } else if(state.needsRender){
+    } else if(state.mode !== 'model' && state.needsRender){
       state.needsRender = false;
     }
     requestAnimationFrame(loop);
@@ -4994,7 +5196,7 @@
       selectGeoset,pushModelHistorySnapshot,captureAnimationSnapshot,captureModelEditSnapshot,captureGeosetSnapshot,captureGeosetStructureSnapshot,
       markDirty,invalidateGeometryCache,invalidatePickCache,focusNodeInViewport,selectedSequenceIndex,currentSequence,currentSequenceProgress,
       rebuildNodeTypeArrays,cloneHistoryData,translateSelectedGeoset,scaleSelectedGeoset,rotateSelectedGeoset,cloneSelectedGeoset,buildTextureExportFiles,clonedModelForPaths,serializeCurrentModel,buildEditedModelArtifact,buildTexturePackageArtifact,buildModelPackageArtifact,autoLoadMissingModelTexturesFromCasc,searchCascTextureCandidates,
-      setReferenceModel,clearReferenceModel,setReferenceTransform,selectReferenceItem,referenceModelState,frameReferenceScene,copyReferenceGeoset,copyReferenceObject,addEffectAttachmentFromPath,captureReferenceImportSnapshot,ensureCascOnDemand,loadCascEffectAssets,prepareReferenceModelRuntime,drawRuntimeAssetPreview,referenceLayerPolicy,referenceLayerStackPolicy,renderGlReferenceModel,addedObjectEntries,applyAddedObjectTransform,cloneAddedObject,attachAddedObjectToBone,detachAddedObjectFromBone,focusAddedObject,setParticleEmitterTiming,buildParticleVisibilityTrack
+      setReferenceModel,clearReferenceModel,setReferenceTransform,selectReferenceItem,referenceModelState,frameReferenceScene,copyReferenceGeoset,copyReferenceObject,addEffectAttachmentFromPath,captureReferenceImportSnapshot,ensureCascOnDemand,loadCascEffectAssets,prepareReferenceModelRuntime,prepareReferenceModelRuntimesBatch,drawRuntimeAssetPreview,modelPrimaryLod,modelRenderableGeosetEntries,modelLodSummary,renderableModelBounds,hdMaterialInfo,hdMaterialSample,particleCompositeMode,particleSpriteTexture,referenceLayerPolicy,referenceLayerStackPolicy,renderGlReferenceModel,addedObjectEntries,applyAddedObjectTransform,cloneAddedObject,attachAddedObjectToBone,detachAddedObjectFromBone,focusAddedObject,setParticleEmitterTiming,buildParticleVisibilityTrack,particleHeartbeatSignature,particleHeartbeatDecision,particleHeartbeatStats,maybeLogParticleHeartbeat
     },
     debug:{
       pickAt(x,y){return pickHitFromCanvas(x,y);},

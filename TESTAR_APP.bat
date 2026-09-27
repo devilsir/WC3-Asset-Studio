@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 cd /d "%~dp0"
-title WC3 Asset Studio v1.3 - Teste direto
+title WC3 Asset Studio v1.4 - Teste direto
 
 cls
 echo ================================================================
-echo  WC3 ASSET STUDIO v1.3 - TESTAR SEM MONTAR SETUP
+echo  WC3 ASSET STUDIO v1.4 - TESTAR SEM MONTAR SETUP
 echo ================================================================
 echo.
 
@@ -97,7 +97,7 @@ if not exist "node_modules\electron\dist\electron.exe" (
 :launch
 cls
 echo ================================================================
-echo  WC3 ASSET STUDIO v1.3 - EXECUCAO DIRETA
+echo  WC3 ASSET STUDIO v1.4 - EXECUCAO DIRETA
 echo ================================================================
 echo.
 echo Projeto: %CD%

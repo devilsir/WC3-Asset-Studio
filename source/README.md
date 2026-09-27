@@ -4,7 +4,7 @@
 
 It brings texture editing, Warcraft III model previewing, UV inspection, button creation, asset validation and CASC-assisted asset loading into one application, so common art workflows do not require constantly switching between separate tools.
 
-> Current version: **1.3**  
+> Current version: **1.4**  
 > Created by **DarkSir#1620**
 
 ## Features

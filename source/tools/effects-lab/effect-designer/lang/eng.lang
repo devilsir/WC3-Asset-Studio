@@ -1,0 +1,1099 @@
+; War3 Effect Designer - language file
+; Please do not edit this comments here.
+; Copyright (C) 2017 - 2019 yhx1129. All rights reserved.
+
+[MainMenu]
+0= &File
+1= &Edit
+2= &Options
+3= &Help
+
+[File]
+0= Open project
+1= Save project
+2= Close project
+3=
+4= &Compile (F5)
+5= Copy codes
+6= Save codes
+7=
+8= Recent projects
+9= Exit
+
+[History]
+0=Clear all
+
+[Edit]
+0= Add phase
+1= Delete phase
+2=
+3= Add layer
+4= Edit layer
+5= Delete layer
+6=
+7= Scheme
+
+[Options]
+0=Settings
+1=Language
+2=
+3=Ability Multiplier
+4=Function Helper
+
+
+[Language]
+0=Chinese simplified
+1=English
+2=
+3=Load language
+
+[Help]
+0 = Help
+1 = Donate
+2 = 
+3 = About
+
+[ToolBar]
+0=New phase
+1=Delete phase
+2=
+3=New layer
+4=Edit layer
+5=Delete layer
+6=
+7=Compile
+8=Settings
+9=
+10=Help
+
+[StatusBar]
+0 = State:
+1=
+2 = Ready
+3 = Tips: Adding phases and layers.
+
+[DropMenus]
+0 = Save and Open
+1 = Reset all
+2 = Save Init Equations
+3 = Save Move Equations
+4 = Clear List
+5 = Delete
+6 = Export script to World Editor
+7 = Export script file to World Editor
+8 = Export All script file to World Editor
+9 = Import equation list
+10 = Export equation list
+
+[TargetType]
+0 = point
+1 = Units
+2 = Immediate
+
+[TriggerType]
+0 = Cast
+1 = Attack
+2 = Attacked
+3 = Damaged
+4 = Dead
+5 = Use item
+
+[TreeCtrl]
+corrlayer = Correlated layer
+copy = Copy
+phase = phase
+layer = layer
+0 = Clear list
+1 = Cut
+2 = Copy
+3 = Paste
+4 = Delete
+
+[MainWnd]
+title = Effect Designer
+1025 = Structural design
+1024 = Basic Settings
+1102 = Add phase
+1038 = Create triggers:
+1101 = Delete phase
+1110 = Copy code
+1005 = Add Layer
+1036 = Delete layer
+1026 = Script code
+1111 = Probability:
+1023 = Heroes
+1109 = Save code
+1035 = Edit layer
+1003 = Object Data
+1027 = Name:
+1235 = ID:
+1232 = Refresh Cycle:
+1234 = Target Type:
+1233 = Hashtable:
+
+[LayerInit]
+1145 = until empty group
+1133 = Random
+1171 = Random
+1004 = Caster dies
+1005 = Target dies
+1006 = Buff disappears:
+1015 = Add
+1010 = Delete
+1067 = Add/Edit
+1007 = Edit
+1238 = Ref. point:
+1243 = Variation:
+1240 = Quick Selection:
+1236 = Duration:
+1235 = Time point:
+1244 = Layer name:
+1245= (optional)
+1237 = Interval time:
+1246 = Layer duration:
+1024 = Time Settings
+1241 = Parameter:
+1027 = Layer attributes
+1025 = Spatial Settings
+1239 = Layer Index:
+1232 = Phase discontinuation (optional)
+1026 = Material Management
+1233 = Layer type:
+1234 = Goal Layer:
+1242 = Number of changes:
+1247 = Jump to:
+
+[LayerType]
+0 = Independent
+1 = Related
+
+[StartTime]
+0 = Phase start
+1 = Phase end
+2 = Movement process
+3 = Movement end
+4 = Phase terminate
+
+[CorrLayer]
+0 = Previous layer
+
+[DurTime]
+0 = phase end
+
+[RefPoint]
+0 = Default
+1 = Target point
+2 = Caster point
+3 = Inherit from previous layer
+
+[RandPara1]
+0 = Caster facing
+1 = Spell direction
+2 = Distance to target
+
+[InitEqs]
+0 = Random point
+1 = Circle
+2 = Helix
+3 = Sphere
+4 = Parabolic
+
+[PhaseSuspendJump]
+0 = All phase end
+
+[DummyList]
+header = Unit
+0 = New dummy
+1 = Choose in group
+2 = Range choose
+3 = Caster
+4 = Target
+5 = Closed
+
+[EffectList]
+header = Effect
+0 = Effect|
+1 = Filter|
+2 = Weather|
+3 = Lightning|
+4 = Image|
+5=Destructable|
+
+[EffectExList]
+header = EffectEx
+0 = Camera|
+1 = Camera noise|
+2 = Sound|
+3 = TextTag|
+4 = Sky|
+5 = UberSplat|
+6 = Terrain Deformation|
+7 = Terrain Type|
+
+[LayerMove]
+1151 = Preview
+1042 = Delayed motion:
+1028 = Parameter control:
+1158 = Termination at end of this phase
+1067 = Add
+1068 = Public
+1177 = Enable kinematics
+1188 = Z height correction
+1014 = Coordinate rotation
+1029 = Coordinate translation
+1038 = For Initialization
+1039 = For kinematics
+1160 = Add
+1161 = Delete
+1162 = Edit
+1004 = Random
+1069 = Reset
+1003 = Insert
+1231 = Initialization
+1002 = Kinematics
+1233 = Quick Selection:
+1024 = Kinematic Editor
+1026 = Movement Ends
+1235 = Parameter:
+1027 = 3D Preview
+1236 = Numeric editing:
+1025 = Movement Options
+1234 = Special Movement:
+1239 = Direction angle:
+1232 = Coordinate transformation (optional)
+1238 = Stereo angle:
+1240 = X axis:
+1241 = Y axis:
+1242 = Z axis:
+1237 = Playback speed:
+
+[PreviewButton]
+0 = Preview
+1 = Stop
+
+[SpecialMove]
+0 = Color change
+1 = Size change
+2 = Self rotate
+
+[MoveTooltips]
+0 = Enable movement to be delayed after a while.
+1 = The height calculation can be more accurate when the terrain has height fluctuation, but it may cause asynchronism when the terrain is deformed dynamically.
+
+[MoveEqs]
+0 = Line
+1 = Circle
+2 = Parabola
+3 = Helix
+4 = Spiral rise
+5 = None
+
+[TransformList]
+0 = [Init]
+1 = [Move]
+2 = Tansform:
+3 = Translate:
+
+[LayerEdit]
+title = Layer Editor
+phase = phase
+layer = layer
+tab1 = Initialization
+tab2 = Kinetics
+tab3 = Order
+1 = OK
+2 = Cancel
+1072 =
+
+[StuffDummy]
+1233 = Faing:
+1232 = ID:
+1026 = Mode:
+1123 = Life:
+1211 = Kill at end:
+1126 = Delete
+1237 = Region type:
+1239 = Radius:
+1243 = Direction angle:
+1242 = Angle range:
+1240 = Length:
+1241 = Width:
+1036 = Add skills:
+1138 = Binding effects:
+1040 = Skill level:
+1248 = Attachment point:
+1141 = Life:
+1002 = Destroy at the end:
+1025 =  Switch to Unit Attributes
+1003 = Add/Edit
+1004 = Delete
+1165 = Vertex color:
+1247 = Transparency:
+1176 = Property item:
+1010 = Display value with texttag
+1014 = Convert to Heal
+1023 = Add damage:
+1238 = Capture mode:
+1235 = Phase:
+1236 = Layer:
+1024 = Switch to Unit Setup
+1234 = + offset:
+1028 = Count limit:
+1244 = Filters:
+1245 = Unit model:
+1246 = Model file:
+1249 = Model file:
+1250 = Select Attributes:
+1027 = Fill Motion
+
+[DummyAttrList]
+0 = vertex color:
+1 = injury:
+2= |Display
+3 = Skills:
+4 = Rank=
+5 = Special effects:
+6 = Life:
+7 = Destruction:
+8 = End
+9 = attachment point:
+10 = |Heal
+
+[AttackType]
+0 = Melee Attack
+1 = Magic Attack
+2 = Puncture attack
+3 = Siege attack
+4 = Magic Attack
+5 = Chaos Attack
+6 = Heroic Attack
+
+[DamageType]
+0 = Ordinary injury
+1 = Strengthen injury
+2 = Magic damage
+3 = Universal Damage
+4 = Unknown damage
+
+[UnitAttrs]
+0 = Action
+1 = Size
+2 = Animation speed
+3 = Blend time
+4 = Flight altitude
+5 = Strength
+6 = Agility
+7 = Intelligence
+8 = Life value
+9 = Magic value
+10 = Maximum Life
+11 = Maximum Magic
+12 = Life Recovery
+13 = Magic Restoration
+14 = Moving speed
+15 = Attack speed
+16 = Damage
+17 = Armor
+18 = Field of view
+19 = Chance of death
+20 = Pause
+21 = Stun
+22 = Silence
+23 = Disarm
+24 = Ensnare
+25 = Disable
+
+[RegionSel]
+0 = Circle
+1 = Sector
+2 = Rectangle
+3 = Rotating rectangle
+4 = Ring
+5 = Sector ring
+
+[CaptureMode]
+0 = Dynamic
+1 = static
+2 = Auto
+
+[UnitFilters]
+0 = Enemy
+1 = Structure
+2 = Hero
+3 = Ancient
+4 = Mechanical
+5 = Magicimmune
+6 = Undead
+7 = and
+8 = or
+9 = not
+
+[LifeEndPhase]
+0 = This phase
+1 = Last phase
+
+[StuffEffect]
+1253 = Select Effect:
+1233 = Number:
+1197 = Life:
+1001 = Destroyed at end:
+1196 = Random
+1193 = Add special effects:
+1200 = Enable filter:
+1236 = Duration:
+1235 = Mode:
+1025 = Cinematic Filter
+1024 = Zone Effect
+1031 = Create Image:
+1242 = Size:
+1243 = Image type:
+1166 = Set color:
+1244 = Transparency:
+1232 = Image
+1201 = Enable weather effect:
+1238 = Length:
+1239 = Width:
+1026 = Weather Effect
+1127 = Lifetime:
+1002 = Destroy at end:
+1240 = Number:
+1130 = Random
+1203 = Add lightning effect:
+1205 = Set color:
+1241 = Transparency:
+1027 = Lightning Effect
+1234 = Model pathname:
+1237 = Blp pathname:
+1245 = Blp pathname:
+1004 = Fill motion
+1131 = Lifetime:
+1003 = Destroyed at end:
+title=
+1164=~
+4294967295=(s)
+1176=16711680
+1162=~
+1206=16711935
+1023 = Create Destructable:
+1028 = Dead
+1246 = Orientation:
+1304 = Size:
+1305 = Change:
+1289 = Lifetime:
+1291 = Kill at the end:
+1133 = Deleted
+1247 = Model name:
+1248 = Model file:
+1038 = Animation:
+1014 = Animation speed:
+1303 = Destructable
+
+[CineFilterModes]
+0 = Fade in
+1 = Fade out
+2 = Fade inout
+
+[WeatherTypes]
+0 = Poplar Valley Heavy Rain
+1 = Poplar Valley Light Rain
+2 = Dalaran Shield
+3 = Thick dungeon blue mist
+4 = Thin dungeon blue mist
+5 = Thick dungeon fog
+6 = Thin dungeon fog
+7 = Thick dungeon fog
+8 = Thin dungeon fog
+9 = Thick dungeon fog
+10 = Thin dungeon fog
+11 = Heavy rain in Lordaeron
+12 = Lordaeron drizzle
+13 = Northrend Blizzard
+14 = Thick Northrend Snow
+15 = Thin Northrend snow
+16 = Wind on the edge
+17 = A breeze on the edge
+18 = Sunlight
+19 = Moonlight
+20 = Gale
+
+[LightningTypes]
+0 = Main lightning chain
+1 = Secondary lightning chain
+2 = Main medical wave
+3 = Medical wave
+4 = Finger of death
+5 = Forked lightning
+6 = Lightning strike
+7 = Mana Burning
+8 = Soul Chain
+9 = Life Drawing
+10 = Mana Draw
+11 = Air lock
+12 = Fire of Magic
+
+[StuffEffectEx]
+1313 = Select Extended Effect:
+1232 = Camera
+1046 = Camera vibration:
+1107 = Enable camera
+1239 = target distance:
+1236 = Sound
+1032 = Add sound:
+1255 = units:
+1254 = Goal:
+1256 = Volume:
+1007 = Add terrain deformation
+1245 = Radius:
+1243 = Type:
+1244 = Duration:
+1246 = Depth:
+1251 = Update interval:
+1247 = Final radius:
+1248 = Ripple period:
+1249 = Ripple width:
+1250 = Trajectory delay:
+1240 = Horizontal angle:
+1241 = Rotation angle:
+1021 = Add UberSplat:
+1252 = Duration:
+1242 = Duration:
+1257 = Truncation distance:
+1233 = Terrain deformation
+1010 = Terrain type:
+1253 = Range:
+1235 = Terrain Type
+1031 = Set Sky Effect:
+1234 = UberSplat
+1238 = Sky effect
+1258 = Sound file:
+1237 = TextTag
+1004 = Add Texttag:
+1259 = Z migration:
+1260 = Size:
+1261 = Color:
+1262 = Transparency:
+1263 = Speed:
+1264 = Direction:
+1229 = Life cycle:
+1230 = Delete at end:
+1265 = Vanishing point:
+1038 = Global
+
+[TerrainDeformTypes]
+0 = Crater
+1 = Ripple
+2 = Wave
+3 = Random
+
+[SoundTarget]
+0 = No bonding
+1 = Point bonding
+2 = Unit bonding
+
+[StuffEdit]
+Title = Material Editor
+phase = Phase
+layer = Layer
+1 = OK
+2 = Cancel
+1189=
+
+[MultiAbil]
+title = Ability Multiplier
+1 = OK
+2 = Cancel
+1076=Initial point
+1002=Caster point
+1003=Target point
+1004=Polar caster point:
+1023=Flyable with height:
+1024=Use level of major ability
+1080=Hero specified (check if the same ability is selected)
+1084=Channel ability
+1089=Passive:
+1025=Ability name:
+1027=Ability ID:
+1233=Ability type:
+1232=Execution area:
+1239=Dummy ID:
+1241=Location:
+1235=Initial point
+1236=Distance:
+1237=Direction:
+1244=Dummy ability
+1240=Life span:
+1245=Ability to add:
+1234=Dummy ability type:
+1246=Order:
+1249=Distance:
+1250=Direction range:
+1248=Spell Point:
+1238=Dummy setup
+1247=Count limited:
+1242=Distance:
+1243=Direction range:
+1026=Global Setup
+1251=General
+
+[AbilityOwnerType]
+0 = Unit
+1 = Item
+
+[ObjectData]
+Title = Grimex Configuration
+1 = OK
+2 = Cancel
+1004 = Enable Grimex
+1023 = Added to:
+1028 = Hero skill
+1027 = Place of inspection
+1234 = Skill template:
+1235 = Skill Icon:
+1241 = Tool tip:
+1243 = Extended tip:
+1242 = Interval time:
+1240 = Mana cost:
+1238 = Casting distance:
+1239 = Target:
+1232 = Vest template:
+1236 = Grade:
+1237 = Icon path:
+1026 = Settings
+1247 = Target ID:
+1233 = Skill options
+1245 = Required level:
+1244 = Shortcut key:
+1252 = Model:
+1253 = File:
+1250 = Icon:
+1251 = File:
+1249 = Name:
+1246 = Skip level requirement:
+1248 = Template ID:
+4294967295=
+1254 = Destructable template:
+
+[CompileErrors]
+0 = [Error]Empty Project!
+1 = At least one layer should be included in this phase!
+2 = No filling material!
+3 = Illegal unit selection filter!
+4 = Invalid inheritance logic of reference point!
+5 = Material filling movement, but the layer does not open kinematics!
+6 = Sound contains target units that do not match the target type settings!
+7 = Material contains target units that do not match the target type settings!
+8 = The target layer selected in the unit group does not exist!
+9 = Layer start time and duration setup beyond the layer duration range!
+10 = Initiation time of association layer does not support input!
+11 = The first layer is relevant!
+12 = The associated layer index is out of range!
+13 = The associated layer index is not valid!
+14 = Attempt to correlate the motion process or the end of the motion, but there is no kinematics at the associated layer!
+15 = Attempt to associate phase termination but the associated layer has no phase termination option!
+16 = Start kinematics but no kinematics formula!
+17 = Start kinematics but no end parameters!
+18 = Not defined in the list of initialization formulas or initialized!
+19 = Not defined in the list of kinematic formulas or initialized!
+20 = Jump phase index exceeds range!
+21 = Cannot find kinematics end parameter in the kinematics equations list!
+22 = Not defined in current layer and found in the initializtion equation list of correlated layer!
+23 = Not defined in current layer and the kinematic equation list of correlated layer or initialized!
+24 = The targeted unit of target order does not exist!
+25 = The movement include enum unit but layer has not units!
+26 = The initialization include enum unit but layer has not group or range selected units!
+
+[PaneInfos]
+0 = Tips: Add the necessary phases and layers
+1 = Tips: Add the necessary layers to phase
+2 = Tip: Fill material to 
+3 = Tip: Editing unit filter for 
+4 = hint: adjust the inheritance relationship to 
+5 = Tip: Open movement or close filling movement for 
+6 = Tip: Adjust the sound selection or target type to 
+7 = Tip: Adjust unit selection or target type to 
+8 = Tip: Adjust the target layer index to 
+9 = Tip: Set the adjustment time to 
+10 = Tip: Choose the appropriate start time for 
+11 = Tip: The adjustment of independent layer type for 
+12 = Tip: Select or enter the existing layer index for 
+13 = Tip: Select or enter a numeric index for 
+14 = Tip: Adjust the kinematics settings at the target layer or re-select the effective start time as follows
+15 = Tip: Adjust the phase termination option at the associated target layer or re-select the valid start time as follows
+16 = Tip: Quickly select kinematics or input kinematics formula for 
+17 = Tip: Choose or input kinematics end parameters as follows
+18 = Tip: Definition in Initialization Formula List
+19 = Tip: Definition in Kinematics Formula List
+20 = Tip: Edit dependencies in WE based on dependency information
+21 = Fail
+22 = Succeed
+23 = Ready
+24 = Tip: Adjust jump phase index for
+25 = Tip: Adjust kinematics end parameter for
+26 = Tip: Adjust initialization parameter for
+27 = Tip: Adjust options of target type or order for
+28 = Tip: Adjust stuff or edit parameters of movement for
+29 = Tip: Adjust stuff or edit parameters of initialization for
+
+[CompileWarnings]
+0 = More than one lens!
+1 = More than one lens vibration!
+2 = More than one sound!
+3 = Sky effect more than one!
+4 = More than one texture on the ground!
+5 = More than one topographic deformation!
+6 = More than one terrain type!
+7 = Competition exists between phase recycle and movement ending, which may lead to recycle failure of dummies!
+
+[PopupMessages]
+0 = Please choose a phase!
+1 = Please choose a layer!
+2 = Do you want to empty all phases and the entire data table?
+3 = Do you want to delete this phase and all data of its layers?
+4 = Do you want to delete this layer and its data?
+5 = New compilation clears the existing codes, continues?
+6 = There are duplicate files in the directory, overwrite?
+7 = Failed to load the language file. Please make sure that the file exists or the path is correct.
+8 = The selected file is not a valid WED language file.
+9 = Enumeration unit location cannot be selected for non-target abilities.
+10 = Unable to select the initial polar position for the target ability.
+11 = Change must be real!
+12 = The number of changes must be an integer!
+13 = The lower limit must be less than the upper limit!
+14 = The upper limit is not a number!
+15 = The lower limit is not a number!
+16 = The parameter should contain at least one letter!
+17 = Neither upper nor lower limits are numbers!
+18 = The parameter should contain at least one letter! \ r n upper limit is not a number!
+19 = The parameter should contain at least one letter! \ r n lower limit is not a number!
+20 = The parameter should contain at least one letter! \ The upper and lower limits of r n are not numbers!
+21 = Quick selection clears the current formula. Continue?
+22 = Number must be number!
+23 = Phase index is not a legal integer!
+24 = Empty object list!
+25 = Item with same name exists, overwrite?
+26 = Empty name, please type in a name.
+27 = Selected file is not an effective project file of effect designer!
+28 = The current language does not match the project language. switch to that language?
+29 = The current project is not saved, save it?
+30 = Do you want to clear the function list?
+31 = Successfully deleted!
+32 = discoverd this custom attribute does not exist, delete it?
+33 = Order string is null, please type in or select order string!
+34 = Public attribute only supports the updatable parameters!
+35 = World editor is not running, export failed!
+36 = A trigger with same name already exists in Trigger Editor. Override?
+37 = Use JassHelper script importer commands
+38 = Save equation list
+39 = Import will clear the current equations. Continue?
+
+[ConfigDlg]
+title =Configuration
+1 = OK
+2 = Cancel
+
+[ConfigPropertyName]
+0= General
+00 = Display structure item time range:
+01 = History file display number:
+02 = Project file save directory:
+03 = Interface font:
+04 = Interface theme color:
+05 = Interface theme image:
+06 = Scheme area color:
+07 = Text buffer size:
+08 = File encoding:
+1 = Material List
+10 = Background color:
+11 = Text color:
+12 = Text background color:
+2 = Unit filter
+20 = Background color:
+21 = Unit type color:
+22 = Unit type background color:
+23 = Logical text color:
+24 = Logical text background color:
+3= Previewer
+30 = Maximum playback speed:
+31 = Minimum playback speed:
+32 = Element size:
+33= Background:
+34 = Element color:
+4= Compiler
+40 = Create a new hash table:
+41 = Open Code Comments:
+42 = Compile options:
+5 = Code Editor
+50 = Background color:
+51 = Default text color:
+52 = Code window editable:
+53 = Code font:
+54 = Open code indentation:
+55 = Indentation:
+56 = Indentation:
+57 = Open grammar highlighting:
+58 = Keyword color:
+59 = Data type color:
+510 = String color:
+511 = Comment color:
+512 = Function color:
+
+[ConfigPropertyDescription]
+0=
+00 = The time range of the upper stage or level of a tree control
+01 = Maximum number of historical items under the file menu
+02 = Default saved directory for project files
+03 = The font used to indicate the interface
+04 = Specify the theme color of interface
+05 = Specify the theme image of interface
+06 = Specify the color of the selected area of the scheme dialog box
+07 = Specify the data reading buffer size for projects
+08 = Specify the file encoding for saving codes
+1=
+10 = Background color indicating list
+11 = Text color indicating list items
+12 = Text background color indicating list items
+2=
+20 = Background for Indicating Unit Filters
+21 = Indicates the unit type text color of the unit filter
+22 = unit type text background color indicating unit filter
+23 = Logical text color indicating unit filter
+24 = Logical text background color indicating unit filter
+3=
+30 = Slider's Optional Speed Upper Limit
+31 = Slider Optional Play Speed Lower Limit
+32 = The size of the trajectory element
+33 = Indicates the background of the preview
+34 = The color of the element indicating the trajectory
+4=
+40 = New hash table at compile time
+41 = Code block annotations at compile time
+42 = Compiler language options
+5=
+50 = Indicating background color
+51 = Indicates default text color
+52 = Open or close the code window editing function
+53 = Indicates the font used by the code
+54 = Turn on or off indentation
+55 = Indent optional spaces or tabs
+56 = Unit indentation
+57 = Turn on or off grammar highlighting
+58 = Indicates keyword color
+59 = Indicates the data type color
+510 = Indicate string color
+511 = Indicative comment color
+512 = Indicator function color
+
+[SaveCustomEqs]
+title = Save custom equations
+1 = OK
+2 = Cancel
+1025 = Equation list name:
+1024 = Save equations
+1003 = Delete
+
+[SchemeDlg]
+Title = Scheme
+1 = OK
+2 = Cancel
+1015 = Load Template
+1024 = Step 1: select units
+1025 = Option 1
+1026 = Option 2
+1016 = New Vest:
+1001 = Existing Units:
+1232 = ID:
+1233 = Lifetime:
+1004 = Fill Motion
+1270 = Immediate
+1003 = Continuous
+1235 = Radius:
+1023 = Enemy
+1027 = Ally
+1234 = Filter:
+1236 = Step 2: what action to do
+1038 = Add Motion:
+1039 = Add Special Effect after Motion:
+1040 = Add Damage after Motion:
+4294967295=
+1237=
+1238=
+1028 = Add Order:
+1300 = Target Type:
+1301 = Target:
+1302 = Ability ID:
+
+[FunctionType]
+0 = Buff
+1 = Aura
+2 = Passive
+
+
+[FunctionHelper]
+Title = Function Helper
+Tab1 = General
+TAB2 = Custom
+1 = OK
+2 = Cancel
+1271 = Buff ID:
+1040 = Continuous damage:
+1003 = Add/Edit
+1015 = Delete
+1011 = Display value
+1024 = General
+1025 = Category:
+1026 = Function Editor
+1027 = Trigger:
+1004 = Convert to Healing
+1023 = Dynamic trigger
+1028 = Reverse
+1038 = Probability:
+4294967295=%
+1014 = Hero
+1232 = Options
+
+[FunchelperGeneral]
+1038 = to enemy
+1039 = Regional effects:
+1040 = Add damage:
+1011 = Display damage with floating text
+1004 = Reflex damage
+1023 = New vest:
+1028 = Modify attributes:
+1025 = Ability ID:
+1026 = Order:
+1024 = Target type:
+1027 = Duration:
+
+[FunchelperCustom]
+1004 = Add custom:
+1003 = Save codes
+
+[FunctionTree]
+root = Functions
+0 = Add Effect
+1 = Add damage
+2 = New dummy
+3 = Modify attributes
+4 = New custom
+
+
+[AboutBox]
+Title = About Effect Designer
+1232 = Author: \r\nEmail: 
+1233 = Copyright (C) 2019 yhx1129. All rights reserved.
+1 = OK
+1067 = License Agreement
+1234 = Credits
+1235 = Blizzard Entertainment for making the classic masterpiece Warcraft III.
+1236 = OpenGL, an open source and professional graphic library.
+1237 = Jass Manual, full documentation for Jass APIs.
+1238 = JassHelper (Vexorian), excellent vJass compiler.
+1239 = Grimex (PitzerMike), excellent preprocessor.
+
+[OrderTarget]
+0 = no target
+1 = caster position
+2 = target location
+3 = reference point
+4 = offset position
+5 = caster
+6 = target unit
+7 = range random unit
+
+[LayerOrder]
+title=
+1004 = Add Order:
+1018=smart;stop;attack;attackonce;move;patrol;holdposition;
+1306 = Ability ID:
+1307 = Template ID:
+1300 = Order attributes
+1302 = Ability attributes
+1204 = main lightning chain;secondary lightning chain;main medical wave;secondary medical wave;finger of death;fork lightning;lightning attack;mana burning;soul chain;life draw;mana draw;air shackles;magic flame;Clear origins;Not edit;
+1308 = Light shadow effect:
+1054 = archery skill;effect-caster;effect-effect;effect-target;effect-special;
+1248 = Model file:
+1309 = Effect/Magic effect:
+1249 = Model name:
+1250 = Ability effect:
+1310 = Template ID:
+1251 = Model file:
+1252 = Model name:
+1016 = No target
+1017 = Point target:
+1020 = Unit target:
+1055 = caster position;target position;reference point;offset position;
+1056 = caster;target unit;range random unit;
+1023 = Enemy
+1024 = Ally
+1025 = Hero
+1027 = Hide unit
+1301 = Order options
+1028 = Enable delay:
+
+[SchemeTargetFilters]
+0 = Enemy
+1 = Ally
+2 = All
+
+[SchemeEntries]
+0 = create a new vest and cause damage at the end of the exercise
+1 = create a new vest and issue a command
+2 = capture existing units and issue commands to them
+3 = capture existing units and cause damage when the movement ends
+4 = select a unit to cause damage at the end of exercise
+5 = select a company and issue a command to it
+
+
+[SchemeTemplateDlg]
+title=Scheme Template
+1 = OK
+2 = Cancel
+1004 = Ignore scheme, create project directly
+1024 = What effect do you want to make?
+4294967295=
+1237=
+1017=
+1025=
+1026=
+1028=
+1029=
+1030=
+1232=Create vest with
+1233=s of lifetime and ID
+1234=, control it for
+1235=motion;
+1236=Inflict damage on enemies around of
+1238= after motion using special effect:
+1239=Create vest with
+1240=s of lifetime and ID
+1241=, targeting 
+1242=, issue order of
+1243= using ability:
+1244=Capture
+1245=range of
+1246=units, targeting
+1247=, issue order of
+1248=using ability:
+1249=Capture
+1250=range of
+1251=units, control it for
+1252=motion; Inflict damage on them of
+1253=after motion using special effect:
+1254=Select
+1255=, control it for
+1256=motion; Inflict damage on enemies around of
+1257=after motion using special effect:
+1258=Select
+1259=, targeting
+1260=, issue order of
+1261=using ability:
+
+[DonateDlg]
+title = Donation
+1 = Close
+4294967295=
+1024 = Donation Statements:
+1025 = - The software is free and you can use all of its functions completely.
+1026 = - The donation is voluntary and cannot compensate the author for what he has lost.
+1027 = - It can be seen as a little consolation for the author's hard work.
+1232 = - It may encourage author to update the tool and to develop Intuititive Lab series.

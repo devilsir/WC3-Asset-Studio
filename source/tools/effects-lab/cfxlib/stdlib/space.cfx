@@ -1,0 +1,290 @@
+import "xform.cfx";
+
+// The masks below are `xform.cfx`'s named constants, not literals. They fold to the same words the
+// baker wrote before anything hashes them, so the signatures these functions define stay matchable
+// against real blobs — see `tests/payload_flags::the_named_corpus_masks_match_their_definitions`.
+//
+// ONE FUNCTION PER MASK, and the mask must be one the baker actually writes. All eight
+// `xform_*_masked` script names bind to a single engine function, so the mask is the only thing that
+// distinguishes them — a function carrying a mask no blob contains describes nothing, and worse, the
+// recognizer's generalized tier (which disregards constants) will match real regions against it and
+// then discard them when the candidate fails to recompile. The masks the WC3 + IceEffects corpus
+// contains, censused off 1742 lifted blobs with `examples/maskcensus`, are exactly:
+//
+//     17  l2w Translate           -> local_to_world_position_xtrans_only  (+ world_base_position)
+//     19  l2w Translate|Rotate    -> local_to_world_position
+//     18  l2w Rotate              -> local_to_world_direction
+//     67  w2l Translate|Rotate    -> world_to_local_position
+//     66  w2l Rotate              -> world_to_local_direction
+//     107 w2l Translate|Rotate, PREV on both sides -> world_to_local_position_prev
+//
+// `tests/reconstruct::every_coord_space_function_reconstructs_as_itself` pins that each one comes
+// back as ITSELF; without that a wrong mask reads as "no match", which is indistinguishable from
+// "matched the sibling".
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+namespace coord_space {
+
+    /// @brief_en Move a POINT out of emitter-local space into world space, translating only. Rotating the origin is the identity, so the baker never pays for a rotate here.
+    /// @brief_es Lleva un PUNTO del espacio local del emisor al espacio del mundo, solo trasladando. Rotar el origen es la identidad, así que el compilador nunca paga una rotación aquí.
+    /// @brief_pt Leva um PONTO do espaço local do emissor para o espaço do mundo, apenas transladando. Rotacionar a origem é a identidade, então o compilador nunca paga uma rotação aqui.
+    /// @brief_fr Fait passer un POINT de l'espace local de l'émetteur à l'espace monde, par translation seule. Faire tourner l'origine est l'identité : le compilateur ne paie donc jamais de rotation ici.
+    /// @brief_it Porta un PUNTO dallo spazio locale dell'emettitore allo spazio del mondo, solo traslando. Ruotare l'origine è l'identità, quindi il compilatore non paga mai una rotazione qui.
+    /// @brief_de Bringt einen PUNKT aus dem emitterlokalen Raum in den Weltraum, nur durch Verschiebung. Den Ursprung zu drehen ist die Identität, der Compiler zahlt hier also nie für eine Drehung.
+    /// @brief_ru Переводит ТОЧКУ из локального пространства эмиттера в мировое, только сдвигом. Поворот начала координат — тождество, поэтому компилятор здесь никогда не платит за поворот.
+    /// @brief_zh 把一个点从发射器局部空间搬到世界空间，只做平移。旋转原点等同于恒等变换，因此编译器在这里从不为旋转付出代价。
+    /// @brief_ja 点をエミッタのローカル空間からワールド空間へ移します。平行移動だけです。原点の回転は恒等変換なので、ここで回転のコストは発生しません。
+    /// @brief_ko 점을 이미터 로컬 공간에서 월드 공간으로 옮깁니다. 이동만 합니다. 원점을 회전하는 것은 항등이므로 여기서 회전 비용은 들지 않습니다.
+    ///
+    /// @param_en local_pos The point, in emitter-local space.
+    /// @param_es local_pos El punto, en el espacio local del emisor.
+    /// @param_pt local_pos O ponto, no espaço local do emissor.
+    /// @param_fr local_pos Le point, dans l'espace local de l'émetteur.
+    /// @param_it local_pos Il punto, nello spazio locale dell'emettitore.
+    /// @param_de local_pos Der Punkt im emitterlokalen Raum.
+    /// @param_ru local_pos Точка в локальном пространстве эмиттера.
+    /// @param_zh local_pos 位于发射器局部空间的点。
+    /// @param_ja local_pos エミッタのローカル空間における点。
+    /// @param_ko local_pos 이미터 로컬 공간의 점.
+    ///
+    /// @result_en The same point in world space.
+    /// @result_es El mismo punto en el espacio del mundo.
+    /// @result_pt O mesmo ponto no espaço do mundo.
+    /// @result_fr Le même point dans l'espace monde.
+    /// @result_it Lo stesso punto nello spazio del mondo.
+    /// @result_de Derselbe Punkt im Weltraum.
+    /// @result_ru Та же точка в мировом пространстве.
+    /// @result_zh 同一个点在世界空间中的表示。
+    /// @result_ja 同じ点をワールド空間で表したもの。
+    /// @result_ko 같은 점을 월드 공간으로 나타낸 것.
+    fn local_to_world_position_xtrans_only(local_pos: f32x3) -> f32x3 {
+        // Bound through a TYPED temp on purpose: a call's result type is part of its structural
+        // hash, and `let NAME : T = <call>` is the only syntax that attaches one. That is also the
+        // form the lifter emits for every call in a baked blob, so writing it any other way makes
+        // this function unmatchable against the very code it describes.
+        let world_pos : f32x3 = xform_l2w_f_masked(local_pos, xform.L2W_Point);
+        world_pos
+    }
+
+    /// @brief_en Move a POINT out of emitter-local space into world space, rotating it as well as translating it — the ordinary case for a spawn position.
+    /// @brief_es Lleva un PUNTO del espacio local del emisor al del mundo, rotándolo además de trasladarlo: el caso normal de una posición de nacimiento.
+    /// @brief_pt Leva um PONTO do espaço local do emissor ao do mundo, rotacionando além de transladar — o caso normal de uma posição de nascimento.
+    /// @brief_fr Fait passer un POINT de l'espace local de l'émetteur à l'espace monde, en le faisant tourner en plus de le translater — le cas normal d'une position de naissance.
+    /// @brief_it Porta un PUNTO dallo spazio locale dell'emettitore a quello del mondo, ruotandolo oltre che traslandolo: il caso normale di una posizione di nascita.
+    /// @brief_de Bringt einen PUNKT aus dem emitterlokalen Raum in den Weltraum und dreht ihn dabei zusätzlich — der Normalfall für eine Geburtsposition.
+    /// @brief_ru Переводит ТОЧКУ из локального пространства эмиттера в мировое, не только сдвигая, но и поворачивая, — обычный случай для позиции рождения.
+    /// @brief_zh 把一个点从发射器局部空间搬到世界空间，除平移外还会旋转 —— 这是出生位置的常规情形。
+    /// @brief_ja 点をエミッタのローカル空間からワールド空間へ移します。平行移動に加えて回転も行う、出生位置の通常のケースです。
+    /// @brief_ko 점을 이미터 로컬 공간에서 월드 공간으로 옮기며 이동뿐 아니라 회전도 합니다. 출생 위치의 일반적인 경우입니다.
+    ///
+    /// @param_en local_pos The point, in emitter-local space.
+    /// @param_es local_pos El punto, en el espacio local del emisor.
+    /// @param_pt local_pos O ponto, no espaço local do emissor.
+    /// @param_fr local_pos Le point, dans l'espace local de l'émetteur.
+    /// @param_it local_pos Il punto, nello spazio locale dell'emettitore.
+    /// @param_de local_pos Der Punkt im emitterlokalen Raum.
+    /// @param_ru local_pos Точка в локальном пространстве эмиттера.
+    /// @param_zh local_pos 位于发射器局部空间的点。
+    /// @param_ja local_pos エミッタのローカル空間における点。
+    /// @param_ko local_pos 이미터 로컬 공간의 점.
+    ///
+    /// @result_en The same point in world space.
+    /// @result_es El mismo punto en el espacio del mundo.
+    /// @result_pt O mesmo ponto no espaço do mundo.
+    /// @result_fr Le même point dans l'espace monde.
+    /// @result_it Lo stesso punto nello spazio del mondo.
+    /// @result_de Derselbe Punkt im Weltraum.
+    /// @result_ru Та же точка в мировом пространстве.
+    /// @result_zh 同一个点在世界空间中的表示。
+    /// @result_ja 同じ点をワールド空間で表したもの。
+    /// @result_ko 같은 점을 월드 공간으로 나타낸 것.
+    fn local_to_world_position(local_pos: f32x3) -> f32x3 {
+        // Bound through a TYPED temp on purpose: a call's result type is part of its structural
+        // hash, and `let NAME : T = <call>` is the only syntax that attaches one. That is also the
+        // form the lifter emits for every call in a baked blob, so writing it any other way makes
+        // this function unmatchable against the very code it describes.
+        let world_pos : f32x3 = xform_l2w_f_masked(local_pos, xform.L2W_PointRot);
+        world_pos
+    }
+
+    /// @brief_en Move a DIRECTION out of emitter-local space into world space. Rotation only — a direction must never pick up the emitter's translation.
+    /// @brief_es Lleva una DIRECCIÓN del espacio local del emisor al del mundo. Solo rotación: una dirección nunca debe recoger la traslación del emisor.
+    /// @brief_pt Leva uma DIREÇÃO do espaço local do emissor ao do mundo. Só rotação — uma direção nunca deve absorver a translação do emissor.
+    /// @brief_fr Fait passer une DIRECTION de l'espace local de l'émetteur à l'espace monde. Rotation seule — une direction ne doit jamais capter la translation de l'émetteur.
+    /// @brief_it Porta una DIREZIONE dallo spazio locale dell'emettitore a quello del mondo. Solo rotazione: una direzione non deve mai raccogliere la traslazione dell'emettitore.
+    /// @brief_de Bringt eine RICHTUNG aus dem emitterlokalen Raum in den Weltraum. Nur Drehung — eine Richtung darf die Verschiebung des Emitters niemals aufnehmen.
+    /// @brief_ru Переводит НАПРАВЛЕНИЕ из локального пространства эмиттера в мировое. Только поворот: направление никогда не должно подхватывать сдвиг эмиттера.
+    /// @brief_zh 把一个方向从发射器局部空间搬到世界空间。只做旋转 —— 方向绝不能沾上发射器的平移。
+    /// @brief_ja 方向をエミッタのローカル空間からワールド空間へ移します。回転のみです。方向がエミッタの平行移動を拾ってはいけません。
+    /// @brief_ko 방향을 이미터 로컬 공간에서 월드 공간으로 옮깁니다. 회전만 합니다. 방향이 이미터의 이동을 받아서는 안 됩니다.
+    ///
+    /// @param_en local_dir The direction, in emitter-local space.
+    /// @param_es local_dir La dirección, en el espacio local del emisor.
+    /// @param_pt local_dir A direção, no espaço local do emissor.
+    /// @param_fr local_dir La direction, dans l'espace local de l'émetteur.
+    /// @param_it local_dir La direzione, nello spazio locale dell'emettitore.
+    /// @param_de local_dir Die Richtung im emitterlokalen Raum.
+    /// @param_ru local_dir Направление в локальном пространстве эмиттера.
+    /// @param_zh local_dir 位于发射器局部空间的方向。
+    /// @param_ja local_dir エミッタのローカル空間における方向。
+    /// @param_ko local_dir 이미터 로컬 공간의 방향.
+    ///
+    /// @result_en The same direction in world space.
+    /// @result_es La misma dirección en el espacio del mundo.
+    /// @result_pt A mesma direção no espaço do mundo.
+    /// @result_fr La même direction dans l'espace monde.
+    /// @result_it La stessa direzione nello spazio del mondo.
+    /// @result_de Dieselbe Richtung im Weltraum.
+    /// @result_ru То же направление в мировом пространстве.
+    /// @result_zh 同一个方向在世界空间中的表示。
+    /// @result_ja 同じ方向をワールド空間で表したもの。
+    /// @result_ko 같은 방향을 월드 공간으로 나타낸 것.
+    fn local_to_world_direction(local_dir: f32x3) -> f32x3 {
+        let world_dir : f32x3 = xform_l2w_d_masked(local_dir, xform.L2W_Dir);
+        world_dir
+    }
+
+    /// @brief_en Bring a POINT from world space into emitter-local space — the direction a shape sampler wants its input in.
+    /// @brief_es Trae un PUNTO del espacio del mundo al espacio local del emisor: el sentido en que un muestreador de forma quiere su entrada.
+    /// @brief_pt Traz um PONTO do espaço do mundo ao espaço local do emissor — o sentido em que um amostrador de forma quer sua entrada.
+    /// @brief_fr Ramène un POINT de l'espace monde vers l'espace local de l'émetteur — le sens dans lequel un échantillonneur de forme veut son entrée.
+    /// @brief_it Riporta un PUNTO dallo spazio del mondo allo spazio locale dell'emettitore: il verso in cui un campionatore di forma vuole il suo ingresso.
+    /// @brief_de Holt einen PUNKT aus dem Weltraum in den emitterlokalen Raum — die Richtung, in der ein Form-Sampler seine Eingabe erwartet.
+    /// @brief_ru Переводит ТОЧКУ из мирового пространства в локальное пространство эмиттера — именно так сэмплер формы хочет получать вход.
+    /// @brief_zh 把一个点从世界空间带回发射器局部空间 —— 形状采样器就是要这个方向的输入。
+    /// @brief_ja 点をワールド空間からエミッタのローカル空間へ戻します。シェイプサンプラーが入力に求める向きです。
+    /// @brief_ko 점을 월드 공간에서 이미터 로컬 공간으로 되돌립니다. 셰이프 샘플러가 입력으로 원하는 방향입니다.
+    ///
+    /// @param_en world_pos The point, in world space.
+    /// @param_es world_pos El punto, en el espacio del mundo.
+    /// @param_pt world_pos O ponto, no espaço do mundo.
+    /// @param_fr world_pos Le point, dans l'espace monde.
+    /// @param_it world_pos Il punto, nello spazio del mondo.
+    /// @param_de world_pos Der Punkt im Weltraum.
+    /// @param_ru world_pos Точка в мировом пространстве.
+    /// @param_zh world_pos 位于世界空间的点。
+    /// @param_ja world_pos ワールド空間における点。
+    /// @param_ko world_pos 월드 공간의 점.
+    ///
+    /// @result_en The same point in emitter-local space.
+    /// @result_es El mismo punto en el espacio local del emisor.
+    /// @result_pt O mesmo ponto no espaço local do emissor.
+    /// @result_fr Le même point dans l'espace local de l'émetteur.
+    /// @result_it Lo stesso punto nello spazio locale dell'emettitore.
+    /// @result_de Derselbe Punkt im emitterlokalen Raum.
+    /// @result_ru Та же точка в локальном пространстве эмиттера.
+    /// @result_zh 同一个点在发射器局部空间中的表示。
+    /// @result_ja 同じ点をエミッタのローカル空間で表したもの。
+    /// @result_ko 같은 점을 이미터 로컬 공간으로 나타낸 것.
+    fn world_to_local_position(world_pos: f32x3) -> f32x3 {
+        let local_pos : f32x3 = xform_w2l_f_masked(world_pos, xform.W2L_Point);
+        local_pos
+    }
+
+    /// @brief_en Bring a DIRECTION from world space into emitter-local space. Rotation only, for the same reason its outward twin translates nothing.
+    /// @brief_es Trae una DIRECCIÓN del espacio del mundo al espacio local del emisor. Solo rotación, por la misma razón por la que su gemela hacia fuera no traslada nada.
+    /// @brief_pt Traz uma DIREÇÃO do espaço do mundo ao espaço local do emissor. Só rotação, pela mesma razão pela qual sua gêmea de saída não translada nada.
+    /// @brief_fr Ramène une DIRECTION de l'espace monde vers l'espace local de l'émetteur. Rotation seule, pour la même raison que sa jumelle sortante ne translate rien.
+    /// @brief_it Riporta una DIREZIONE dallo spazio del mondo allo spazio locale dell'emettitore. Solo rotazione, per lo stesso motivo per cui la sua gemella in uscita non trasla nulla.
+    /// @brief_de Holt eine RICHTUNG aus dem Weltraum in den emitterlokalen Raum. Nur Drehung, aus demselben Grund, aus dem ihr Gegenstück nach außen nichts verschiebt.
+    /// @brief_ru Переводит НАПРАВЛЕНИЕ из мирового пространства в локальное пространство эмиттера. Только поворот — по той же причине, по которой его встречный близнец ничего не сдвигает.
+    /// @brief_zh 把一个方向从世界空间带回发射器局部空间。只做旋转，理由与它向外的孪生函数不做平移相同。
+    /// @brief_ja 方向をワールド空間からエミッタのローカル空間へ戻します。回転のみで、外向きの対になる関数が平行移動しないのと同じ理由です。
+    /// @brief_ko 방향을 월드 공간에서 이미터 로컬 공간으로 되돌립니다. 회전만 하며, 바깥으로 향하는 짝이 이동하지 않는 것과 같은 이유입니다.
+    ///
+    /// @param_en world_dir The direction, in world space.
+    /// @param_es world_dir La dirección, en el espacio del mundo.
+    /// @param_pt world_dir A direção, no espaço do mundo.
+    /// @param_fr world_dir La direction, dans l'espace monde.
+    /// @param_it world_dir La direzione, nello spazio del mondo.
+    /// @param_de world_dir Die Richtung im Weltraum.
+    /// @param_ru world_dir Направление в мировом пространстве.
+    /// @param_zh world_dir 位于世界空间的方向。
+    /// @param_ja world_dir ワールド空間における方向。
+    /// @param_ko world_dir 월드 공간의 방향.
+    ///
+    /// @result_en The same direction in emitter-local space.
+    /// @result_es La misma dirección en el espacio local del emisor.
+    /// @result_pt A mesma direção no espaço local do emissor.
+    /// @result_fr La même direction dans l'espace local de l'émetteur.
+    /// @result_it La stessa direzione nello spazio locale dell'emettitore.
+    /// @result_de Dieselbe Richtung im emitterlokalen Raum.
+    /// @result_ru То же направление в локальном пространстве эмиттера.
+    /// @result_zh 同一个方向在发射器局部空间中的表示。
+    /// @result_ja 同じ方向をエミッタのローカル空間で表したもの。
+    /// @result_ko 같은 방향을 이미터 로컬 공간으로 나타낸 것.
+    fn world_to_local_direction(world_dir: f32x3) -> f32x3 {
+        let local_dir : f32x3 = xform_w2l_d_masked(world_dir, xform.W2L_Dir);
+        local_dir
+    }
+
+    /// @brief_en A point from LAST frame's world space into LAST frame's emitter-local space — the shape a per-frame delta is built from. The only mask in the corpus that sets the Prev bit, and it sets it on both sides at once.
+    /// @brief_es Un punto del espacio del mundo del fotograma ANTERIOR al espacio local del emisor de ese mismo fotograma: la forma con la que se construye un delta por fotograma. Es la única máscara del corpus que activa el bit Prev, y lo activa en ambos lados a la vez.
+    /// @brief_pt Um ponto do espaço do mundo do quadro ANTERIOR para o espaço local do emissor desse mesmo quadro — a forma com que se constrói um delta por quadro. É a única máscara do corpus que liga o bit Prev, e o liga dos dois lados ao mesmo tempo.
+    /// @brief_fr Un point de l'espace monde de l'image PRÉCÉDENTE vers l'espace local de l'émetteur de cette même image — la forme dont on construit un delta par image. C'est le seul masque du corpus qui active le bit Prev, et il l'active des deux côtés à la fois.
+    /// @brief_it Un punto dallo spazio del mondo del fotogramma PRECEDENTE allo spazio locale dell'emettitore dello stesso fotogramma: la forma con cui si costruisce un delta per fotogramma. È l'unica maschera del corpus che attiva il bit Prev, e lo attiva su entrambi i lati insieme.
+    /// @brief_de Ein Punkt aus dem Weltraum des VORIGEN Bildes in den emitterlokalen Raum desselben Bildes — die Form, aus der ein Delta pro Bild gebaut wird. Die einzige Maske im Korpus, die das Prev-Bit setzt, und sie setzt es auf beiden Seiten zugleich.
+    /// @brief_ru Точка из мирового пространства ПРЕДЫДУЩЕГО кадра в локальное пространство эмиттера того же кадра — форма, из которой строится покадровая дельта. Единственная маска в корпусе, ставящая бит Prev, и ставит она его сразу с обеих сторон.
+    /// @brief_zh 把上一帧世界空间中的点带到上一帧的发射器局部空间 —— 逐帧增量就是这样构造的。这是语料中唯一设置 Prev 位的掩码，而且两侧同时设置。
+    /// @brief_ja 前フレームのワールド空間の点を、同じ前フレームのエミッタローカル空間へ移します。フレームごとの差分を作るための形です。コーパス中で Prev ビットを立てる唯一のマスクで、しかも両側に同時に立てます。
+    /// @brief_ko 이전 프레임 월드 공간의 점을 같은 프레임의 이미터 로컬 공간으로 옮깁니다. 프레임 단위 델타를 만드는 형태입니다. 코퍼스에서 Prev 비트를 세우는 유일한 마스크이며, 양쪽에 동시에 세웁니다.
+    ///
+    /// @param_en world_pos The point, in last frame's world space.
+    /// @param_es world_pos El punto, en el espacio del mundo del fotograma anterior.
+    /// @param_pt world_pos O ponto, no espaço do mundo do quadro anterior.
+    /// @param_fr world_pos Le point, dans l'espace monde de l'image précédente.
+    /// @param_it world_pos Il punto, nello spazio del mondo del fotogramma precedente.
+    /// @param_de world_pos Der Punkt im Weltraum des vorigen Bildes.
+    /// @param_ru world_pos Точка в мировом пространстве предыдущего кадра.
+    /// @param_zh world_pos 位于上一帧世界空间的点。
+    /// @param_ja world_pos 前フレームのワールド空間における点。
+    /// @param_ko world_pos 이전 프레임 월드 공간의 점.
+    ///
+    /// @result_en The same point in last frame's emitter-local space.
+    /// @result_es El mismo punto en el espacio local del emisor del fotograma anterior.
+    /// @result_pt O mesmo ponto no espaço local do emissor do quadro anterior.
+    /// @result_fr Le même point dans l'espace local de l'émetteur de l'image précédente.
+    /// @result_it Lo stesso punto nello spazio locale dell'emettitore del fotogramma precedente.
+    /// @result_de Derselbe Punkt im emitterlokalen Raum des vorigen Bildes.
+    /// @result_ru Та же точка в локальном пространстве эмиттера предыдущего кадра.
+    /// @result_zh 同一个点在上一帧发射器局部空间中的表示。
+    /// @result_ja 同じ点を前フレームのエミッタローカル空間で表したもの。
+    /// @result_ko 같은 점을 이전 프레임의 이미터 로컬 공간으로 나타낸 것.
+    fn world_to_local_position_prev(world_pos: f32x3) -> f32x3 {
+        let local_pos : f32x3 = xform_w2l_f_masked(world_pos, xform.W2L_PointPrev);
+        local_pos
+    }
+
+    /// @brief_en The emitter's origin in world space — where this emitter is right now.
+    /// @brief_es El origen del emisor en el espacio del mundo: dónde está este emisor ahora mismo.
+    /// @brief_pt A origem do emissor no espaço do mundo — onde este emissor está agora.
+    /// @brief_fr L'origine de l'émetteur dans l'espace monde — où se trouve cet émetteur en cet instant.
+    /// @brief_it L'origine dell'emettitore nello spazio del mondo: dove si trova questo emettitore in questo momento.
+    /// @brief_de Der Ursprung des Emitters im Weltraum — wo dieser Emitter gerade steht.
+    /// @brief_ru Начало координат эмиттера в мировом пространстве — где этот эмиттер находится прямо сейчас.
+    /// @brief_zh 发射器原点在世界空间中的位置 —— 也就是这个发射器此刻在哪里。
+    /// @brief_ja エミッタの原点をワールド空間で表したもの。つまり、このエミッタが今どこにあるかです。
+    /// @brief_ko 이미터 원점의 월드 공간 위치 — 이 이미터가 지금 어디에 있는지입니다.
+    ///
+    /// @result_en The emitter's world position.
+    /// @result_es La posición del emisor en el mundo.
+    /// @result_pt A posição do emissor no mundo.
+    /// @result_fr La position de l'émetteur dans le monde.
+    /// @result_it La posizione dell'emettitore nel mondo.
+    /// @result_de Die Weltposition des Emitters.
+    /// @result_ru Мировая позиция эмиттера.
+    /// @result_zh 发射器的世界位置。
+    /// @result_ja エミッタのワールド座標。
+    /// @result_ko 이미터의 월드 위치.
+    ///
+    /// Built on the TRANSLATE-ONLY variant, and it has to be: rotating the zero vector is the
+    /// identity (`R·0 + T == T`), so the baker never pays for the rotate here — all 65 corpus sites
+    /// of this shape are `xform_l2w_f_masked(#f32x3(0,0,0), 17)` and not one is `19`. Routing this
+    /// through the rotating `local_to_world_position` gives it a signature no blob contains, which
+    /// costs every one of those reconstructions.
+    fn world_base_position() -> f32x3 {
+        local_to_world_position_xtrans_only(#f32x3(0.0, 0.0, 0.0))
+    }
+}

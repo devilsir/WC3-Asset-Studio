@@ -95,5 +95,5 @@
   }
   function patchMdlSource(source,model){if(!model||!model.__animationEdited)return bytesOf(source);let text=dec.decode(bytesOf(source));for(const op of model.__animationOps||[]){if(op.type==='clone')text=applyMdlCloneOp(text,op);else if(op.type==='transform')text=applyMdlTransformOp(text,op);}text=patchMdlGeosetExtents(text,model.__animationOps||[],model);const block=findContainer(text,'Sequences'),seqText=sequencesMdl(model.sequences||[]);if(block)text=text.slice(0,block.start)+seqText+text.slice(block.end+1);else text+='\n\n'+seqText+'\n';return enc.encode(text);}
 
-  window.WC3_MODEL_ANIMATION_SAVE={patchMdxSource,patchMdlSource,version:'1.3'};
+  window.WC3_MODEL_ANIMATION_SAVE={patchMdxSource,patchMdlSource,version:'1.4'};
 })();

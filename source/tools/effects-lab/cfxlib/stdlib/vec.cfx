@@ -1,0 +1,508 @@
+// stdlib/vec.cfx — vector helpers.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "math.cfx";
+
+namespace vec {
+
+    /// @brief_en The world's up axis. WC3 is Z-up, so this is the axis a billboard stands along, not the one gravity acts on.
+    /// @brief_es El eje vertical del mundo. WC3 usa Z hacia arriba, así que este es el eje sobre el que se alza un cartel, no aquel sobre el que actúa la gravedad.
+    /// @brief_pt O eixo vertical do mundo. WC3 usa Z para cima, então este é o eixo ao longo do qual um billboard se ergue, não aquele em que a gravidade age.
+    /// @brief_fr L'axe vertical du monde. WC3 est en Z-up, donc c'est l'axe le long duquel un panneau se dresse, pas celui sur lequel agit la gravité.
+    /// @brief_it L'asse verticale del mondo. WC3 è Z-up, quindi è l'asse lungo cui si erge un billboard, non quello su cui agisce la gravità.
+    /// @brief_de Die Hochachse der Welt. WC3 ist Z-up, das hier ist also die Achse, entlang derer ein Billboard steht, nicht die, auf die die Schwerkraft wirkt.
+    /// @brief_ru Вертикальная ось мира. В WC3 вверх — это Z, так что это ось, вдоль которой стоит билборд, а не та, по которой действует гравитация.
+    /// @brief_zh 世界的上方向轴。WC3 以 Z 为上，因此这是公告板竖立的轴，而不是重力作用的那个轴。
+    /// @brief_ja ワールドの上方向の軸です。WC3 は Z-up なので、これはビルボードが立つ軸であり、重力が働く軸ではありません。
+    /// @brief_ko 월드의 위쪽 축입니다. WC3는 Z가 위이므로, 이것은 빌보드가 서는 축이지 중력이 작용하는 축이 아닙니다.
+    const UP      : f32x3 = #f32x3(0, 1, 0);
+
+    /// @brief_en The forward axis, used as the fallback direction when a vector is too short to normalize.
+    /// @brief_es El eje de avance, usado como dirección de reserva cuando un vector es demasiado corto para normalizarlo.
+    /// @brief_pt O eixo de avanço, usado como direção de reserva quando um vetor é curto demais para normalizar.
+    /// @brief_fr L'axe avant, utilisé comme direction de repli quand un vecteur est trop court pour être normalisé.
+    /// @brief_it L'asse in avanti, usato come direzione di riserva quando un vettore è troppo corto per essere normalizzato.
+    /// @brief_de Die Vorwärtsachse, die als Ersatzrichtung dient, wenn ein Vektor zum Normieren zu kurz ist.
+    /// @brief_ru Ось «вперёд», используемая как запасное направление, когда вектор слишком короток для нормировки.
+    /// @brief_zh 前方轴。当一个向量太短、无法归一化时，用它作为回退方向。
+    /// @brief_ja 前方向の軸です。ベクトルが短すぎて正規化できないときのフォールバック方向として使われます。
+    /// @brief_ko 앞쪽 축입니다. 벡터가 너무 짧아 정규화할 수 없을 때 대체 방향으로 쓰입니다.
+    const FORWARD : f32x3 = #f32x3(0, 0, 1);
+
+    /// @brief_en The rightward axis, completing the basis with `UP` and `FORWARD`.
+    /// @brief_es El eje hacia la derecha, que completa la base junto a `UP` y `FORWARD`.
+    /// @brief_pt O eixo para a direita, que completa a base junto de `UP` e `FORWARD`.
+    /// @brief_fr L'axe vers la droite, qui complète la base avec `UP` et `FORWARD`.
+    /// @brief_it L'asse verso destra, che completa la base insieme a `UP` e `FORWARD`.
+    /// @brief_de Die Achse nach rechts, die zusammen mit `UP` und `FORWARD` die Basis vervollständigt.
+    /// @brief_ru Ось вправо, дополняющая базис вместе с `UP` и `FORWARD`.
+    /// @brief_zh 向右的轴，与 `UP`、`FORWARD` 一起构成完整的基。
+    /// @brief_ja 右方向の軸です。`UP` と `FORWARD` と合わせて基底を成します。
+    /// @brief_ko 오른쪽 축입니다. `UP`, `FORWARD`와 함께 기저를 이룹니다.
+    const RIGHT   : f32x3 = #f32x3(1, 0, 0);
+
+    /// @brief_en Squared length — cheaper than `length` when you only compare distances, since it skips the square root.
+    /// @brief_es Longitud al cuadrado: más barata que `length` cuando solo comparas distancias, porque se salta la raíz cuadrada.
+    /// @brief_pt Comprimento ao quadrado: mais barato que `length` quando você só compara distâncias, pois evita a raiz quadrada.
+    /// @brief_fr Longueur au carré — moins coûteuse que `length` quand on ne fait que comparer des distances, car elle évite la racine.
+    /// @brief_it Lunghezza al quadrato: più economica di `length` quando confronti solo distanze, perché salta la radice quadrata.
+    /// @brief_de Quadrierte Länge — günstiger als `length`, wenn nur Abstände verglichen werden, da die Wurzel entfällt.
+    /// @brief_ru Квадрат длины — дешевле `length`, когда расстояния только сравниваются, потому что не берётся корень.
+    /// @brief_zh 长度的平方 —— 只比较距离时比 `length` 更省，因为省掉了开方。
+    /// @brief_ja 長さの二乗です。距離を比較するだけなら平方根を省ける分 `length` より安価です。
+    /// @brief_ko 길이의 제곱입니다. 거리를 비교만 한다면 제곱근을 생략하므로 `length`보다 쌉니다.
+    ///
+    /// @param_en v The vector to measure.
+    /// @param_es v El vector que se mide.
+    /// @param_pt v O vetor a medir.
+    /// @param_fr v Le vecteur à mesurer.
+    /// @param_it v Il vettore da misurare.
+    /// @param_de v Der zu messende Vektor.
+    /// @param_ru v Измеряемый вектор.
+    /// @param_zh v 要测量的向量。
+    /// @param_ja v 測るベクトル。
+    /// @param_ko v 측정할 벡터.
+    ///
+    /// @result_en The dot product of `v` with itself.
+    /// @result_es El producto escalar de `v` consigo mismo.
+    /// @result_pt O produto escalar de `v` consigo mesmo.
+    /// @result_fr Le produit scalaire de `v` avec lui-même.
+    /// @result_it Il prodotto scalare di `v` con sé stesso.
+    /// @result_de Das Skalarprodukt von `v` mit sich selbst.
+    /// @result_ru Скалярное произведение `v` на себя.
+    /// @result_zh `v` 与自身的点积。
+    /// @result_ja `v` 自身との内積。
+    /// @result_ko `v`와 자기 자신의 내적.
+    fn length_sq<V: vec + float>(v: V) -> f32 { dot(v, v) }
+
+    /// @brief_en `normalize(v)`, but returns `fallback` for a (near-)zero vector instead of NaN.
+    /// @brief_es `normalize(v)`, pero devuelve `fallback` para un vector (casi) nulo en vez de NaN.
+    /// @brief_pt `normalize(v)`, mas devolve `fallback` para um vetor (quase) nulo em vez de NaN.
+    /// @brief_fr `normalize(v)`, mais renvoie `fallback` pour un vecteur (quasi) nul au lieu de NaN.
+    /// @brief_it `normalize(v)`, ma restituisce `fallback` per un vettore (quasi) nullo invece di NaN.
+    /// @brief_de `normalize(v)`, gibt aber für einen (nahezu) Nullvektor `fallback` statt NaN zurück.
+    /// @brief_ru `normalize(v)`, но для (почти) нулевого вектора возвращает `fallback`, а не NaN.
+    /// @brief_zh 与 `normalize(v)` 相同，但对（接近）零向量返回 `fallback` 而不是 NaN。
+    /// @brief_ja `normalize(v)` と同じですが、（ほぼ）ゼロのベクトルには NaN ではなく `fallback` を返します。
+    /// @brief_ko `normalize(v)`와 같지만, (거의) 영벡터에 대해 NaN 대신 `fallback`을 돌려줍니다.
+    ///
+    /// @param_en v The vector to normalize.
+    /// @param_es v El vector que se normaliza.
+    /// @param_pt v O vetor a normalizar.
+    /// @param_fr v Le vecteur à normaliser.
+    /// @param_it v Il vettore da normalizzare.
+    /// @param_de v Der zu normierende Vektor.
+    /// @param_ru v Нормируемый вектор.
+    /// @param_zh v 要归一化的向量。
+    /// @param_ja v 正規化するベクトル。
+    /// @param_ko v 정규화할 벡터.
+    ///
+    /// @param_en fallback The direction to use when `v` is too short to have one.
+    /// @param_es fallback La dirección que se usa cuando `v` es demasiado corto para tener una.
+    /// @param_pt fallback A direção usada quando `v` é curto demais para ter uma.
+    /// @param_fr fallback La direction employée quand `v` est trop court pour en avoir une.
+    /// @param_it fallback La direzione usata quando `v` è troppo corto per averne una.
+    /// @param_de fallback Die Richtung, die genutzt wird, wenn `v` zu kurz für eine eigene ist.
+    /// @param_ru fallback Направление, используемое, когда `v` слишком короток, чтобы его иметь.
+    /// @param_zh fallback 当 `v` 太短、没有方向可言时所使用的方向。
+    /// @param_ja fallback `v` が短すぎて方向を持てないときに使う方向。
+    /// @param_ko fallback `v`가 너무 짧아 방향이 없을 때 사용할 방향.
+    ///
+    /// @param_en epsilon The squared length below which `v` counts as zero.
+    /// @param_es epsilon La longitud al cuadrado por debajo de la cual `v` cuenta como nulo.
+    /// @param_pt epsilon O comprimento ao quadrado abaixo do qual `v` conta como nulo.
+    /// @param_fr epsilon La longueur au carré en dessous de laquelle `v` compte comme nul.
+    /// @param_it epsilon La lunghezza al quadrato sotto la quale `v` conta come nullo.
+    /// @param_de epsilon Die quadrierte Länge, unterhalb derer `v` als null gilt.
+    /// @param_ru epsilon Квадрат длины, ниже которого `v` считается нулевым.
+    /// @param_zh epsilon 长度平方低于此值时，`v` 视为零向量。
+    /// @param_ja epsilon この二乗長を下回ると `v` はゼロとみなされます。
+    /// @param_ko epsilon 이 제곱 길이보다 작으면 `v`를 영벡터로 봅니다.
+    ///
+    /// @result_en The unit vector, or `fallback`.
+    /// @result_es El vector unitario, o `fallback`.
+    /// @result_pt O vetor unitário, ou `fallback`.
+    /// @result_fr Le vecteur unitaire, ou `fallback`.
+    /// @result_it Il vettore unitario, oppure `fallback`.
+    /// @result_de Der Einheitsvektor oder `fallback`.
+    /// @result_ru Единичный вектор или `fallback`.
+    /// @result_zh 单位向量，或者 `fallback`。
+    /// @result_ja 単位ベクトル、または `fallback`。
+    /// @result_ko 단위 벡터 또는 `fallback`.
+    fn safe_normalize<V: vec + float>(v: V, fallback: V, epsilon: f32 = 0.000001) -> V {
+        select(length_sq(v) > epsilon, normalize(v), fallback)
+    }
+
+    /// @brief_en Distance between two points.
+    /// @brief_es Distancia entre dos puntos.
+    /// @brief_pt Distância entre dois pontos.
+    /// @brief_fr Distance entre deux points.
+    /// @brief_it Distanza fra due punti.
+    /// @brief_de Abstand zwischen zwei Punkten.
+    /// @brief_ru Расстояние между двумя точками.
+    /// @brief_zh 两点之间的距离。
+    /// @brief_ja 2 点間の距離です。
+    /// @brief_ko 두 점 사이의 거리입니다.
+    ///
+    /// @param_en a The first point.
+    /// @param_es a El primer punto.
+    /// @param_pt a O primeiro ponto.
+    /// @param_fr a Le premier point.
+    /// @param_it a Il primo punto.
+    /// @param_de a Der erste Punkt.
+    /// @param_ru a Первая точка.
+    /// @param_zh a 第一个点。
+    /// @param_ja a 1 つめの点。
+    /// @param_ko a 첫 번째 점.
+    ///
+    /// @param_en b The second point.
+    /// @param_es b El segundo punto.
+    /// @param_pt b O segundo ponto.
+    /// @param_fr b Le second point.
+    /// @param_it b Il secondo punto.
+    /// @param_de b Der zweite Punkt.
+    /// @param_ru b Вторая точка.
+    /// @param_zh b 第二个点。
+    /// @param_ja b 2 つめの点。
+    /// @param_ko b 두 번째 점.
+    ///
+    /// @result_en The distance between them.
+    /// @result_es La distancia entre ambos.
+    /// @result_pt A distância entre eles.
+    /// @result_fr La distance qui les sépare.
+    /// @result_it La distanza fra i due.
+    /// @result_de Der Abstand zwischen ihnen.
+    /// @result_ru Расстояние между ними.
+    /// @result_zh 两者之间的距离。
+    /// @result_ja 2 点間の距離。
+    /// @result_ko 두 점 사이의 거리.
+    fn dist<V: vec + float>(a: V, b: V) -> f32 { length(b - a) }
+
+    /// @brief_en Unit vector pointing from `a` to `b`, or `fallback` when they coincide.
+    /// @brief_es Vector unitario que apunta de `a` a `b`, o `fallback` cuando coinciden.
+    /// @brief_pt Vetor unitário apontando de `a` para `b`, ou `fallback` quando coincidem.
+    /// @brief_fr Vecteur unitaire pointant de `a` vers `b`, ou `fallback` s'ils coïncident.
+    /// @brief_it Vettore unitario che punta da `a` a `b`, oppure `fallback` se coincidono.
+    /// @brief_de Einheitsvektor von `a` nach `b`, oder `fallback`, wenn beide zusammenfallen.
+    /// @brief_ru Единичный вектор от `a` к `b` или `fallback`, если точки совпадают.
+    /// @brief_zh 从 `a` 指向 `b` 的单位向量；两点重合时返回 `fallback`。
+    /// @brief_ja `a` から `b` へ向かう単位ベクトル。両者が一致する場合は `fallback` を返します。
+    /// @brief_ko `a`에서 `b`로 향하는 단위 벡터. 두 점이 같으면 `fallback`을 돌려줍니다.
+    ///
+    /// @param_en a The point to measure from.
+    /// @param_es a El punto desde el que se mide.
+    /// @param_pt a O ponto de onde se mede.
+    /// @param_fr a Le point de départ.
+    /// @param_it a Il punto da cui si misura.
+    /// @param_de a Der Punkt, von dem aus gemessen wird.
+    /// @param_ru a Точка, от которой измеряют.
+    /// @param_zh a 起始点。
+    /// @param_ja a 起点となる点。
+    /// @param_ko a 기준이 되는 점.
+    ///
+    /// @param_en b The point to measure toward.
+    /// @param_es b El punto hacia el que se mide.
+    /// @param_pt b O ponto para o qual se mede.
+    /// @param_fr b Le point visé.
+    /// @param_it b Il punto verso cui si misura.
+    /// @param_de b Der Punkt, zu dem hin gemessen wird.
+    /// @param_ru b Точка, к которой измеряют.
+    /// @param_zh b 目标点。
+    /// @param_ja b 向かう先の点。
+    /// @param_ko b 향하는 점.
+    ///
+    /// @param_en fallback The direction to use when `a` and `b` are the same point.
+    /// @param_es fallback La dirección que se usa cuando `a` y `b` son el mismo punto.
+    /// @param_pt fallback A direção usada quando `a` e `b` são o mesmo ponto.
+    /// @param_fr fallback La direction employée quand `a` et `b` sont le même point.
+    /// @param_it fallback La direzione usata quando `a` e `b` sono lo stesso punto.
+    /// @param_de fallback Die Richtung, die genutzt wird, wenn `a` und `b` derselbe Punkt sind.
+    /// @param_ru fallback Направление на случай, когда `a` и `b` — одна и та же точка.
+    /// @param_zh fallback 当 `a` 与 `b` 是同一个点时所使用的方向。
+    /// @param_ja fallback `a` と `b` が同じ点のときに使う方向。
+    /// @param_ko fallback `a`와 `b`가 같은 점일 때 사용할 방향.
+    ///
+    /// @result_en The unit direction from `a` to `b`.
+    /// @result_es La dirección unitaria de `a` a `b`.
+    /// @result_pt A direção unitária de `a` para `b`.
+    /// @result_fr La direction unitaire de `a` vers `b`.
+    /// @result_it La direzione unitaria da `a` a `b`.
+    /// @result_de Die Einheitsrichtung von `a` nach `b`.
+    /// @result_ru Единичное направление от `a` к `b`.
+    /// @result_zh 从 `a` 到 `b` 的单位方向。
+    /// @result_ja `a` から `b` への単位方向。
+    /// @result_ko `a`에서 `b`로 향하는 단위 방향.
+    fn dir_to<V: vec + float>(a: V, b: V, fallback: V) -> V { safe_normalize(b - a, fallback) }
+
+    /// @brief_en Projection of `a` onto `b` — the part of `a` that lies along `b`.
+    /// @brief_es Proyección de `a` sobre `b`: la parte de `a` que va en la dirección de `b`.
+    /// @brief_pt Projeção de `a` sobre `b` — a parte de `a` que segue a direção de `b`.
+    /// @brief_fr Projection de `a` sur `b` — la part de `a` qui suit `b`.
+    /// @brief_it Proiezione di `a` su `b`: la parte di `a` che giace lungo `b`.
+    /// @brief_de Projektion von `a` auf `b` — der Anteil von `a`, der entlang `b` liegt.
+    /// @brief_ru Проекция `a` на `b` — та часть `a`, что лежит вдоль `b`.
+    /// @brief_zh `a` 在 `b` 上的投影 —— `a` 中沿着 `b` 的那一部分。
+    /// @brief_ja `a` を `b` に射影したもの。`a` のうち `b` に沿った成分です。
+    /// @brief_ko `a`를 `b`에 사영한 것. `a` 중 `b` 방향 성분입니다.
+    ///
+    /// @param_en a The vector being projected.
+    /// @param_es a El vector que se proyecta.
+    /// @param_pt a O vetor projetado.
+    /// @param_fr a Le vecteur projeté.
+    /// @param_it a Il vettore proiettato.
+    /// @param_de a Der projizierte Vektor.
+    /// @param_ru a Проецируемый вектор.
+    /// @param_zh a 被投影的向量。
+    /// @param_ja a 射影されるベクトル。
+    /// @param_ko a 사영되는 벡터.
+    ///
+    /// @param_en b The vector projected onto. Need not be unit length.
+    /// @param_es b El vector sobre el que se proyecta. No hace falta que sea unitario.
+    /// @param_pt b O vetor sobre o qual se projeta. Não precisa ser unitário.
+    /// @param_fr b Le vecteur sur lequel on projette. Il n'a pas besoin d'être unitaire.
+    /// @param_it b Il vettore su cui si proietta. Non serve che sia unitario.
+    /// @param_de b Der Vektor, auf den projiziert wird. Muss keine Einheitslänge haben.
+    /// @param_ru b Вектор, на который проецируют. Не обязан быть единичным.
+    /// @param_zh b 投影所依据的向量，不必是单位长度。
+    /// @param_ja b 射影先のベクトル。単位長である必要はありません。
+    /// @param_ko b 사영 대상 벡터. 단위 길이일 필요는 없습니다.
+    ///
+    /// @result_en The component of `a` along `b`.
+    /// @result_es La componente de `a` a lo largo de `b`.
+    /// @result_pt A componente de `a` ao longo de `b`.
+    /// @result_fr La composante de `a` selon `b`.
+    /// @result_it La componente di `a` lungo `b`.
+    /// @result_de Die Komponente von `a` entlang `b`.
+    /// @result_ru Составляющая `a` вдоль `b`.
+    /// @result_zh `a` 沿 `b` 方向的分量。
+    /// @result_ja `b` 方向における `a` の成分。
+    /// @result_ko `b` 방향으로의 `a` 성분.
+    fn project<V: vec + float>(a: V, b: V) -> V { b * (dot(a, b) * rcp(dot(b, b))) }
+
+    /// @brief_en Reflect `v` about a UNIT normal `n`. A non-normalised normal scales the reflection and lets the result drift.
+    /// @brief_es Refleja `v` respecto a una normal UNITARIA `n`. Una normal sin normalizar escala la reflexión y hace que el resultado se desvíe.
+    /// @brief_pt Reflete `v` em relação a uma normal UNITÁRIA `n`. Uma normal não normalizada escala a reflexão e faz o resultado derivar.
+    /// @brief_fr Réfléchit `v` par rapport à une normale UNITAIRE `n`. Une normale non normalisée met la réflexion à l'échelle et fait dériver le résultat.
+    /// @brief_it Riflette `v` rispetto a una normale UNITARIA `n`. Una normale non normalizzata scala la riflessione e fa deviare il risultato.
+    /// @brief_de Spiegelt `v` an einer EINHEITS-Normalen `n`. Eine nicht normierte Normale skaliert die Spiegelung und lässt das Ergebnis abdriften.
+    /// @brief_ru Отражает `v` относительно ЕДИНИЧНОЙ нормали `n`. Ненормированная нормаль масштабирует отражение, и результат уплывает.
+    /// @brief_zh 以单位法线 `n` 为镜面反射 `v`。若法线未归一化，反射会被缩放，结果随之漂移。
+    /// @brief_ja 単位法線 `n` について `v` を反射します。正規化されていない法線は反射をスケールさせ、結果がずれていきます。
+    /// @brief_ko 단위 법선 `n`에 대해 `v`를 반사합니다. 정규화되지 않은 법선은 반사를 확대·축소해 결과가 어긋납니다.
+    ///
+    /// @param_en v The incoming vector.
+    /// @param_es v El vector entrante.
+    /// @param_pt v O vetor de entrada.
+    /// @param_fr v Le vecteur entrant.
+    /// @param_it v Il vettore entrante.
+    /// @param_de v Der einfallende Vektor.
+    /// @param_ru v Падающий вектор.
+    /// @param_zh v 入射向量。
+    /// @param_ja v 入射ベクトル。
+    /// @param_ko v 입사 벡터.
+    ///
+    /// @param_en n The surface normal, which must be unit length.
+    /// @param_es n La normal de la superficie, que debe ser unitaria.
+    /// @param_pt n A normal da superfície, que precisa ser unitária.
+    /// @param_fr n La normale de la surface, qui doit être unitaire.
+    /// @param_it n La normale della superficie, che deve essere unitaria.
+    /// @param_de n Die Flächennormale, die Einheitslänge haben muss.
+    /// @param_ru n Нормаль поверхности; должна быть единичной.
+    /// @param_zh n 表面法线，必须是单位长度。
+    /// @param_ja n 面の法線。単位長でなければなりません。
+    /// @param_ko n 표면 법선. 반드시 단위 길이여야 합니다.
+    ///
+    /// @result_en The reflected vector.
+    /// @result_es El vector reflejado.
+    /// @result_pt O vetor refletido.
+    /// @result_fr Le vecteur réfléchi.
+    /// @result_it Il vettore riflesso.
+    /// @result_de Der gespiegelte Vektor.
+    /// @result_ru Отражённый вектор.
+    /// @result_zh 反射之后的向量。
+    /// @result_ja 反射後のベクトル。
+    /// @result_ko 반사된 벡터.
+    fn reflect<V: vec + float>(v: V, n: V) -> V { v - n * (2.0 * dot(v, n)) }
+
+    /// @brief_en Rebuild a f32x3 with its x lane replaced.
+    /// @brief_es Reconstruye un f32x3 con el carril x sustituido.
+    /// @brief_pt Reconstrói um f32x3 com a faixa x substituída.
+    /// @brief_fr Reconstruit un f32x3 avec la voie x remplacée.
+    /// @brief_it Ricostruisce un f32x3 con la corsia x sostituita.
+    /// @brief_de Baut einen f32x3 mit ersetzter x-Spur neu auf.
+    /// @brief_ru Пересобирает f32x3 с заменённой дорожкой x.
+    /// @brief_zh 重建一个 f32x3，其中 x 通道被替换。
+    /// @brief_ja x レーンだけを差し替えた f32x3 を作り直します。
+    /// @brief_ko x 레인만 바꾼 f32x3를 다시 만듭니다.
+    ///
+    /// @param_en v The vector to rebuild.
+    /// @param_es v El vector que se reconstruye.
+    /// @param_pt v O vetor a reconstruir.
+    /// @param_fr v Le vecteur à reconstruire.
+    /// @param_it v Il vettore da ricostruire.
+    /// @param_de v Der neu zu bauende Vektor.
+    /// @param_ru v Пересобираемый вектор.
+    /// @param_zh v 要重建的向量。
+    /// @param_ja v 作り直すベクトル。
+    /// @param_ko v 다시 만들 벡터.
+    ///
+    /// @param_en x The new value for the x lane.
+    /// @param_es x El nuevo valor del carril x.
+    /// @param_pt x O novo valor da faixa x.
+    /// @param_fr x La nouvelle valeur de la voie x.
+    /// @param_it x Il nuovo valore della corsia x.
+    /// @param_de x Der neue Wert der x-Spur.
+    /// @param_ru x Новое значение дорожки x.
+    /// @param_zh x x 通道的新值。
+    /// @param_ja x x レーンの新しい値。
+    /// @param_ko x x 레인의 새 값.
+    ///
+    /// @result_en The vector with its x lane replaced.
+    /// @result_es El vector con el carril x sustituido.
+    /// @result_pt O vetor com a faixa x substituída.
+    /// @result_fr Le vecteur avec sa voie x remplacée.
+    /// @result_it Il vettore con la corsia x sostituita.
+    /// @result_de Der Vektor mit ersetzter x-Spur.
+    /// @result_ru Вектор с заменённой дорожкой x.
+    /// @result_zh x 通道已被替换的向量。
+    /// @result_ja x レーンが差し替えられたベクトル。
+    /// @result_ko x 레인이 교체된 벡터.
+    fn with_x(v: f32x3, x: f32) -> f32x3 { #f32x3(x, v.y, v.z) }
+
+    /// @brief_en Rebuild a f32x3 with its y lane replaced.
+    /// @brief_es Reconstruye un f32x3 con el carril y sustituido.
+    /// @brief_pt Reconstrói um f32x3 com a faixa y substituída.
+    /// @brief_fr Reconstruit un f32x3 avec la voie y remplacée.
+    /// @brief_it Ricostruisce un f32x3 con la corsia y sostituita.
+    /// @brief_de Baut einen f32x3 mit ersetzter y-Spur neu auf.
+    /// @brief_ru Пересобирает f32x3 с заменённой дорожкой y.
+    /// @brief_zh 重建一个 f32x3，其中 y 通道被替换。
+    /// @brief_ja y レーンだけを差し替えた f32x3 を作り直します。
+    /// @brief_ko y 레인만 바꾼 f32x3를 다시 만듭니다.
+    ///
+    /// @param_en v The vector to rebuild.
+    /// @param_es v El vector que se reconstruye.
+    /// @param_pt v O vetor a reconstruir.
+    /// @param_fr v Le vecteur à reconstruire.
+    /// @param_it v Il vettore da ricostruire.
+    /// @param_de v Der neu zu bauende Vektor.
+    /// @param_ru v Пересобираемый вектор.
+    /// @param_zh v 要重建的向量。
+    /// @param_ja v 作り直すベクトル。
+    /// @param_ko v 다시 만들 벡터.
+    ///
+    /// @param_en y The new value for the y lane.
+    /// @param_es y El nuevo valor del carril y.
+    /// @param_pt y O novo valor da faixa y.
+    /// @param_fr y La nouvelle valeur de la voie y.
+    /// @param_it y Il nuovo valore della corsia y.
+    /// @param_de y Der neue Wert der y-Spur.
+    /// @param_ru y Новое значение дорожки y.
+    /// @param_zh y y 通道的新值。
+    /// @param_ja y y レーンの新しい値。
+    /// @param_ko y y 레인의 새 값.
+    ///
+    /// @result_en The vector with its y lane replaced.
+    /// @result_es El vector con el carril y sustituido.
+    /// @result_pt O vetor com a faixa y substituída.
+    /// @result_fr Le vecteur avec sa voie y remplacée.
+    /// @result_it Il vettore con la corsia y sostituita.
+    /// @result_de Der Vektor mit ersetzter y-Spur.
+    /// @result_ru Вектор с заменённой дорожкой y.
+    /// @result_zh y 通道已被替换的向量。
+    /// @result_ja y レーンが差し替えられたベクトル。
+    /// @result_ko y 레인이 교체된 벡터.
+    fn with_y(v: f32x3, y: f32) -> f32x3 { #f32x3(v.x, y, v.z) }
+
+    /// @brief_en Rebuild a f32x3 with its z lane replaced. In WC3's Z-up world that is the height.
+    /// @brief_es Reconstruye un f32x3 con el carril z sustituido. En el mundo Z-arriba de WC3 esa es la altura.
+    /// @brief_pt Reconstrói um f32x3 com a faixa z substituída. No mundo Z-para-cima de WC3 essa é a altura.
+    /// @brief_fr Reconstruit un f32x3 avec la voie z remplacée. Dans le monde Z-up de WC3, c'est la hauteur.
+    /// @brief_it Ricostruisce un f32x3 con la corsia z sostituita. Nel mondo Z-up di WC3 quella è l'altezza.
+    /// @brief_de Baut einen f32x3 mit ersetzter z-Spur neu auf. In der Z-up-Welt von WC3 ist das die Höhe.
+    /// @brief_ru Пересобирает f32x3 с заменённой дорожкой z. В мире WC3 с осью Z вверх это высота.
+    /// @brief_zh 重建一个 f32x3，其中 z 通道被替换。在 WC3 的 Z 向上世界里，这就是高度。
+    /// @brief_ja z レーンだけを差し替えた f32x3 を作り直します。Z-up の WC3 ではこれが高さです。
+    /// @brief_ko z 레인만 바꾼 f32x3를 다시 만듭니다. Z가 위인 WC3에서는 이것이 높이입니다.
+    ///
+    /// @param_en v The vector to rebuild.
+    /// @param_es v El vector que se reconstruye.
+    /// @param_pt v O vetor a reconstruir.
+    /// @param_fr v Le vecteur à reconstruire.
+    /// @param_it v Il vettore da ricostruire.
+    /// @param_de v Der neu zu bauende Vektor.
+    /// @param_ru v Пересобираемый вектор.
+    /// @param_zh v 要重建的向量。
+    /// @param_ja v 作り直すベクトル。
+    /// @param_ko v 다시 만들 벡터.
+    ///
+    /// @param_en z The new value for the z lane.
+    /// @param_es z El nuevo valor del carril z.
+    /// @param_pt z O novo valor da faixa z.
+    /// @param_fr z La nouvelle valeur de la voie z.
+    /// @param_it z Il nuovo valore della corsia z.
+    /// @param_de z Der neue Wert der z-Spur.
+    /// @param_ru z Новое значение дорожки z.
+    /// @param_zh z z 通道的新值。
+    /// @param_ja z z レーンの新しい値。
+    /// @param_ko z z 레인의 새 값.
+    ///
+    /// @result_en The vector with its z lane replaced.
+    /// @result_es El vector con el carril z sustituido.
+    /// @result_pt O vetor com a faixa z substituída.
+    /// @result_fr Le vecteur avec sa voie z remplacée.
+    /// @result_it Il vettore con la corsia z sostituita.
+    /// @result_de Der Vektor mit ersetzter z-Spur.
+    /// @result_ru Вектор с заменённой дорожкой z.
+    /// @result_zh z 通道已被替换的向量。
+    /// @result_ja z レーンが差し替えられたベクトル。
+    /// @result_ko z 레인이 교체된 벡터.
+    fn with_z(v: f32x3, z: f32) -> f32x3 { #f32x3(v.x, v.y, z) }
+
+    /// @brief_en Scale only the horizontal plane, leaving height alone — spread a burst outward without lifting it.
+    /// @brief_es Escala solo el plano horizontal, sin tocar la altura: expande un estallido hacia fuera sin elevarlo.
+    /// @brief_pt Escala apenas o plano horizontal, sem tocar na altura — espalha uma explosão para fora sem elevá-la.
+    /// @brief_fr Met à l'échelle uniquement le plan horizontal, sans toucher à la hauteur — étale une explosion sans la soulever.
+    /// @brief_it Scala solo il piano orizzontale, lasciando stare l'altezza: allarga un'esplosione senza sollevarla.
+    /// @brief_de Skaliert nur die waagerechte Ebene und lässt die Höhe unberührt — verteilt einen Ausbruch nach außen, ohne ihn anzuheben.
+    /// @brief_ru Масштабирует только горизонтальную плоскость, не трогая высоту, — разносит вспышку в стороны, не поднимая её.
+    /// @brief_zh 只缩放水平面，保持高度不变 —— 让爆发向外扩散而不抬升。
+    /// @brief_ja 高さはそのままに水平面だけをスケールします。バーストを持ち上げずに外へ広げられます。
+    /// @brief_ko 높이는 두고 수평면만 확대·축소합니다. 폭발을 들어 올리지 않고 바깥으로 퍼뜨릴 때 씁니다.
+    ///
+    /// @param_en v The vector to scale.
+    /// @param_es v El vector que se escala.
+    /// @param_pt v O vetor a escalar.
+    /// @param_fr v Le vecteur à mettre à l'échelle.
+    /// @param_it v Il vettore da scalare.
+    /// @param_de v Der zu skalierende Vektor.
+    /// @param_ru v Масштабируемый вектор.
+    /// @param_zh v 要缩放的向量。
+    /// @param_ja v スケールするベクトル。
+    /// @param_ko v 확대·축소할 벡터.
+    ///
+    /// @param_en s The factor applied to x and z.
+    /// @param_es s El factor que se aplica a x y z.
+    /// @param_pt s O fator aplicado a x e z.
+    /// @param_fr s Le facteur appliqué à x et z.
+    /// @param_it s Il fattore applicato a x e z.
+    /// @param_de s Der auf x und z angewandte Faktor.
+    /// @param_ru s Множитель для x и z.
+    /// @param_zh s 应用到 x 和 z 上的系数。
+    /// @param_ja s x と z に掛ける係数。
+    /// @param_ko s x와 z에 적용할 계수.
+    ///
+    /// @result_en The vector with x and z scaled and y untouched.
+    /// @result_es El vector con x y z escalados y con y intacto.
+    /// @result_pt O vetor com x e z escalados e y intacto.
+    /// @result_fr Le vecteur avec x et z mis à l'échelle et y inchangé.
+    /// @result_it Il vettore con x e z scalati e y invariato.
+    /// @result_de Der Vektor mit skaliertem x und z und unverändertem y.
+    /// @result_ru Вектор с масштабированными x и z и нетронутым y.
+    /// @result_zh x 与 z 被缩放、y 保持不变的向量。
+    /// @result_ja x と z がスケールされ、y はそのままのベクトル。
+    /// @result_ko x와 z만 조정되고 y는 그대로인 벡터.
+    fn scale_xz(v: f32x3, s: f32) -> f32x3 { #f32x3(v.x * s, v.y, v.z * s) }
+}

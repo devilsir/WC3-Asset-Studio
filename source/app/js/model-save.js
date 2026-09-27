@@ -188,13 +188,21 @@
     const ext=new Uint8Array(28),ev=new DataView(ext.buffer);writeExtent(ev,0,extentObject(geo.extent,vertices));parts.push(ext);
     const seqs=geo.sequenceExtents||[],seqBlock=new Uint8Array(4+seqs.length*28),sv=new DataView(seqBlock.buffer);sv.setUint32(0,seqs.length,true);seqs.forEach((e,k)=>writeExtent(sv,4+k*28,extentObject(e,vertices)));parts.push(seqBlock);
     if((geo.tangents||[]).length){const tang=geo.tangents;parts.push(taggedCount('TANG',tang.length,16,(v,o)=>tang.forEach((a,k)=>{const q=o+k*16;for(let c=0;c<4;c++)v.setFloat32(q+c*4,f(a&&a[c],c===3?1:0),true);})));}
-    if(geo.skin&&geo.skin.length){const skin=geo.skin instanceof Uint8Array?geo.skin:Uint8Array.from(geo.skin);const block=new Uint8Array(8+skin.length),v=new DataView(block.buffer);writeTag(v,0,'SKIN');v.setUint32(4,skin.length,true);block.set(skin,8);parts.push(block);}
+    if(geo.skin&&geo.skin.length){
+      const skin=Array.from(geo.skin),elementBytes=(geo.skinElementBytes===2||formatVersion>=1800)?2:1;
+      const block=new Uint8Array(8+skin.length*elementBytes),v=new DataView(block.buffer);
+      writeTag(v,0,'SKIN');v.setUint32(4,skin.length,true);
+      if(elementBytes===2){for(let k=0;k<skin.length;k++)v.setUint16(8+k*2,Math.max(0,Math.min(65535,i(skin[k]))),true);}
+      else{for(let k=0;k<skin.length;k++)block[8+k]=Math.max(0,Math.min(255,i(skin[k])));}
+      parts.push(block);
+    }
     const uvSets=(geo.uvSets||[]).length?geo.uvSets:(geo.tverts&&geo.tverts.length?[geo.tverts]:[]);if(uvSets.length){const blocks=[];for(const uv of uvSets){blocks.push(taggedCount('UVBS',uv.length,8,(v,o)=>uv.forEach((x,k)=>{const q=o+k*8;v.setFloat32(q,f(x&&x.u),true);v.setFloat32(q+4,f(x&&x.v),true);})));}const head=new Uint8Array(8),hv=new DataView(head.buffer);writeTag(hv,0,'UVAS');hv.setUint32(4,blocks.length,true);parts.push(head,...blocks);}
     const body=concat(parts),out=new Uint8Array(4+body.length),ov=new DataView(out.buffer);ov.setUint32(0,out.length,true);out.set(body,4);return out;
   }
   function importedGeosets(model){return (model&&model.geosets||[]).map((g,index)=>({g,index})).filter(x=>x.g&&x.g.__referenceImported===true&&!Number.isInteger(x.g.__clonedFromIndex));}
   function appendImportedGeosetsMdx(existing,model,formatVersion){const rows=importedGeosets(model);return rows.length?concat([existing||new Uint8Array(),...rows.map(x=>geosetRecordMdx(x.g,formatVersion))]):(existing||new Uint8Array());}
   function geosetAnimationRecordMdx(a){const tracks=trackSetBinary(a&&a.tracks,['KGAO','KGAC']),out=new Uint8Array(28+tracks.length),v=new DataView(out.buffer);v.setUint32(0,out.length,true);v.setFloat32(4,f(a&&a.alpha,1),true);v.setUint32(8,i(a&&a.flags,0)>>>0,true);const c=Array.isArray(a&&a.color)?a.color:[1,1,1];v.setFloat32(12,f(c[0],1),true);v.setFloat32(16,f(c[1],1),true);v.setFloat32(20,f(c[2],1),true);v.setInt32(24,i(a&&a.geosetId,-1),true);if(tracks.length)out.set(tracks,28);return out;}
+  function geosetAnimationsData(model){const rows=(model&&model.geosetAnimations||[]).filter(Boolean).map(geosetAnimationRecordMdx);return rows.length?concat(rows):new Uint8Array();}
   function appendImportedGeosetAnimationsMdx(existing,model){const rows=(model&&model.geosetAnimations||[]).filter(a=>a&&a.__referenceImported===true);return rows.length?concat([existing||new Uint8Array(),...rows.map(geosetAnimationRecordMdx)]):(existing||new Uint8Array());}
 
   function geosetClones(model){return (model&&model.geosets||[]).map((g,index)=>({g,index})).filter(x=>x.g&&x.g.__cloned&&Number.isInteger(x.g.__clonedFromIndex)&&x.g.__clonedFromIndex>=0);}
@@ -239,12 +247,30 @@
       if(geo&&geo.__geometryEdited){const b=boundsForVertices(geo.vertices);writeExtent(view,q,b);geo.extent={boundsRadius:b.boundsRadius,min:[b.min.x,b.min.y,b.min.z],max:[b.max.x,b.max.y,b.max.z]};changed++;}
       q+=28;
       // Sequence extents are followed by optional Reforged TANG / SKIN chunks.
-      // Weight utilities only rewrite SKIN bytes in-place; bone order remains untouched.
-      if(q+4<=recEnd){const seqCount=view.getUint32(q,true);q+=4+Math.max(0,seqCount)*28;}
+      // Sanity compatibility repair may shift model-space geometry while compensating
+      // the animated root. Shift the stored geoset sequence bounds by the same amount
+      // so Warcraft culling sees the same world-space bounds after root compensation.
+      if(q+4<=recEnd){
+        const seqCount=view.getUint32(q,true),seqStart=q+4;
+        if(geo&&geo.__sequenceExtentsEdited&&Array.isArray(geo.sequenceExtents)){
+          const count=Math.min(seqCount,geo.sequenceExtents.length);
+          for(let si=0;si<count;si++)writeExtent(view,seqStart+si*28,extentObject(geo.sequenceExtents[si]));
+          if(count)changed++;
+        }
+        q=seqStart+Math.max(0,seqCount)*28;
+      }
       if(q+8<=recEnd&&tagAt(q)==='TANG'){const count=view.getUint32(q+4,true),end=q+8+count*16;if(end<=recEnd)q=end;}
       if(q+8<=recEnd&&tagAt(q)==='SKIN'){
-        const count=view.getUint32(q+4,true),start=q+8,end=start+count;
-        if(end<=recEnd&&geo&&geo.__skinEdited&&geo.skin){const src=geo.skin instanceof Uint8Array?geo.skin:Uint8Array.from(geo.skin);out.set(src.slice(0,count),start);changed++;}
+        const count=view.getUint32(q+4,true),start=q+8,end8=start+count,end16=start+count*2;
+        const uv8=end8+4<=recEnd&&tagAt(end8)==='UVAS',uv16=end16+4<=recEnd&&tagAt(end16)==='UVAS';
+        const elementBytes=(end16<=recEnd&&(uv16&&(!uv8||formatVersion>=1800)))||((geo&&geo.skinElementBytes===2)&&end16<=recEnd)?2:1;
+        const end=start+count*elementBytes;
+        if(end<=recEnd&&geo&&geo.__skinEdited&&geo.skin){
+          const src=Array.from(geo.skin),n=Math.min(count,src.length);
+          if(elementBytes===2){for(let k=0;k<n;k++)view.setUint16(start+k*2,Math.max(0,Math.min(65535,i(src[k]))),true);}
+          else{for(let k=0;k<n;k++)out[start+k]=Math.max(0,Math.min(255,i(src[k])));}
+          changed++;
+        }
       }
       off=recEnd;gi++;
     }
@@ -253,6 +279,16 @@
   function patchModelExtentMdx(existing,model){
     if(!existing||!model.__geometryEdited||existing.length<372)return existing||new Uint8Array();
     const out=new Uint8Array(existing),view=new DataView(out.buffer,out.byteOffset,out.byteLength),b=boundsForVertices((model.geosets||[]).flatMap(g=>g.vertices||[]));writeExtent(view,340,b);return out;
+  }
+  function patchSequenceExtentsMdx(existing,model){
+    if(!existing||!model.__sequenceExtentsEdited)return existing||new Uint8Array();
+    const out=new Uint8Array(existing),view=new DataView(out.buffer,out.byteOffset,out.byteLength),seqs=model.sequences||[];
+    const count=Math.min(seqs.length,Math.floor(out.length/132));
+    for(let n=0;n<count;n++){
+      const ext=extentObject(seqs[n]?.extent);
+      writeExtent(view,n*132+104,ext);
+    }
+    return out;
   }
   function blockEndLocal(text,open){let depth=0,inString=false,esc=false;for(let p=open;p<text.length;p++){const ch=text[p];if(inString){if(esc)esc=false;else if(ch==='\\')esc=true;else if(ch==='"')inString=false;continue;}if(ch==='"'){inString=true;continue;}if(ch==='{')depth++;else if(ch==='}'&&--depth===0)return p;}return-1;}
   function geosetBlockRanges(text){const out=[],re=/\bGeoset\s*\{/gi;let m;while((m=re.exec(text))){const open=text.indexOf('{',m.index),end=blockEndLocal(text,open);if(end<0)break;out.push({start:m.index,open,end});re.lastIndex=end+1;}return out;}
@@ -301,11 +337,13 @@
     if(model.__materialEdited)replaceFirst('MTLS',materialsData(model),false);
     if(model.__cameraEdited)replaceFirst('CAMS',camerasData(model),false);
     if(model.__effectsEdited)replaceFirst('PRE2',emitters2Data(model),false);
+    if(model.__geosetAnimationsEdited)replaceFirst('GEOA',geosetAnimationsData(model),false);
+    if(model.__sequenceExtentsEdited){const seqExisting=(byTag.get('SEQS')||[])[0]?.c.data;if(seqExisting)replaceFirst('SEQS',patchSequenceExtentsMdx(seqExisting,model),false);}
     const clones=geosetClones(model),imports=importedGeosets(model);
     if(model.__geometryEdited||clones.length||imports.length){
       const geosExisting=(byTag.get('GEOS')||[])[0]?.c.data;
       if(geosExisting||imports.length){let expanded=expandClonedGeosetsMdx(geosExisting||new Uint8Array(),model);expanded=appendImportedGeosetsMdx(expanded,model,i(model.formatVersion,800));replaceFirst('GEOS',patchGeosetsMdx(expanded,model,i(model.formatVersion,800)),false);}
-      const geoaExisting=(byTag.get('GEOA')||[])[0]?.c.data;let geoa=geoaExisting||new Uint8Array();if(clones.length&&geoa.length)geoa=expandClonedGeosetAnimationsMdx(geoa,model);geoa=appendImportedGeosetAnimationsMdx(geoa,model);if(geoa.length)replaceFirst('GEOA',geoa,false);
+      if(!model.__geosetAnimationsEdited){const geoaExisting=(byTag.get('GEOA')||[])[0]?.c.data;let geoa=geoaExisting||new Uint8Array();if(clones.length&&geoa.length)geoa=expandClonedGeosetAnimationsMdx(geoa,model);geoa=appendImportedGeosetAnimationsMdx(geoa,model);if(geoa.length)replaceFirst('GEOA',geoa,false);}
       const modlExisting=(byTag.get('MODL')||[])[0]?.c.data;if(modlExisting)replaceFirst('MODL',patchModelExtentMdx(modlExisting,model),false);
     }
     const pivExisting=(byTag.get('PIVT')||[])[0]?.c.data; if(customNodes.length&&!model.__rigEdited&&!model.__animationKeyEdited) replaceFirst('PIVT',pivotData(pivExisting,model,customNodes),false);
@@ -314,8 +352,8 @@
     if(customEmitters.length&&!model.__effectsEdited){const ex=(byTag.get('PRE2')||[])[0]?.c.data;replaceFirst('PRE2',appendData(ex,customEmitters.map(emitter2Outer)),false);}
     const parts=[parsed.bytes.slice(0,4)];
     parsed.chunks.forEach((c,idx)=>parts.push(replacements.has(idx)?replacements.get(idx):c.raw));
-    for(const tag of ['TEXS','MTLS','GEOS','GEOA','MODL','BONE','HELP','PIVT','ATCH','PRE2','CAMS']){const key=`append:${tag}`;if(replacements.has(key))parts.push(replacements.get(key));}
-    return {bytes:concat(parts),type:'MDX',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetImports:imports.length,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
+    for(const tag of ['TEXS','MTLS','SEQS','GEOS','GEOA','MODL','BONE','HELP','PIVT','ATCH','PRE2','CAMS']){const key=`append:${tag}`;if(replacements.has(key))parts.push(replacements.get(key));}
+    return {bytes:concat(parts),type:'MDX',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetImports:imports.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
   }
 
   function findContainer(text,keyword){
@@ -365,6 +403,19 @@
     lines.push('}');return lines.join('\n');
   }
   function cameraMdl(c){const lines=[`Camera "${escMdl(c.name||'Camera')}" {`,`\tPosition ${v3(c.position)},`,`\tFieldOfView ${num(c.fieldOfView??.7)},`,`\tFarClip ${num(c.farClippingPlane??5000)},`,`\tNearClip ${num(c.nearClippingPlane??8)},`,'\tTarget {',`\t\tPosition ${v3(c.targetPosition)},`,'\t},'];for(const tag of ['KCTR','KCRL','KTTR']){const t=mdlTrackText(tag,c.tracks&&c.tracks[tag],'\t\t');if(t)lines.push('\t'+t.replace(/\n/g,'\n\t'));}lines.push('}');return lines.join('\n');}
+  function stripBareBlocks(text,keyword){
+    const re=new RegExp(`\\b${keyword}\\s*\\{`,'gi'),ranges=[];let m;
+    while((m=re.exec(text))){const open=text.indexOf('{',m.index),end=blockEndLocal(text,open);if(end<0)break;ranges.push([m.index,end+1]);re.lastIndex=end+1;}
+    for(let x=ranges.length-1;x>=0;x--){const [a,b]=ranges[x];text=text.slice(0,a)+text.slice(b);}return text;
+  }
+  function geosetAnimMdl(a){
+    const lines=['GeosetAnim {'];if(i(a&&a.flags,0)&1)lines.push('\tDropShadow,');
+    lines.push(`\tstatic Alpha ${num(a&&a.alpha!=null?a.alpha:1)},`);
+    const c=Array.isArray(a&&a.color)?a.color:[1,1,1];if((i(a&&a.flags,0)&2)||c.some((x,k)=>Math.abs(f(x,1)-1)>1e-9))lines.push(`\tstatic Color ${v3(c)},`);
+    lines.push(`\tGeosetId ${i(a&&a.geosetId,-1)},`);
+    for(const tag of ['KGAO','KGAC']){const t=mdlTrackText(tag,a&&a.tracks&&a.tracks[tag],'\t\t');if(t)lines.push('\t'+t.replace(/\n/g,'\n\t'));}
+    lines.push('}');return lines.join('\n');
+  }
   function saveMDL(source,model){
     if(model&&model.__animationEdited&&window.WC3_MODEL_ANIMATION_SAVE?.patchMdlSource)source=window.WC3_MODEL_ANIMATION_SAVE.patchMdlSource(source,model);
     let text=dec.decode(bytesOf(source));const defs=model.textureDefs||[],customNodes=(model.nodes||[]).filter(n=>n&&n.__custom),customAttachments=customNodes.filter(n=>n.type==='Attachment'),customEmitters=customNodes.filter(n=>n.type==='ParticleEmitter2'),customCameras=(model.cameras||[]).filter(c=>c&&c.__custom),clones=geosetClones(model);
@@ -373,11 +424,12 @@
     if(model.__materialEdited){const block=findContainer(text,'Materials'),replacement=materialsMdl(model);if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
     if(model.__cameraEdited){text=stripNamedBlocks(text,'Camera');const cams=(model.cameras||[]).filter(Boolean).map(cameraMdl);if(cams.length)text+='\n\n// Cameras written by WC3 Asset Studio\n'+cams.join('\n\n')+'\n';}
     if(model.__effectsEdited){text=stripNamedBlocks(text,'ParticleEmitter2');const fx=(model.particleEmitters2||[]).filter(n=>n&&!n.__deleted).map(emitter2Mdl);if(fx.length)text+='\n\n// ParticleEmitter2 written by WC3 Asset Studio\n'+fx.join('\n\n')+'\n';}
+    if(model.__geosetAnimationsEdited){text=stripBareBlocks(text,'GeosetAnim');const gas=(model.geosetAnimations||[]).filter(Boolean).map(geosetAnimMdl);if(gas.length)text+='\n\n// GeosetAnimations written by WC3 Asset Studio\n'+gas.join('\n\n')+'\n';text=patchModelGeosetCountsMdl(text,model);}
     if(clones.length){text=appendClonedGeosetsMdl(text,model);text=patchModelGeosetCountsMdl(text,model);}
     if(model.__geometryEdited||clones.length){text=patchGeosetsMdl(text,model);text=patchModelExtentMdl(text,model);}
     if(customNodes.length&&!model.__rigEdited&&!model.__animationKeyEdited){const block=findContainer(text,'PivotPoints'),replacement=pivotsMdl(model,customNodes);if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
     const additions=[...customAttachments.map(attachmentMdl),...(!model.__effectsEdited?customEmitters.map(emitter2Mdl):[]),...(!model.__cameraEdited?customCameras.map(cameraMdl):[])];if(additions.length)text+='\n\n// Added by WC3 Asset Studio\n'+additions.join('\n\n')+'\n';
-    return {bytes:enc.encode(text),type:'MDL',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
+    return {bytes:enc.encode(text),type:'MDL',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
   }
 
   function saveEditedModel(sourceBuffer,sourceName,model){
@@ -385,5 +437,5 @@
     return type==='MDL'?saveMDL(sourceBuffer,model):saveMDX(sourceBuffer,model);
   }
 
-  window.WC3_MODEL_SAVE={saveEditedModel,saveMDX,saveMDL,version:'1.3'};
+  window.WC3_MODEL_SAVE={saveEditedModel,saveMDX,saveMDL,version:'1.4'};
 })();

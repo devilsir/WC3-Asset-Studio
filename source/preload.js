@@ -19,12 +19,34 @@ contextBridge.exposeInMainWorld('WC3_CASC', Object.freeze({
   chooseInstallFolder: () => ipcRenderer.invoke('wc3-casc:choose-install-folder'),
   setup: () => ipcRenderer.invoke('wc3-casc:setup'),
   readAssets: requests => ipcRenderer.invoke('wc3-casc:read-assets', { requests: Array.isArray(requests) ? requests : [] }),
-  searchAssets: (query, type='all', limit=200) => ipcRenderer.invoke('wc3-casc:search-assets', { query:String(query||''), type:String(type||'all'), limit:Number(limit)||200 })
+  searchAssets: (query, type='all', limit=200, offset=0, artSet='sd') => ipcRenderer.invoke('wc3-casc:search-assets', { query:String(query||''), type:String(type||'all'), limit:Number(limit)||200, offset:Math.max(0,Number(offset)||0), artSet:String(artSet||'sd').toLowerCase() }),
+  exportAssets: (requests, preservePath=true) => ipcRenderer.invoke('wc3-casc:export-assets', { requests:Array.isArray(requests)?requests:[], preservePath:preservePath!==false })
 }));
 
 
+
+contextBridge.exposeInMainWorld('WC3_EFFECTS', Object.freeze({
+  status: () => ipcRenderer.invoke('wc3-effects:status'),
+  selfTest: () => ipcRenderer.invoke('wc3-effects:self-test'),
+  launchDesigner: payload => ipcRenderer.invoke('wc3-effects:launch-designer', payload && typeof payload==='object' ? payload : {}),
+  chooseEpf: () => ipcRenderer.invoke('wc3-effects:choose-epf'),
+  saveEpf: payload => ipcRenderer.invoke('wc3-effects:save-epf', payload && typeof payload==='object' ? payload : {}),
+  choosePkb: () => ipcRenderer.invoke('wc3-effects:choose-pkb'),
+  chooseBundle: () => ipcRenderer.invoke('wc3-effects:choose-bundle'),
+  readBundle: bundlePath => ipcRenderer.invoke('wc3-effects:read-bundle', String(bundlePath||'')),
+  saveBundle: payload => ipcRenderer.invoke('wc3-effects:save-bundle', payload && typeof payload==='object' ? payload : {}),
+  decompile: payload => ipcRenderer.invoke('wc3-effects:decompile', payload && typeof payload==='object' ? payload : {}),
+  build: payload => ipcRenderer.invoke('wc3-effects:build', payload && typeof payload==='object' ? payload : {}),
+  saveCode: payload => ipcRenderer.invoke('wc3-effects:save-code', payload && typeof payload==='object' ? payload : {})
+}));
+
 contextBridge.exposeInMainWorld('WC3_LOCAL_FILES', Object.freeze({
   pathForFile: file => { try { return webUtils.getPathForFile(file) || ''; } catch (_) { return ''; } },
+  saveBinary: (name, data, filters=[]) => ipcRenderer.invoke('wc3-file:save-binary', {
+    name:String(name||'export.bin'),
+    data,
+    filters:Array.isArray(filters)?filters:[]
+  }),
   scanModelTextures: (fileOrPath, refs) => {
     let modelPath = typeof fileOrPath === 'string' ? fileOrPath : '';
     if (!modelPath) { try { modelPath = webUtils.getPathForFile(fileOrPath) || ''; } catch (_) {} }

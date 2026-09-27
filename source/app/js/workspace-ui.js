@@ -6,6 +6,8 @@
   const titles = {
     texture: 'Texture Paint',
     model: 'Model Lab',
+    effects: 'Effects Lab',
+    casc: 'CASC',
     sanity: 'Sanity Checker',
     buttons: 'WC3 Buttons',
     log: 'Log'
@@ -18,10 +20,10 @@
     const saveBtn=$('#saveProjectBtn');
     const exportBtns=['exportBlpBtn','exportTgaBtn','exportPngBtn','exportGameBtn'].map(id=>$('#'+id)).filter(Boolean);
     const exportGroup=document.querySelector('.header-export-actions');
-    if(openBtn){ openBtn.textContent = module==='model' ? 'Open Model' : module==='buttons' ? 'Open Source' : module==='sanity' ? 'Open Files' : 'Open'; openBtn.style.display=module==='log'?'none':''; }
-    if(importBtn){ importBtn.textContent = module==='model' ? 'Add Textures' : 'Import Layer'; importBtn.style.display = (module==='sanity'||module==='buttons'||module==='log') ? 'none' : ''; }
-    if(newBtn) newBtn.style.display = (module==='model' || module==='sanity' || module==='buttons' || module==='log') ? 'none' : '';
-    if(saveBtn) saveBtn.style.display = (module==='sanity'||module==='buttons'||module==='log') ? 'none' : '';
+    if(openBtn){ openBtn.textContent = module==='model' ? 'Open Model' : module==='buttons' ? 'Open Source' : module==='sanity' ? 'Open Files' : 'Open'; openBtn.style.display=(module==='log'||module==='casc'||module==='effects')?'none':''; }
+    if(importBtn){ importBtn.textContent = module==='model' ? 'Add Textures' : 'Import Layer'; importBtn.style.display = (module==='sanity'||module==='buttons'||module==='log'||module==='casc'||module==='effects') ? 'none' : ''; }
+    if(newBtn) newBtn.style.display = (module==='model' || module==='sanity' || module==='buttons' || module==='log' || module==='casc' || module==='effects') ? 'none' : '';
+    if(saveBtn) saveBtn.style.display = (module==='sanity'||module==='buttons'||module==='log'||module==='casc'||module==='effects') ? 'none' : '';
     const showExports = module==='texture';
     if(exportGroup) exportGroup.style.display = showExports ? 'flex' : 'none';
     exportBtns.forEach(el=>el.style.display = showExports ? '' : 'none');
@@ -59,6 +61,16 @@
     if(module === 'model'){
       clickPanel('model');
       setActive('model');
+      return;
+    }
+    if(module === 'effects'){
+      setActive('effects');
+      window.WC3_EFFECTS_LAB?.prepare?.();
+      return;
+    }
+    if(module === 'casc'){
+      setActive('casc');
+      window.WC3_MODEL_LAB_PRO?.prepareCascWorkspace?.();
       return;
     }
     if(module === 'sanity'){
@@ -99,7 +111,7 @@
   document.addEventListener('keydown', e => {
     if(e.ctrlKey || e.metaKey || e.altKey) return;
     if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName)) return;
-    const map = {'1':'texture','2':'model','3':'sanity','4':'buttons','5':'log'};
+    const map = {'1':'texture','2':'model','3':'effects','4':'casc','5':'sanity','6':'buttons','7':'log'};
     const module = map[e.key];
     if(module){ e.preventDefault(); openModule(module); }
   });

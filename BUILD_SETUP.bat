@@ -1,10 +1,10 @@
 @echo off
 setlocal EnableExtensions DisableDelayedExpansion
 cd /d "%~dp0"
-title Build - WC3 Asset Studio v1.3 Setup
+title Build - WC3 Asset Studio v1.4 Setup
 
 echo ================================================================
-echo  WC3 ASSET STUDIO v1.3 - BUILD INNO SETUP - FIXED R2
+echo  WC3 ASSET STUDIO v1.4 - BUILD INNO SETUP - FIXED R2
 echo ================================================================
 echo.
 
@@ -92,7 +92,7 @@ if exist "%~dp0output" rmdir /s /q "%~dp0output"
 
 echo.
 echo [3/3] Compilando Setup com Inno Setup...
-"%ISCC%" "%~dp0WC3_Asset_Studio_v1.3.iss"
+"%ISCC%" "%~dp0WC3_Asset_Studio_v1.4.iss"
 if errorlevel 1 (
   echo.
   echo [ERRO] Falha ao compilar o Setup.
@@ -103,7 +103,7 @@ if errorlevel 1 (
 echo.
 echo ================================================================
 echo PRONTO:
-echo   %~dp0output\WC3 Asset Studio v1.3 Setup.exe
+echo   %~dp0output\WC3 Asset Studio v1.4 Setup.exe
 echo ================================================================
 pause
 exit /b 0

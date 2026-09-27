@@ -1,0 +1,341 @@
+// stdlib/xform.cfx — the mask word that every `xform_*_masked` call ends with.
+//
+// There are EIGHT script names — `xform_{l2l,l2w,w2l,w2w}_{f,d}_masked` — and they all bind to ONE
+// implementation (`RegisterForLink_XForm` @0x143d62b90 binds every float3 variant to
+// `_FnXForm_Float3_Masked` @0x143d6de00; the four `_d_` orientation overloads all go to
+// `_FnXForm_Orientation_Masked` @0x143d6fb10). **The name is decoration. The mask is the whole
+// instruction** — which space you leave, which you enter, and what part of the transform applies.
+//
+// Like `buildPayloadElement`'s semantic word, the mask is a UNIFORM: `DeclareXForm` @0x143acbf80
+// registers it `Attribute_None` while the vector and the context are `Attribute_Stream`, so it is
+// always a compile-time literal and can never be computed per particle.
+//
+//     mask = filter | (spaceEnter << 3) | (spaceLeave << 5)
+//
+// (`_FnXForm_Float3_Masked`: `filter = mask & 7; spaceEnter = (mask >> 3) & 3;
+//  spaceLeave = (mask >> 5) & 3`. Seven bits used; nothing above 0x7F is defined.)
+//
+// Every mask in the WC3 + IceEffects corpus, decoded — no leftover bits anywhere:
+//
+//     17  = 0x11  Translate            EmitterLocal     -> World             xform_l2w_f
+//     19  = 0x13  Translate|Rotate     EmitterLocal     -> World             xform_l2w_f
+//     18  = 0x12  Rotate               EmitterLocal     -> World             xform_l2w_d
+//     66  = 0x42  Rotate               World            -> EmitterLocal      xform_w2l_d
+//     67  = 0x43  Translate|Rotate     World            -> EmitterLocal      xform_w2l_f
+//     107 = 0x6B  Translate|Rotate     WorldPrev        -> EmitterLocalPrev  xform_w2l_f
+//
+// The space fields always agree with the name, which is what makes the census a check and not just
+// a list. `107` is the only one that uses the Prev bit, on both sides at once.
+
+namespace xform {
+
+    // --- bits 0..2: ParticleScript::kXFormFilter_* --------------------------------------------
+    //
+    // WHICH PART of the transform applies. This is the only thing separating the `_f_` (point) and
+    // `_d_` (direction) spellings of the same function: a point translates, a direction does not.
+    //
+    // `_FnXForm_Float3_Masked` asserts `(filter & kXFormFilter_Full) != 0` — a mask with no filter
+    // bits is a programming error, not a no-op.
+    //
+    // The orientation overload is stricter still: `_FnXForm_Orientation_Masked` asserts
+    // `(mask & kXFormFilter_Full) == kXFormFilter_Rotate`, so a quaternion may only ever be
+    // rotated — `Rotate` exactly, not `Translate|Rotate`.
+    namespace Filter {
+        /// @brief_en No part of the transform at all. A mask with no filter bits is a programming error, not a no-op — the engine asserts on it.
+        /// @brief_es Ninguna parte de la transformación. Una máscara sin bits de filtro es un error de programación, no una operación nula: el motor lanza una aserción.
+        /// @brief_pt Nenhuma parte da transformação. Uma máscara sem bits de filtro é um erro de programação, não uma operação nula — o motor lança uma asserção.
+        /// @brief_fr Aucune partie de la transformation. Un masque sans bits de filtre est une erreur de programmation, pas une opération nulle — le moteur lève une assertion.
+        /// @brief_it Nessuna parte della trasformazione. Una maschera senza bit di filtro è un errore di programmazione, non un'operazione nulla: il motore lancia un'asserzione.
+        /// @brief_de Kein Teil der Transformation. Eine Maske ohne Filterbits ist ein Programmierfehler, keine Leeroperation — die Engine wirft eine Zusicherung.
+        /// @brief_ru Ничего из преобразования. Маска без битов фильтра — это ошибка программиста, а не пустая операция: движок срабатывает на неё ассертом.
+        /// @brief_zh 不包含变换的任何部分。没有过滤位的掩码是编程错误，而不是空操作 —— 引擎会对它断言失败。
+        /// @brief_ja 変換のどの部分も含みません。フィルタビットのないマスクは無操作ではなくプログラミングエラーであり、エンジンはアサートで引っかけます。
+        /// @brief_ko 변환의 어느 부분도 포함하지 않습니다. 필터 비트가 없는 마스크는 무작용이 아니라 프로그래밍 오류이며, 엔진이 단언문으로 걸러냅니다.
+        const None      : i32 = 0;
+        /// @brief_en Apply the translation. This is the only bit separating the point and direction spellings of the same engine function: a point translates, a direction does not.
+        /// @brief_es Aplica la traslación. Es el único bit que separa la variante de punto de la de dirección de la misma función del motor: un punto se traslada, una dirección no.
+        /// @brief_pt Aplica a translação. É o único bit que separa a variante de ponto da de direção da mesma função do motor: um ponto translada, uma direção não.
+        /// @brief_fr Applique la translation. C'est le seul bit qui sépare la variante point de la variante direction de la même fonction moteur : un point se translate, pas une direction.
+        /// @brief_it Applica la traslazione. È l'unico bit che separa la variante punto da quella direzione della stessa funzione del motore: un punto trasla, una direzione no.
+        /// @brief_de Wendet die Verschiebung an. Das ist das einzige Bit, das die Punkt- von der Richtungsschreibweise derselben Engine-Funktion trennt: ein Punkt verschiebt sich, eine Richtung nicht.
+        /// @brief_ru Применяет сдвиг. Это единственный бит, разделяющий точечную и направленную формы одной и той же функции движка: точка сдвигается, направление — нет.
+        /// @brief_zh 应用平移。这是区分同一个引擎函数的“点”与“方向”两种写法的唯一位：点会平移，方向不会。
+        /// @brief_ja 平行移動を適用します。同じエンジン関数の「点」版と「方向」版を分ける唯一のビットです。点は平行移動し、方向はしません。
+        /// @brief_ko 이동을 적용합니다. 같은 엔진 함수의 점 버전과 방향 버전을 가르는 유일한 비트입니다. 점은 이동하고 방향은 하지 않습니다.
+        const Translate : i32 = 1;
+        /// @brief_en Apply the rotation. A quaternion may only ever be rotated — the orientation overload asserts that this is the WHOLE filter, not merely part of it.
+        /// @brief_es Aplica la rotación. Un cuaternión solo puede rotarse: la sobrecarga de orientación exige que este sea el filtro COMPLETO y no solo una parte.
+        /// @brief_pt Aplica a rotação. Um quatérnio só pode ser rotacionado: a sobrecarga de orientação exige que este seja o filtro INTEIRO e não apenas parte dele.
+        /// @brief_fr Applique la rotation. Un quaternion ne peut jamais qu'être tourné : la surcharge d'orientation exige que ce soit le filtre ENTIER et non seulement une partie.
+        /// @brief_it Applica la rotazione. Un quaternione può solo essere ruotato: l'overload di orientamento pretende che questo sia il filtro INTERO e non solo una parte.
+        /// @brief_de Wendet die Drehung an. Eine Quaternion darf nur gedreht werden — die Ausrichtungsüberladung verlangt, dass dies der GANZE Filter ist und nicht bloß ein Teil davon.
+        /// @brief_ru Применяет поворот. Кватернион можно только поворачивать: перегрузка для ориентации требует, чтобы это был ВЕСЬ фильтр, а не его часть.
+        /// @brief_zh 应用旋转。四元数只能被旋转 —— 朝向重载会断言这必须是整个过滤位，而不只是其中一部分。
+        /// @brief_ja 回転を適用します。クォータニオンは回転しかできず、向きのオーバーロードはこれがフィルタ全体であることをアサートします。
+        /// @brief_ko 회전을 적용합니다. 쿼터니언은 회전만 가능하며, 방향 오버로드는 이것이 필터 전체여야 한다고 단언합니다.
+        const Rotate    : i32 = 2;
+        /// @brief_en Apply the scale. No mask in the WC3 corpus sets it — it is here because the engine defines it, not because anything uses it.
+        /// @brief_es Aplica la escala. Ninguna máscara del corpus de WC3 la activa: está aquí porque el motor la define, no porque algo la use.
+        /// @brief_pt Aplica a escala. Nenhuma máscara do corpus de WC3 a liga: está aqui porque o motor a define, não porque algo a use.
+        /// @brief_fr Applique la mise à l'échelle. Aucun masque du corpus WC3 ne l'active : il est ici parce que le moteur le définit, pas parce que quelque chose l'emploie.
+        /// @brief_it Applica la scala. Nessuna maschera del corpus di WC3 la attiva: sta qui perché il motore la definisce, non perché qualcosa la usi.
+        /// @brief_de Wendet die Skalierung an. Keine Maske im WC3-Korpus setzt sie — sie steht hier, weil die Engine sie definiert, nicht weil irgendetwas sie nutzt.
+        /// @brief_ru Применяет масштаб. Ни одна маска в корпусе WC3 его не ставит — он здесь потому, что его определяет движок, а не потому, что им кто-то пользуется.
+        /// @brief_zh 应用缩放。WC3 语料中没有任何掩码设置它 —— 它列在这里是因为引擎定义了它，而不是因为有人用它。
+        /// @brief_ja スケールを適用します。WC3 のコーパスでこれを立てているマスクはありません。エンジンが定義しているからここにあるのであって、使われているからではありません。
+        /// @brief_ko 크기 조정을 적용합니다. WC3 코퍼스의 어느 마스크도 이것을 세우지 않습니다. 엔진이 정의하기 때문에 있는 것이지 쓰이기 때문이 아닙니다.
+        const Scale     : i32 = 4;
+        /// @brief_en The field mask, not a mode. Use it to READ the filter out of a mask, never to build one — asking for all three parts at once is not something any corpus mask does.
+        /// @brief_es La máscara del campo, no un modo. Úsala para LEER el filtro de una máscara, nunca para construir una: pedir las tres partes a la vez no es algo que haga ninguna máscara del corpus.
+        /// @brief_pt A máscara do campo, não um modo. Use-a para LER o filtro de uma máscara, nunca para construir uma: pedir as três partes de uma vez não é algo que qualquer máscara do corpus faça.
+        /// @brief_fr Le masque du champ, pas un mode. Servez-vous-en pour LIRE le filtre d'un masque, jamais pour en construire un : demander les trois parties à la fois n'est le fait d'aucun masque du corpus.
+        /// @brief_it La maschera del campo, non una modalità. Usala per LEGGERE il filtro da una maschera, mai per costruirne una: chiedere tutte e tre le parti insieme non è cosa che faccia alcuna maschera del corpus.
+        /// @brief_de Die Feldmaske, kein Modus. Nutze sie, um den Filter AUS einer Maske zu lesen, nie um eine zu bauen — alle drei Teile auf einmal zu verlangen tut keine Maske im Korpus.
+        /// @brief_ru Маска поля, а не режим. Используйте её, чтобы СЧИТАТЬ фильтр из маски, а не чтобы строить маску: запрашивать все три части сразу не делает ни одна маска в корпусе.
+        /// @brief_zh 这是字段掩码，不是一种模式。用它从掩码中读出过滤位，而不要用它构造掩码 —— 同时要求三个部分并非任何语料掩码的做法。
+        /// @brief_ja フィールドマスクであってモードではありません。マスクからフィルタを読み出すために使い、マスクを組み立てるのには使わないでください。3 つを同時に要求するマスクはコーパスに存在しません。
+        /// @brief_ko 모드가 아니라 필드 마스크입니다. 마스크에서 필터를 읽을 때 쓰고, 마스크를 만들 때는 쓰지 마세요. 세 부분을 한꺼번에 요구하는 마스크는 코퍼스에 없습니다.
+        const Full      : i32 = 7;   // the field mask, not a mode
+    }
+
+    // --- bits 3..4 (enter) and 5..6 (leave): ParticleScript::kXFormSpace_* ---------------------
+    //
+    // Two bits each, and the bits are meaningful on their own — `kXFormSpaceMask_Space` (2) is
+    // "emitter-local", `kXFormSpaceMask_Prev` (1) is "the PREVIOUS frame's transform". The engine
+    // reads them separately: `localEnter = (mask >> 3) & 2`, `prevEnter = (mask >> 3) & 1`.
+    //
+    // Two consequences fall straight out of that split, and both are load-bearing:
+    //
+    //  * **`l2l` can never do anything.** The work is gated on
+    //    `(!localEnter || !localLeave) && spaceEnter != spaceLeave`, so ANY pair that is local on
+    //    both sides short-circuits to a stream copy — including `EmitterLocal -> EmitterLocalPrev`,
+    //    which is a real transform the engine simply refuses. The corpus contains no `l2l` mask.
+    //  * **Only `l2w` reads the per-particle spawn transform.** `local2world = localEnter &&
+    //    !localLeave` is what enables the `SpawnerFields` payload path (the per-particle
+    //    `Kind_Builtin_XForms_Position` / `_Orientation` streams). Every other direction takes the
+    //    fetch path and gets the emitter's transform BROADCAST to all particles.
+    namespace Space {
+        /// @brief_en World space — the space everything shares.
+        /// @brief_es Espacio del mundo: el espacio que todo comparte.
+        /// @brief_pt Espaço do mundo — o espaço que tudo compartilha.
+        /// @brief_fr L'espace monde — celui que tout partage.
+        /// @brief_it Spazio del mondo: lo spazio che tutto condivide.
+        /// @brief_de Weltraum — der Raum, den alles teilt.
+        /// @brief_ru Мировое пространство — общее для всего.
+        /// @brief_zh 世界空间 —— 所有东西共享的那个空间。
+        /// @brief_ja ワールド空間です。すべてが共有する空間です。
+        /// @brief_ko 월드 공간 — 모든 것이 공유하는 공간입니다.
+        const World            : i32 = 0;
+        /// @brief_en World space as it was at the START of this frame. Reading it is how a per-frame delta is built.
+        /// @brief_es El espacio del mundo tal como estaba al PRINCIPIO de este fotograma. Leerlo es como se construye un delta por fotograma.
+        /// @brief_pt O espaço do mundo como estava no INÍCIO deste quadro. Lê-lo é como se constrói um delta por quadro.
+        /// @brief_fr L'espace monde tel qu'il était au DÉBUT de cette image. Le lire, c'est ainsi qu'on construit un delta par image.
+        /// @brief_it Lo spazio del mondo com'era all'INIZIO di questo fotogramma. Leggerlo è il modo in cui si costruisce un delta per fotogramma.
+        /// @brief_de Der Weltraum, wie er zu BEGINN dieses Bildes war. Ihn zu lesen ist die Art, wie ein Delta pro Bild gebaut wird.
+        /// @brief_ru Мировое пространство такое, каким оно было в НАЧАЛЕ этого кадра. Именно чтением его строится покадровая дельта.
+        /// @brief_zh 本帧开始时的世界空间。逐帧增量就是靠读取它构造出来的。
+        /// @brief_ja このフレームの開始時点のワールド空間です。これを読むことでフレームごとの差分を作ります。
+        /// @brief_ko 이번 프레임이 시작될 때의 월드 공간입니다. 이것을 읽어 프레임 단위 데이터를 만듭니다.
+        const WorldPrev        : i32 = 1;
+        /// @brief_en The emitter's own space. Only the emitter-local → world direction reads the per-particle spawn transform; every other direction gets the emitter's transform broadcast to all particles.
+        /// @brief_es El espacio propio del emisor. Solo el sentido local del emisor → mundo lee la transformación de nacimiento por partícula; cualquier otro sentido recibe la transformación del emisor difundida a todas.
+        /// @brief_pt O espaço próprio do emissor. Só o sentido local do emissor → mundo lê a transformação de nascimento por partícula; qualquer outro sentido recebe a transformação do emissor difundida a todas.
+        /// @brief_fr L'espace propre de l'émetteur. Seul le sens local émetteur → monde lit la transformation de naissance par particule ; tout autre sens reçoit la transformation de l'émetteur diffusée à toutes.
+        /// @brief_it Lo spazio proprio dell'emettitore. Solo il verso locale emettitore → mondo legge la trasformazione di nascita per particella; ogni altro verso riceve la trasformazione dell'emettitore diffusa a tutte.
+        /// @brief_de Der eigene Raum des Emitters. Nur die Richtung emitterlokal → Welt liest die Geburtstransformation je Partikel; jede andere Richtung erhält die Emittertransformation an alle Partikel gestreut.
+        /// @brief_ru Собственное пространство эмиттера. Только направление «локальное эмиттера → мировое» читает почастичное преобразование рождения; все остальные получают преобразование эмиттера, разосланное всем частицам.
+        /// @brief_zh 发射器自身的空间。只有“发射器局部 → 世界”这个方向会读取逐粒子的生成变换；其他方向拿到的都是广播给所有粒子的发射器变换。
+        /// @brief_ja エミッタ自身の空間です。エミッタローカル→ワールドの向きだけがパーティクルごとのスポーン変換を読み、他の向きはすべてのパーティクルにブロードキャストされたエミッタ変換を受け取ります。
+        /// @brief_ko 이미터 자신의 공간입니다. 이미터 로컬 → 월드 방향만 파티클별 스폰 변환을 읽으며, 다른 방향은 모든 파티클에 브로드캐스트된 이미터 변환을 받습니다.
+        const EmitterLocal     : i32 = 2;
+        /// @brief_en The emitter's space as it was at the start of this frame. Pairing it with `EmitterLocal` is a real transform the engine simply refuses — any pair that is local on both sides short-circuits to a stream copy.
+        /// @brief_es El espacio del emisor tal como estaba al principio de este fotograma. Emparejarlo con `EmitterLocal` es una transformación real que el motor simplemente rechaza: todo par que sea local por ambos lados se corta a una copia de flujo.
+        /// @brief_pt O espaço do emissor como estava no início deste quadro. Emparelhá-lo com `EmitterLocal` é uma transformação real que o motor simplesmente recusa: todo par local dos dois lados curto-circuita para uma cópia de fluxo.
+        /// @brief_fr L'espace de l'émetteur tel qu'il était au début de cette image. L'appairer avec `EmitterLocal` est une vraie transformation que le moteur refuse tout simplement : toute paire locale des deux côtés court-circuite vers une copie de flux.
+        /// @brief_it Lo spazio dell'emettitore com'era all'inizio di questo fotogramma. Accoppiarlo a `EmitterLocal` è una trasformazione reale che il motore semplicemente rifiuta: ogni coppia locale da entrambi i lati va in cortocircuito verso una copia di flusso.
+        /// @brief_de Der Raum des Emitters, wie er zu Beginn dieses Bildes war. Ihn mit `EmitterLocal` zu paaren ist eine echte Transformation, die die Engine schlicht verweigert — jedes Paar, das auf beiden Seiten lokal ist, kurzschließt zu einer Stromkopie.
+        /// @brief_ru Пространство эмиттера такое, каким оно было в начале этого кадра. Сочетание его с `EmitterLocal` — настоящее преобразование, которое движок просто отказывается делать: любая пара, локальная с обеих сторон, вырождается в копирование потока.
+        /// @brief_zh 本帧开始时的发射器空间。把它与 `EmitterLocal` 配成一对是一个真实的变换，而引擎干脆拒绝执行 —— 两边都是局部空间的组合会短路成一次流复制。
+        /// @brief_ja このフレーム開始時のエミッタ空間です。`EmitterLocal` と組み合わせるのは実在の変換ですが、エンジンはそれを単に拒否します。両側ともローカルな組み合わせはすべてストリームのコピーに短絡されます。
+        /// @brief_ko 이번 프레임이 시작될 때의 이미터 공간입니다. 이것을 `EmitterLocal`과 짝짓는 것은 실제 변환이지만 엔진은 그냥 거부합니다. 양쪽이 모두 로컬인 쌍은 전부 스트림 복사로 단락됩니다.
+        const EmitterLocalPrev : i32 = 3;
+        /// @brief_en Bit 0 of a space field: "the PREVIOUS frame's transform". The engine reads it separately from the locality bit, which is why the two combine freely.
+        /// @brief_es El bit 0 de un campo de espacio: «la transformación del fotograma ANTERIOR». El motor lo lee aparte del bit de localidad, y por eso ambos se combinan libremente.
+        /// @brief_pt O bit 0 de um campo de espaço: «a transformação do quadro ANTERIOR». O motor o lê separadamente do bit de localidade, e por isso os dois se combinam livremente.
+        /// @brief_fr Le bit 0 d'un champ d'espace : « la transformation de l'image PRÉCÉDENTE ». Le moteur le lit séparément du bit de localité, d'où leur libre combinaison.
+        /// @brief_it Il bit 0 di un campo di spazio: «la trasformazione del fotogramma PRECEDENTE». Il motore lo legge separatamente dal bit di località, ed è per questo che i due si combinano liberamente.
+        /// @brief_de Bit 0 eines Raumfelds: „die Transformation des VORIGEN Bildes“. Die Engine liest es getrennt vom Lokalitätsbit, weshalb sich die beiden frei kombinieren.
+        /// @brief_ru Бит 0 поля пространства: «преобразование ПРЕДЫДУЩЕГО кадра». Движок читает его отдельно от бита локальности, поэтому они свободно сочетаются.
+        /// @brief_zh 空间字段的第 0 位：“上一帧的变换”。引擎会把它与局部性位分开读取，因此两者可以自由组合。
+        /// @brief_ja 空間フィールドのビット 0で、「前フレームの変換」を意味します。エンジンはこれをローカル性のビットとは別に読むため、両者は自由に組み合わせられます。
+        /// @brief_ko 공간 필드의 0번 비트로 "이전 프레임의 변환"을 뜻합니다. 엔진은 이것을 로컬성 비트와 따로 읽기 때문에 둘은 자유롭게 조합됩니다.
+        const MaskPrev         : i32 = 1;   // bit 0 of a space field
+        /// @brief_en Bit 1 of a space field: "emitter-local" rather than world.
+        /// @brief_es El bit 1 de un campo de espacio: «local del emisor» en vez de mundo.
+        /// @brief_pt O bit 1 de um campo de espaço: «local do emissor» em vez de mundo.
+        /// @brief_fr Le bit 1 d'un champ d'espace : « local à l'émetteur » plutôt que monde.
+        /// @brief_it Il bit 1 di un campo di spazio: «locale dell'emettitore» invece di mondo.
+        /// @brief_de Bit 1 eines Raumfelds: „emitterlokal“ statt Welt.
+        /// @brief_ru Бит 1 поля пространства: «локальное эмиттера», а не мировое.
+        /// @brief_zh 空间字段的第 1 位：表示“发射器局部”而非世界。
+        /// @brief_ja 空間フィールドのビット 1 で、ワールドではなく「エミッタローカル」を意味します。
+        /// @brief_ko 공간 필드의 1번 비트로, 월드가 아니라 "이미터 로컬"을 뜻합니다.
+        const MaskSpace        : i32 = 2;   // bit 1 of a space field
+        /// @brief_en Both bits of a space field, for reading one out of a mask rather than building one.
+        /// @brief_es Ambos bits de un campo de espacio, para leerlo de una máscara en vez de construirlo.
+        /// @brief_pt Ambos os bits de um campo de espaço, para lê-lo de uma máscara em vez de construí-lo.
+        /// @brief_fr Les deux bits d'un champ d'espace, pour le lire dans un masque plutôt que pour en construire un.
+        /// @brief_it Entrambi i bit di un campo di spazio, per leggerlo da una maschera invece che per costruirne uno.
+        /// @brief_de Beide Bits eines Raumfelds, um es aus einer Maske zu lesen statt eines zu bauen.
+        /// @brief_ru Оба бита поля пространства — чтобы считать его из маски, а не строить.
+        /// @brief_zh 空间字段的两个位，用于从掩码中读出它而不是构造它。
+        /// @brief_ja 空間フィールドの両ビットです。マスクを組み立てるのではなく、マスクから読み出すために使います。
+        /// @brief_ko 공간 필드의 두 비트입니다. 마스크를 만들 때가 아니라 마스크에서 읽을 때 씁니다.
+        const MaskFull         : i32 = 3;
+    }
+
+    /// Build the mask word: what to transform, the space you are leaving, the space you are
+    /// entering.
+    ///
+    /// `enter`/`leave` are named as the ENGINE names them (`spaceEnter` is the source), so
+    /// `xform_l2w` is `enter = EmitterLocal, leave = World`. Both default to `World`, which is the
+    /// half of the pair a `w2l` call leaves alone.
+    ///
+    /// `* 8` / `* 32` rather than shifts: the compiler folds integer `*` and `|` exactly but leaves
+    /// `<<` to the VM, and an argument the engine requires to be a uniform must not carry real
+    /// arithmetic. Same reason as `payloads.PackSemantics`.
+    /// @brief_en Build the mask word: what to transform, the space you are leaving, the space you are entering. `enter`/`leave` are named as the ENGINE names them, so `xform_l2w` is `enter = EmitterLocal, leave = World`.
+    /// @brief_es Construye la palabra de máscara: qué transformar, el espacio del que sales y el espacio al que entras. `enter`/`leave` se llaman como los llama el MOTOR, así que `xform_l2w` es `enter = EmitterLocal, leave = World`.
+    /// @brief_pt Constrói a palavra de máscara: o que transformar, o espaço de onde você sai e o espaço em que entra. `enter`/`leave` têm os nomes que o MOTOR lhes dá, então `xform_l2w` é `enter = EmitterLocal, leave = World`.
+    /// @brief_fr Construit le mot de masque : ce qu'il faut transformer, l'espace que l'on quitte, l'espace où l'on entre. `enter`/`leave` portent les noms que le MOTEUR leur donne, donc `xform_l2w` vaut `enter = EmitterLocal, leave = World`.
+    /// @brief_it Costruisce la parola di maschera: cosa trasformare, lo spazio che si lascia e quello in cui si entra. `enter`/`leave` hanno i nomi che dà loro il MOTORE, quindi `xform_l2w` è `enter = EmitterLocal, leave = World`.
+    /// @brief_de Baut das Maskenwort: was transformiert wird, der Raum, den man verlässt, und der Raum, den man betritt. `enter`/`leave` heißen so, wie die ENGINE sie nennt, `xform_l2w` ist also `enter = EmitterLocal, leave = World`.
+    /// @brief_ru Строит слово маски: что преобразовывать, какое пространство покидаете и в какое входите. `enter`/`leave` названы так, как их называет ДВИЖОК, поэтому `xform_l2w` — это `enter = EmitterLocal, leave = World`.
+    /// @brief_zh 构造掩码字：要变换什么、离开哪个空间、进入哪个空间。`enter`/`leave` 采用引擎自己的命名，因此 `xform_l2w` 就是 `enter = EmitterLocal, leave = World`。
+    /// @brief_ja マスク語を組み立てます。何を変換するか、どの空間を出るか、どの空間に入るかです。`enter`/`leave` はエンジン自身の命名に合わせてあるため、`xform_l2w` は `enter = EmitterLocal, leave = World` になります。
+    /// @brief_ko 마스크 워드를 만듭니다. 무엇을 변환할지, 어느 공간을 떠나는지, 어느 공간으로 들어가는지입니다. `enter`/`leave`는 엔진 자체의 이름을 따른 것이므로 `xform_l2w`는 `enter = EmitterLocal, leave = World`입니다.
+    ///
+    /// @param_en filter Which part of the transform applies, from `Filter`. A mask with no filter bits is an error.
+    /// @param_es filter Qué parte de la transformación se aplica, de `Filter`. Una máscara sin bits de filtro es un error.
+    /// @param_pt filter Que parte da transformação se aplica, de `Filter`. Uma máscara sem bits de filtro é um erro.
+    /// @param_fr filter Quelle partie de la transformation s'applique, parmi `Filter`. Un masque sans bits de filtre est une erreur.
+    /// @param_it filter Quale parte della trasformazione si applica, da `Filter`. Una maschera senza bit di filtro è un errore.
+    /// @param_de filter Welcher Teil der Transformation gilt, aus `Filter`. Eine Maske ohne Filterbits ist ein Fehler.
+    /// @param_ru filter Какая часть преобразования применяется, из `Filter`. Маска без битов фильтра — ошибка.
+    /// @param_zh filter 应用变换的哪一部分，取自 `Filter`。没有过滤位的掩码是错误。
+    /// @param_ja filter 変換のどの部分を適用するか。`Filter` から選びます。フィルタビットのないマスクはエラーです。
+    /// @param_ko filter 변환의 어느 부분을 적용할지. `Filter`에서 고릅니다. 필터 비트가 없는 마스크는 오류입니다.
+    ///
+    /// @param_en enter The space being left — the SOURCE, despite the name. Defaults to `World`.
+    /// @param_es enter El espacio que se abandona: el ORIGEN, pese al nombre. Por omisión, `World`.
+    /// @param_pt enter O espaço que se abandona: a ORIGEM, apesar do nome. O padrão é `World`.
+    /// @param_fr enter L'espace que l'on quitte — la SOURCE, malgré le nom. Par défaut `World`.
+    /// @param_it enter Lo spazio che si lascia: la SORGENTE, nonostante il nome. Il valore predefinito è `World`.
+    /// @param_de enter Der Raum, der verlassen wird — die QUELLE, dem Namen zum Trotz. Standard ist `World`.
+    /// @param_ru enter Покидаемое пространство — ИСХОДНОЕ, вопреки имени. По умолчанию `World`.
+    /// @param_zh enter 要离开的空间 —— 尽管名字叫 enter，它其实是源空间。默认为 `World`。
+    /// @param_ja enter 出ていく空間、つまりソースです（名前に反して）。既定値は `World` です。
+    /// @param_ko enter 떠나는 공간, 즉 이름과 달리 원본 공간입니다. 기본값은 `World`입니다.
+    ///
+    /// @param_en leave The space being entered — the DESTINATION. Defaults to `World`, which is the half a `w2l` call leaves alone.
+    /// @param_es leave El espacio al que se entra: el DESTINO. Por omisión, `World`, que es la mitad que una llamada `w2l` deja intacta.
+    /// @param_pt leave O espaço em que se entra: o DESTINO. O padrão é `World`, que é a metade que uma chamada `w2l` deixa intacta.
+    /// @param_fr leave L'espace où l'on entre — la DESTINATION. Par défaut `World`, la moitié qu'un appel `w2l` laisse inchangée.
+    /// @param_it leave Lo spazio in cui si entra: la DESTINAZIONE. Il valore predefinito è `World`, la metà che una chiamata `w2l` lascia intatta.
+    /// @param_de leave Der Raum, der betreten wird — das ZIEL. Standard ist `World`, die Hälfte, die ein `w2l`-Aufruf unberührt lässt.
+    /// @param_ru leave Пространство, в которое входим, — НАЗНАЧЕНИЕ. По умолчанию `World` — та половина, которую вызов `w2l` не трогает.
+    /// @param_zh leave 要进入的空间 —— 即目标空间。默认为 `World`，也就是 `w2l` 调用不去动的那一半。
+    /// @param_ja leave 入っていく空間、つまり行き先です。既定値は `World` で、`w2l` 呼び出しが触らない側にあたります。
+    /// @param_ko leave 들어가는 공간, 즉 목적지입니다. 기본값은 `World`이며, `w2l` 호출이 건드리지 않는 쪽입니다.
+    ///
+    /// @result_en The packed mask word. Folds at build time, so naming the parts costs nothing.
+    /// @result_es La palabra de máscara empaquetada. Se pliega en compilación, así que nombrar las partes no cuesta nada.
+    /// @result_pt A palavra de máscara compactada. É dobrada em tempo de compilação, então nomear as partes não custa nada.
+    /// @result_fr Le mot de masque compacté. Il est replié à la compilation, donc nommer les parties ne coûte rien.
+    /// @result_it La parola di maschera compattata. Viene ripiegata in compilazione, quindi dare un nome alle parti non costa nulla.
+    /// @result_de Das gepackte Maskenwort. Es wird zur Bauzeit gefaltet, das Benennen der Teile kostet also nichts.
+    /// @result_ru Упакованное слово маски. Сворачивается на этапе сборки, поэтому именование частей ничего не стоит.
+    /// @result_zh 打包后的掩码字。它在构建期折叠，因此给各部分起名字不会有任何开销。
+    /// @result_ja 詰め込まれたマスク語。ビルド時に畳まれるため、各部分に名前を付けてもコストはかかりません。
+    /// @result_ko 묶인 마스크 워드. 빌드 시점에 접히므로 각 부분에 이름을 붙여도 비용이 없습니다.
+    fn Mask(filter: i32, enter: i32 = 0, leave: i32 = 0) -> i32 {
+        filter | (enter * 8) | (leave * 32)
+    }
+
+    // --- the six masks the corpus actually uses ------------------------------------------------
+    //
+    // Named so a call site says what it does. Each is `Mask(...)` folded, so they cost nothing.
+
+    /// Move a POINT out of emitter-local space into world space.
+    /// @brief_en Move a POINT out of emitter-local space into world space, translating only. The corpus writes this and not the rotating variant wherever the input is the origin, because rotating zero is the identity.
+    /// @brief_es Lleva un PUNTO del espacio local del emisor al del mundo, solo trasladando. El corpus escribe esta y no la variante que rota siempre que la entrada es el origen, porque rotar el cero es la identidad.
+    /// @brief_pt Leva um PONTO do espaço local do emissor ao do mundo, apenas transladando. O corpus escreve esta e não a variante que rotaciona sempre que a entrada é a origem, porque rotacionar o zero é a identidade.
+    /// @brief_fr Fait passer un POINT de l'espace local de l'émetteur à l'espace monde, par translation seule. Le corpus écrit celle-ci et non la variante rotative partout où l'entrée est l'origine, car faire tourner zéro est l'identité.
+    /// @brief_it Porta un PUNTO dallo spazio locale dell'emettitore a quello del mondo, solo traslando. Il corpus scrive questa e non la variante che ruota ovunque l'ingresso sia l'origine, perché ruotare lo zero è l'identità.
+    /// @brief_de Bringt einen PUNKT aus dem emitterlokalen Raum in den Weltraum, nur durch Verschiebung. Der Korpus schreibt diese und nicht die drehende Variante überall dort, wo die Eingabe der Ursprung ist, denn null zu drehen ist die Identität.
+    /// @brief_ru Переводит ТОЧКУ из локального пространства эмиттера в мировое, только сдвигом. Корпус пишет именно эту, а не вращающую разновидность, везде, где на входе начало координат, потому что вращение нуля — тождество.
+    /// @brief_zh 把一个点从发射器局部空间搬到世界空间，只做平移。只要输入是原点，语料写的就是它而不是带旋转的那个，因为旋转零向量等同于不变。
+    /// @brief_ja 点をエミッタのローカル空間からワールド空間へ、平行移動だけで移します。入力が原点の場合、コーパスは回転付きの方ではなくこちらを書きます。ゼロを回転させても恒等変換だからです。
+    /// @brief_ko 점을 이미터 로컬 공간에서 월드 공간으로 이동만으로 옮깁니다. 입력이 원점일 때 코퍼스가 회전 버전이 아니라 이것을 쓰는 이유는, 영벡터를 회전해도 그대로이기 때문입니다.
+    const L2W_Point       : i32 = 17;   // Mask(Filter.Translate, Space.EmitterLocal, Space.World)
+    /// Move a point out of emitter-local space, rotating it too.
+    /// @brief_en Move a point out of emitter-local space, rotating it too — the ordinary spawn-position mask.
+    /// @brief_es Lleva un punto fuera del espacio local del emisor, rotándolo también: la máscara habitual de posición de nacimiento.
+    /// @brief_pt Leva um ponto para fora do espaço local do emissor, rotacionando-o também — a máscara habitual de posição de nascimento.
+    /// @brief_fr Fait sortir un point de l'espace local de l'émetteur en le faisant aussi tourner — le masque habituel de position de naissance.
+    /// @brief_it Porta un punto fuori dallo spazio locale dell'emettitore, ruotandolo anche: la maschera abituale della posizione di nascita.
+    /// @brief_de Bringt einen Punkt aus dem emitterlokalen Raum heraus und dreht ihn dabei — die gewöhnliche Maske für Geburtspositionen.
+    /// @brief_ru Выводит точку из локального пространства эмиттера, ещё и поворачивая её, — обычная маска для позиции рождения.
+    /// @brief_zh 把点移出发射器局部空间，并同时旋转 —— 这是出生位置的常规掩码。
+    /// @brief_ja 点をエミッタのローカル空間から出し、同時に回転もさせます。出生位置の通常のマスクです。
+    /// @brief_ko 점을 이미터 로컬 공간 밖으로 옮기면서 회전도 합니다. 출생 위치에 쓰이는 일반적인 마스크입니다.
+    const L2W_PointRot    : i32 = 19;   // Mask(Translate|Rotate, EmitterLocal, World)
+    /// Move a DIRECTION out of emitter-local space — rotation only, never translated.
+    /// @brief_en Move a DIRECTION out of emitter-local space — rotation only, never translated.
+    /// @brief_es Lleva una DIRECCIÓN fuera del espacio local del emisor: solo rotación, nunca traslación.
+    /// @brief_pt Leva uma DIREÇÃO para fora do espaço local do emissor — só rotação, nunca translação.
+    /// @brief_fr Fait sortir une DIRECTION de l'espace local de l'émetteur — rotation seule, jamais de translation.
+    /// @brief_it Porta una DIREZIONE fuori dallo spazio locale dell'emettitore: solo rotazione, mai traslazione.
+    /// @brief_de Bringt eine RICHTUNG aus dem emitterlokalen Raum heraus — nur Drehung, nie Verschiebung.
+    /// @brief_ru Выводит НАПРАВЛЕНИЕ из локального пространства эмиттера — только поворот, без сдвига.
+    /// @brief_zh 把方向移出发射器局部空间 —— 只旋转，绝不平移。
+    /// @brief_ja 方向をエミッタのローカル空間から出します。回転のみで、平行移動はしません。
+    /// @brief_ko 방향을 이미터 로컬 공간 밖으로 옮깁니다. 회전만 하고 이동은 결코 하지 않습니다.
+    const L2W_Dir         : i32 = 18;   // Mask(Filter.Rotate, Space.EmitterLocal, Space.World)
+    /// Bring a direction from world space into emitter-local space.
+    /// @brief_en Bring a direction from world space into emitter-local space.
+    /// @brief_es Trae una dirección del espacio del mundo al espacio local del emisor.
+    /// @brief_pt Traz uma direção do espaço do mundo ao espaço local do emissor.
+    /// @brief_fr Ramène une direction de l'espace monde vers l'espace local de l'émetteur.
+    /// @brief_it Riporta una direzione dallo spazio del mondo allo spazio locale dell'emettitore.
+    /// @brief_de Holt eine Richtung aus dem Weltraum in den emitterlokalen Raum.
+    /// @brief_ru Переводит направление из мирового пространства в локальное пространство эмиттера.
+    /// @brief_zh 把方向从世界空间带回发射器局部空间。
+    /// @brief_ja 方向をワールド空間からエミッタのローカル空間へ戻します。
+    /// @brief_ko 방향을 월드 공간에서 이미터 로컬 공간으로 가져옵니다.
+    const W2L_Dir         : i32 = 66;   // Mask(Filter.Rotate, Space.World, Space.EmitterLocal)
+    /// Bring a point from world space into emitter-local space.
+    /// @brief_en Bring a point from world space into emitter-local space — the direction a shape sampler wants its input in.
+    /// @brief_es Trae un punto del espacio del mundo al espacio local del emisor: el sentido en que un muestreador de forma quiere su entrada.
+    /// @brief_pt Traz um ponto do espaço do mundo ao espaço local do emissor — o sentido em que um amostrador de forma quer sua entrada.
+    /// @brief_fr Ramène un point de l'espace monde vers l'espace local de l'émetteur — le sens dans lequel un échantillonneur de forme veut son entrée.
+    /// @brief_it Riporta un punto dallo spazio del mondo allo spazio locale dell'emettitore: il verso in cui un campionatore di forma vuole il suo ingresso.
+    /// @brief_de Holt einen Punkt aus dem Weltraum in den emitterlokalen Raum — die Richtung, in der ein Form-Sampler seine Eingabe erwartet.
+    /// @brief_ru Переводит точку из мирового пространства в локальное пространство эмиттера — именно так сэмплер формы хочет получать вход.
+    /// @brief_zh 把点从世界空间带回发射器局部空间 —— 形状采样器就是要这个方向的输入。
+    /// @brief_ja 点をワールド空間からエミッタのローカル空間へ戻します。シェイプサンプラーが入力に求める向きです。
+    /// @brief_ko 점을 월드 공간에서 이미터 로컬 공간으로 가져옵니다. 셀이프 샘플러가 입력으로 원하는 방향입니다.
+    const W2L_Point       : i32 = 67;   // Mask(Translate|Rotate, World, EmitterLocal)
+    /// The same, against LAST frame's transforms on both sides — the shape a per-frame delta uses.
+    /// @brief_en The same as `W2L_Point`, but against LAST frame's transforms on both sides — the shape a per-frame delta uses. The only mask in the corpus that sets the Prev bit.
+    /// @brief_es Igual que `W2L_Point`, pero contra las transformaciones del fotograma ANTERIOR por ambos lados: la forma que usa un delta por fotograma. Es la única máscara del corpus que activa el bit Prev.
+    /// @brief_pt O mesmo que `W2L_Point`, mas contra as transformações do quadro ANTERIOR dos dois lados — a forma que um delta por quadro usa. É a única máscara do corpus que liga o bit Prev.
+    /// @brief_fr Comme `W2L_Point`, mais face aux transformations de l'image PRÉCÉDENTE des deux côtés — la forme qu'emploie un delta par image. C'est le seul masque du corpus qui active le bit Prev.
+    /// @brief_it Come `W2L_Point`, ma rispetto alle trasformazioni del fotogramma PRECEDENTE da entrambi i lati: la forma che usa un delta per fotogramma. È l'unica maschera del corpus che attiva il bit Prev.
+    /// @brief_de Wie `W2L_Point`, aber gegen die Transformationen des VORIGEN Bildes auf beiden Seiten — die Form, die ein Delta pro Bild verwendet. Die einzige Maske im Korpus, die das Prev-Bit setzt.
+    /// @brief_ru То же, что `W2L_Point`, но против преобразований ПРЕДЫДУЩЕГО кадра с обеих сторон — форма, которой пользуется покадровая дельта. Единственная маска в корпусе, ставящая бит Prev.
+    /// @brief_zh 与 `W2L_Point` 相同，但两边都采用上一帧的变换 —— 逐帧增量就是这个形状。这是语料中唯一设置 Prev 位的掩码。
+    /// @brief_ja `W2L_Point` と同じですが、両側とも前フレームの変換を使います。フレームごとの差分が使う形で、コーパス中で Prev ビットを立てる唯一のマスクです。
+    /// @brief_ko `W2L_Point`과 같지만 양쪽 모두 이전 프레임의 변환을 씁니다. 프레임 단위 데이터가 쓰는 형태이며, 코퍼스에서 Prev 비트를 세우는 유일한 마스크입니다.
+    const W2L_PointPrev   : i32 = 107;  // Mask(Translate|Rotate, WorldPrev, EmitterLocalPrev)
+}

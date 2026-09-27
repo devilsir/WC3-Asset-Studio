@@ -74,8 +74,8 @@
       const r=await window.WC3_DIAGNOSTICS.read();
       const lines=String(r&&r.text||'').split(/\r?\n/).filter(Boolean);
       for(const line of lines){if(persistentSeen.has(line))continue;persistentSeen.add(line);try{const e=JSON.parse(line);add(e.level||'info',e.source||'Main',e.message||'',e.detail||'',{persist:false,time:e.time});}catch(_){add('info','Main',line,'',{persist:false});}}
-      add('info','Log','Persistent runtime log attached',{path:r&&r.path||''},{persist:false});
-    }catch(e){add('warn','Log','Could not read persistent runtime log',e,{persist:false});}
+      add('info','Log','Current session log attached',{path:r&&r.path||''},{persist:false});
+    }catch(e){add('warn','Log','Could not read current session log',e,{persist:false});}
   }
 
   console.log=(...args)=>{originals.log(...args);add('info','Console',normalizeMessage(args),'');};

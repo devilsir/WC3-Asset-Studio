@@ -1,0 +1,1020 @@
+// stdlib/math.cfx — scalar and generic math helpers.
+//
+// Everything here is plain CFX and is INLINED at build time; there is no runtime cost and no
+// engine surface. Copy this file into a bundle and edit it if you want a variant.
+//
+// Everything lives under `math.` — `math.remap(x, 0.0, 2.0)`, `math.PI`. A library that puts
+// bare `remap` / `PI` into a bundle's global scope collides with the bundle's own names sooner
+// or later, and the collision surfaces as a load error in a file the author did not write.
+// The one exception is `degrees` below, which is a namespace in its own right.
+
+namespace math {
+
+    /// @brief_en Degrees to radians, as a multiplier. The engine's trigonometry is all in radians, so this is what a human-authored angle has to pass through.
+    /// @brief_es De grados a radianes, como multiplicador. La trigonometría del motor va toda en radianes, así que es por aquí por donde debe pasar un ángulo escrito por una persona.
+    /// @brief_pt De graus para radianos, como multiplicador. A trigonometria do motor é toda em radianos, então é por aqui que um ângulo escrito por uma pessoa precisa passar.
+    /// @brief_fr Des degrés aux radians, sous forme de multiplicateur. La trigonométrie du moteur est entièrement en radians : c'est donc par là que doit passer un angle écrit par un humain.
+    /// @brief_it Da gradi a radianti, come moltiplicatore. La trigonometria del motore è tutta in radianti, quindi è di qui che deve passare un angolo scritto da una persona.
+    /// @brief_de Grad in Bogenmaß, als Faktor. Die Trigonometrie der Engine läuft ganz im Bogenmaß, hier hindurch muss also ein von Hand geschriebener Winkel.
+    /// @brief_ru Градусы в радианы, множителем. Вся тригонометрия движка в радианах, так что угол, написанный человеком, обязан пройти через это.
+    /// @brief_zh 度转弧度的乘数。引擎的三角函数全部使用弧度，因此人写的角度都得经过它。
+    /// @brief_ja 度からラジアンへの係数です。エンジンの三角関数はすべてラジアンなので、人が書いた角度はここを通す必要があります。
+    /// @brief_ko 도를 라디안으로 바꾸는 계수입니다. 엔진의 삼각함수는 모두 라디안이므로 사람이 쓴 각도는 이것을 거쳐야 합니다.
+    const DEG2RAD : f32 = 0.017453292;
+    /// @brief_en Radians to degrees, as a multiplier — the way back from an engine angle to one a person can read.
+    /// @brief_es De radianes a grados, como multiplicador: el camino de vuelta de un ángulo del motor a uno que una persona pueda leer.
+    /// @brief_pt De radianos para graus, como multiplicador — o caminho de volta de um ângulo do motor a um que uma pessoa consiga ler.
+    /// @brief_fr Des radians aux degrés, sous forme de multiplicateur — le chemin de retour d'un angle moteur vers un angle lisible.
+    /// @brief_it Da radianti a gradi, come moltiplicatore: la via di ritorno da un angolo del motore a uno leggibile da una persona.
+    /// @brief_de Bogenmaß in Grad, als Faktor — der Rückweg von einem Engine-Winkel zu einem, den ein Mensch lesen kann.
+    /// @brief_ru Радианы в градусы, множителем, — путь обратно от угла движка к тому, что можно прочитать.
+    /// @brief_zh 弧度转度的乘数 —— 从引擎角度回到人能读懂的角度的途径。
+    /// @brief_ja ラジアンから度への係数です。エンジンの角度を人が読める形に戻す道です。
+    /// @brief_ko 라디안을 도로 바꾸는 계수 — 엔진 각도를 사람이 읽을 수 있는 값으로 되돌리는 길입니다.
+    const RAD2DEG : f32 = 57.295776;
+    /// @brief_en Half a turn in radians — the ratio of a circle's circumference to its diameter.
+    /// @brief_es Media vuelta en radianes: la razón entre la circunferencia de un círculo y su diámetro.
+    /// @brief_pt Meia volta em radianos — a razão entre a circunferência de um círculo e seu diâmetro.
+    /// @brief_fr Un demi-tour en radians — le rapport de la circonférence d'un cercle à son diamètre.
+    /// @brief_it Mezzo giro in radianti: il rapporto fra la circonferenza di un cerchio e il suo diametro.
+    /// @brief_de Eine halbe Umdrehung im Bogenmaß — das Verhältnis von Kreisumfang zu Durchmesser.
+    /// @brief_ru Половина оборота в радианах — отношение длины окружности к её диаметру.
+    /// @brief_zh 弧度制下的半周 —— 即圆周长与直径之比。
+    /// @brief_ja ラジアンでの半回転。円周の長さと直径の比です。
+    /// @brief_ko 라디안으로 반 바퀴 — 원둘레와 지름의 비율입니다.
+    const PI      : f32 = 3.1415927;
+    /// @brief_en A full turn in radians. `rand(0.0, TAU)` is the idiom for a random angle around a circle.
+    /// @brief_es Una vuelta completa en radianes. `rand(0.0, TAU)` es el modismo para un ángulo aleatorio alrededor de un círculo.
+    /// @brief_pt Uma volta completa em radianos. `rand(0.0, TAU)` é o idioma para um ângulo aleatório em torno de um círculo.
+    /// @brief_fr Un tour complet en radians. `rand(0.0, TAU)` est l'idiome pour un angle aléatoire autour d'un cercle.
+    /// @brief_it Un giro completo in radianti. `rand(0.0, TAU)` è l'idioma per un angolo casuale attorno a un cerchio.
+    /// @brief_de Eine volle Umdrehung im Bogenmaß. `rand(0.0, TAU)` ist die Redewendung für einen zufälligen Winkel rund um einen Kreis.
+    /// @brief_ru Полный оборот в радианах. `rand(0.0, TAU)` — приём для случайного угла по окружности.
+    /// @brief_zh 弧度制下的一整圈。`rand(0.0, TAU)` 是取圆周上随机角度的惯用写法。
+    /// @brief_ja ラジアンでの一回転です。`rand(0.0, TAU)` は円周上のランダムな角度を得る定石です。
+    /// @brief_ko 라디안으로 한 바퀴 전체. `rand(0.0, TAU)`는 원 주위의 임의 각도를 얻는 관용구입니다.
+    const TAU     : f32 = 6.2831855;
+
+    /// @brief_en Convert an angle from degrees to radians.
+    /// @brief_es Convierte un ángulo de grados a radianes.
+    /// @brief_pt Converte um ângulo de graus para radianos.
+    /// @brief_fr Convertit un angle des degrés vers les radians.
+    /// @brief_it Converte un angolo da gradi a radianti.
+    /// @brief_de Wandelt einen Winkel von Grad in Bogenmaß um.
+    /// @brief_ru Переводит угол из градусов в радианы.
+    /// @brief_zh 将角度从度转换为弧度。
+    /// @brief_ja 角度を度からラジアンに変換します。
+    /// @brief_ko 각도를 도에서 라디안으로 바꿉니다.
+    ///
+    /// @param_en d The angle in degrees.
+    /// @param_es d El ángulo en grados.
+    /// @param_pt d O ângulo em graus.
+    /// @param_fr d L'angle en degrés.
+    /// @param_it d L'angolo in gradi.
+    /// @param_de d Der Winkel in Grad.
+    /// @param_ru d Угол в градусах.
+    /// @param_zh d 以度为单位的角度。
+    /// @param_ja d 度単位の角度。
+    /// @param_ko d 도 단위의 각도.
+    ///
+    /// @result_en The same angle in radians.
+    /// @result_es El mismo ángulo en radianes.
+    /// @result_pt O mesmo ângulo em radianos.
+    /// @result_fr Le même angle en radians.
+    /// @result_it Lo stesso angolo in radianti.
+    /// @result_de Derselbe Winkel im Bogenmaß.
+    /// @result_ru Тот же угол в радианах.
+    /// @result_zh 以弧度表示的同一角度。
+    /// @result_ja 同じ角度をラジアンで表したもの。
+    /// @result_ko 라디안으로 나타난 같은 각도.
+    fn deg_to_rad(d: f32) -> f32 { d * DEG2RAD }
+    /// @brief_en Convert an angle from radians to degrees.
+    /// @brief_es Convierte un ángulo de radianes a grados.
+    /// @brief_pt Converte um ângulo de radianos para graus.
+    /// @brief_fr Convertit un angle des radians vers les degrés.
+    /// @brief_it Converte un angolo da radianti a gradi.
+    /// @brief_de Wandelt einen Winkel von Bogenmaß in Grad um.
+    /// @brief_ru Переводит угол из радиан в градусы.
+    /// @brief_zh 将角度从弧度转换为度。
+    /// @brief_ja 角度をラジアンから度に変換します。
+    /// @brief_ko 각도를 라디안에서 도로 바꿉니다.
+    ///
+    /// @param_en r The angle in radians.
+    /// @param_es r El ángulo en radianes.
+    /// @param_pt r O ângulo em radianos.
+    /// @param_fr r L'angle en radians.
+    /// @param_it r L'angolo in radianti.
+    /// @param_de r Der Winkel im Bogenmaß.
+    /// @param_ru r Угол в радианах.
+    /// @param_zh r 以弧度为单位的角度。
+    /// @param_ja r ラジアン単位の角度。
+    /// @param_ko r 라디안 단위의 각도.
+    ///
+    /// @result_en The same angle in degrees.
+    /// @result_es El mismo ángulo en grados.
+    /// @result_pt O mesmo ângulo em graus.
+    /// @result_fr Le même angle en degrés.
+    /// @result_it Lo stesso angolo in gradi.
+    /// @result_de Derselbe Winkel in Grad.
+    /// @result_ru Тот же угол в градусах.
+    /// @result_zh 以度表示的同一角度。
+    /// @result_ja 同じ角度を度で表したもの。
+    /// @result_ko 도로 나타난 같은 각도.
+    fn rad_to_deg(r: f32) -> f32 { r * RAD2DEG }
+
+    // --- ranges -------------------------------------------------------------------------------
+
+    /// Map `x` from the range [lo, hi] onto [0, 1]. Clamped by default.
+    /// @brief_en Map `x` from the range [lo, hi] onto [0, 1]. Clamped by default.
+    /// @brief_es Transforma `x` del rango [lo, hi] al rango [0, 1]. Se recorta por omisión.
+    /// @brief_pt Mapeia `x` do intervalo [lo, hi] para [0, 1]. Recortado por padrão.
+    /// @brief_fr Transforme `x` de l'intervalle [lo, hi] vers [0, 1]. Borné par défaut.
+    /// @brief_it Mappa `x` dall'intervallo [lo, hi] su [0, 1]. Limitato per impostazione predefinita.
+    /// @brief_de Bildet `x` vom Bereich [lo, hi] auf [0, 1] ab. Standardmäßig begrenzt.
+    /// @brief_ru Отображает `x` из диапазона [lo, hi] в [0, 1]. По умолчанию с обрезкой.
+    /// @brief_zh 将 `x` 从 [lo, hi] 区间映射到 [0, 1]。默认会截断。
+    /// @brief_ja `x` を [lo, hi] の範囲から [0, 1] に対応付けます。既定ではクランプされます。
+    /// @brief_ko `x`를 [lo, hi] 범위에서 [0, 1]로 대응시킵니다. 기본적으로 잘립니다.
+    ///
+    /// @param_en x The value to map.
+    /// @param_es x El valor que se transforma.
+    /// @param_pt x O valor a mapear.
+    /// @param_fr x La valeur à transformer.
+    /// @param_it x Il valore da mappare.
+    /// @param_de x Der abzubildende Wert.
+    /// @param_ru x Отображаемое значение.
+    /// @param_zh x 要映射的值。
+    /// @param_ja x 対応付ける値。
+    /// @param_ko x 대응시킬 값.
+    ///
+    /// @param_en lo The value that maps to 0.
+    /// @param_es lo El valor que se aplica a 0.
+    /// @param_pt lo O valor que corresponde a 0.
+    /// @param_fr lo La valeur qui correspond à 0.
+    /// @param_it lo Il valore che corrisponde a 0.
+    /// @param_de lo Der Wert, der auf 0 abgebildet wird.
+    /// @param_ru lo Значение, которое отображается в 0.
+    /// @param_zh lo 映射为 0 的那个值。
+    /// @param_ja lo 0 に対応する値。
+    /// @param_ko lo 0으로 대응되는 값.
+    ///
+    /// @param_en hi The value that maps to 1.
+    /// @param_es hi El valor que se aplica a 1.
+    /// @param_pt hi O valor que corresponde a 1.
+    /// @param_fr hi La valeur qui correspond à 1.
+    /// @param_it hi Il valore che corrisponde a 1.
+    /// @param_de hi Der Wert, der auf 1 abgebildet wird.
+    /// @param_ru hi Значение, которое отображается в 1.
+    /// @param_zh hi 映射为 1 的那个值。
+    /// @param_ja hi 1 に対応する値。
+    /// @param_ko hi 1로 대응되는 값.
+    ///
+    /// @param_en clamped Whether to hold the result inside [0, 1]. False lets it run past either end.
+    /// @param_es clamped Si el resultado se mantiene dentro de [0, 1]. Falso lo deja salirse por cualquiera de los extremos.
+    /// @param_pt clamped Se o resultado é mantido dentro de [0, 1]. Falso o deixa passar de qualquer das pontas.
+    /// @param_fr clamped Si le résultat reste dans [0, 1]. Faux le laisse dépasser de part et d'autre.
+    /// @param_it clamped Se il risultato resta dentro [0, 1]. Falso lo lascia uscire da entrambi i lati.
+    /// @param_de clamped Ob das Ergebnis in [0, 1] gehalten wird. Falsch lässt es über beide Enden hinauslaufen.
+    /// @param_ru clamped Держать ли результат внутри [0, 1]. Ложь позволяет ему выйти за любой из краёв.
+    /// @param_zh clamped 是否将结果限制在 [0, 1] 内。为假时允许它超出两端。
+    /// @param_ja clamped 結果を [0, 1] に収めるかどうか。偽なら両端の外側まで伸びます。
+    /// @param_ko clamped 결과를 [0, 1] 안에 가둘 지 여부. 거줴6이면 양 끝 밖까지 나갑니다.
+    ///
+    /// @result_en Where `x` sits between `lo` and `hi`.
+    /// @result_es Dónde cae `x` entre `lo` y `hi`.
+    /// @result_pt Onde `x` cai entre `lo` e `hi`.
+    /// @result_fr Où `x` se situe entre `lo` et `hi`.
+    /// @result_it Dove cade `x` fra `lo` e `hi`.
+    /// @result_de Wo `x` zwischen `lo` und `hi` liegt.
+    /// @result_ru Где `x` находится между `lo` и `hi`.
+    /// @result_zh `x` 在 `lo` 与 `hi` 之间的位置。
+    /// @result_ja `lo` と `hi` の間で `x` がどこにあるか。
+    /// @result_ko `lo`와 `hi` 사이에서 `x`가 있는 위치.
+    fn remap(x: f32, lo: f32, hi: f32, clamped: bool = true) -> f32 {
+        let t : f32 = (x - lo) * rcp(hi - lo);
+        select(clamped, saturate(t), t)
+    }
+
+    /// The unclamped inverse-lerp — where `x` sits between `lo` and `hi`.
+    /// @brief_en The unclamped inverse-lerp — where `x` sits between `lo` and `hi`, allowed to run past either end.
+    /// @brief_es El lerp inverso sin recortar: dónde cae `x` entre `lo` y `hi`, con permiso para salirse por cualquiera de los extremos.
+    /// @brief_pt O lerp inverso sem recorte — onde `x` cai entre `lo` e `hi`, com permissão para passar de qualquer das pontas.
+    /// @brief_fr L'interpolation inverse non bornée — où `x` se situe entre `lo` et `hi`, avec le droit de dépasser de part et d'autre.
+    /// @brief_it Il lerp inverso non limitato: dove cade `x` fra `lo` e `hi`, con la libertà di uscire da entrambi i lati.
+    /// @brief_de Die unbegrenzte inverse Interpolation — wo `x` zwischen `lo` und `hi` liegt, mit der Freiheit, über beide Enden hinauszulaufen.
+    /// @brief_ru Необрезанная обратная интерполяция — где `x` между `lo` и `hi`, с правом выйти за любой из краёв.
+    /// @brief_zh 不截断的反向插值 —— `x` 在 `lo` 与 `hi` 之间的位置，允许超出两端。
+    /// @brief_ja クランプしない逆補間です。`lo` と `hi` の間で `x` がどこにあるかを返し、両端の外側にも伸びます。
+    /// @brief_ko 자르지 않는 역 보간입니다. `lo`와 `hi` 사이에서 `x`가 어디인지를 돌려주며 양 끝 밖으로도 나갑니다.
+    ///
+    /// @param_en x The value to map.
+    /// @param_es x El valor que se transforma.
+    /// @param_pt x O valor a mapear.
+    /// @param_fr x La valeur à transformer.
+    /// @param_it x Il valore da mappare.
+    /// @param_de x Der abzubildende Wert.
+    /// @param_ru x Отображаемое значение.
+    /// @param_zh x 要映射的值。
+    /// @param_ja x 対応付ける値。
+    /// @param_ko x 대응시킬 값.
+    ///
+    /// @param_en lo The value that maps to 0.
+    /// @param_es lo El valor que se aplica a 0.
+    /// @param_pt lo O valor que corresponde a 0.
+    /// @param_fr lo La valeur qui correspond à 0.
+    /// @param_it lo Il valore che corrisponde a 0.
+    /// @param_de lo Der Wert, der auf 0 abgebildet wird.
+    /// @param_ru lo Значение, которое отображается в 0.
+    /// @param_zh lo 映射为 0 的那个值。
+    /// @param_ja lo 0 に対応する値。
+    /// @param_ko lo 0으로 대응되는 값.
+    ///
+    /// @param_en hi The value that maps to 1.
+    /// @param_es hi El valor que se aplica a 1.
+    /// @param_pt hi O valor que corresponde a 1.
+    /// @param_fr hi La valeur qui correspond à 1.
+    /// @param_it hi Il valore che corrisponde a 1.
+    /// @param_de hi Der Wert, der auf 1 abgebildet wird.
+    /// @param_ru hi Значение, которое отображается в 1.
+    /// @param_zh hi 映射为 1 的那个值。
+    /// @param_ja hi 1 に対応する値。
+    /// @param_ko hi 1로 대응되는 값.
+    ///
+    /// @result_en The unclamped position, which may be below 0 or above 1.
+    /// @result_es La posición sin recortar, que puede quedar por debajo de 0 o por encima de 1.
+    /// @result_pt A posição sem recorte, que pode ficar abaixo de 0 ou acima de 1.
+    /// @result_fr La position non bornée, qui peut être inférieure à 0 ou supérieure à 1.
+    /// @result_it La posizione non limitata, che può stare sotto 0 o sopra 1.
+    /// @result_de Die unbegrenzte Position, die unter 0 oder über 1 liegen kann.
+    /// @result_ru Необрезанное положение, которое может быть меньше 0 или больше 1.
+    /// @result_zh 未截断的位置，可能小于 0 或大于 1。
+    /// @result_ja クランプされていない位置。0 未満や 1 超えになりうます。
+    /// @result_ko 잘리지 않은 위치. 0보다 작거나 1보다 클 수 있습니다.
+    fn inv_lerp(x: f32, lo: f32, hi: f32) -> f32 { (x - lo) * rcp(hi - lo) }
+
+    /// Map `x` from [in_lo, in_hi] onto [out_lo, out_hi].
+    /// @brief_en Map `x` from [in_lo, in_hi] onto [out_lo, out_hi] — the general two-range remap.
+    /// @brief_es Transforma `x` de [in_lo, in_hi] a [out_lo, out_hi]: el remapeo general entre dos rangos.
+    /// @brief_pt Mapeia `x` de [in_lo, in_hi] para [out_lo, out_hi] — o remapeamento geral entre dois intervalos.
+    /// @brief_fr Transforme `x` de [in_lo, in_hi] vers [out_lo, out_hi] — le remappage général entre deux intervalles.
+    /// @brief_it Mappa `x` da [in_lo, in_hi] su [out_lo, out_hi]: il rimappamento generale fra due intervalli.
+    /// @brief_de Bildet `x` von [in_lo, in_hi] auf [out_lo, out_hi] ab — die allgemeine Umbildung zwischen zwei Bereichen.
+    /// @brief_ru Отображает `x` из [in_lo, in_hi] в [out_lo, out_hi] — общее переотображение между двумя диапазонами.
+    /// @brief_zh 将 `x` 从 [in_lo, in_hi] 映射到 [out_lo, out_hi] —— 两个区间之间的通用重映射。
+    /// @brief_ja `x` を [in_lo, in_hi] から [out_lo, out_hi] に対応付けます。2 つの範囲間の一般的な再対応付けです。
+    /// @brief_ko `x`를 [in_lo, in_hi]에서 [out_lo, out_hi]로 대응시킵니다. 두 범위 사이의 일반적인 재대응입니다.
+    ///
+    /// @param_en x The value to map.
+    /// @param_es x El valor que se transforma.
+    /// @param_pt x O valor a mapear.
+    /// @param_fr x La valeur à transformer.
+    /// @param_it x Il valore da mappare.
+    /// @param_de x Der abzubildende Wert.
+    /// @param_ru x Отображаемое значение.
+    /// @param_zh x 要映射的值。
+    /// @param_ja x 対応付ける値。
+    /// @param_ko x 대응시킬 값.
+    ///
+    /// @param_en in_lo The input value that maps to `out_lo`.
+    /// @param_es in_lo El valor de entrada que se aplica a `out_lo`.
+    /// @param_pt in_lo O valor de entrada que corresponde a `out_lo`.
+    /// @param_fr in_lo La valeur d'entrée qui correspond à `out_lo`.
+    /// @param_it in_lo Il valore d'ingresso che corrisponde a `out_lo`.
+    /// @param_de in_lo Der Eingabewert, der auf `out_lo` abgebildet wird.
+    /// @param_ru in_lo Входное значение, отображаемое в `out_lo`.
+    /// @param_zh in_lo 映射到 `out_lo` 的输入值。
+    /// @param_ja in_lo `out_lo` に対応する入力値。
+    /// @param_ko in_lo `out_lo`에 대응하는 입력값.
+    ///
+    /// @param_en in_hi The input value that maps to `out_hi`.
+    /// @param_es in_hi El valor de entrada que se aplica a `out_hi`.
+    /// @param_pt in_hi O valor de entrada que corresponde a `out_hi`.
+    /// @param_fr in_hi La valeur d'entrée qui correspond à `out_hi`.
+    /// @param_it in_hi Il valore d'ingresso che corrisponde a `out_hi`.
+    /// @param_de in_hi Der Eingabewert, der auf `out_hi` abgebildet wird.
+    /// @param_ru in_hi Входное значение, отображаемое в `out_hi`.
+    /// @param_zh in_hi 映射到 `out_hi` 的输入值。
+    /// @param_ja in_hi `out_hi` に対応する入力値。
+    /// @param_ko in_hi `out_hi`에 대응하는 입력값.
+    ///
+    /// @param_en out_lo What the low end becomes.
+    /// @param_es out_lo En qué se convierte el extremo bajo.
+    /// @param_pt out_lo No que a ponta baixa se torna.
+    /// @param_fr out_lo Ce que devient l'extrémité basse.
+    /// @param_it out_lo In che cosa diventa l'estremo basso.
+    /// @param_de out_lo Was aus dem unteren Ende wird.
+    /// @param_ru out_lo Во что превращается нижний край.
+    /// @param_zh out_lo 低端最终变成什么。
+    /// @param_ja out_lo 下端が何になるか。
+    /// @param_ko out_lo 아래쪽 끝이 무엇이 되는지.
+    ///
+    /// @param_en out_hi What the high end becomes.
+    /// @param_es out_hi En qué se convierte el extremo alto.
+    /// @param_pt out_hi No que a ponta alta se torna.
+    /// @param_fr out_hi Ce que devient l'extrémité haute.
+    /// @param_it out_hi In che cosa diventa l'estremo alto.
+    /// @param_de out_hi Was aus dem oberen Ende wird.
+    /// @param_ru out_hi Во что превращается верхний край.
+    /// @param_zh out_hi 高端最终变成什么。
+    /// @param_ja out_hi 上端が何になるか。
+    /// @param_ko out_hi 위쪽 끝이 무엇이 되는지.
+    ///
+    /// @param_en clamped Whether to hold the result inside the output range.
+    /// @param_es clamped Si el resultado se mantiene dentro del rango de salida.
+    /// @param_pt clamped Se o resultado é mantido dentro do intervalo de saída.
+    /// @param_fr clamped Si le résultat reste dans l'intervalle de sortie.
+    /// @param_it clamped Se il risultato resta dentro l'intervallo di uscita.
+    /// @param_de clamped Ob das Ergebnis im Ausgabebereich gehalten wird.
+    /// @param_ru clamped Держать ли результат внутри выходного диапазона.
+    /// @param_zh clamped 是否将结果限制在输出区间内。
+    /// @param_ja clamped 結果を出力範囲に収めるかどうか。
+    /// @param_ko clamped 결과를 출력 범위 안에 가둘 지 여부.
+    ///
+    /// @result_en The remapped value.
+    /// @result_es El valor remapeado.
+    /// @result_pt O valor remapeado.
+    /// @result_fr La valeur remappée.
+    /// @result_it Il valore rimappato.
+    /// @result_de Der umgebildete Wert.
+    /// @result_ru Переотображённое значение.
+    /// @result_zh 重映射后的值。
+    /// @result_ja 再対応付けされた値。
+    /// @result_ko 재대응된 값.
+    fn remap_range(x: f32, in_lo: f32, in_hi: f32, out_lo: f32, out_hi: f32, clamped: bool = true) -> f32 {
+        lerp(out_lo, out_hi, remap(x, in_lo, in_hi, clamped = clamped))
+    }
+
+    /// @brief_en Hold a value inside [0, 1].
+    /// @brief_es Mantiene un valor dentro de [0, 1].
+    /// @brief_pt Mantém um valor dentro de [0, 1].
+    /// @brief_fr Maintient une valeur dans [0, 1].
+    /// @brief_it Mantiene un valore dentro [0, 1].
+    /// @brief_de Hält einen Wert in [0, 1].
+    /// @brief_ru Удерживает значение внутри [0, 1].
+    /// @brief_zh 将一个值限制在 [0, 1] 内。
+    /// @brief_ja 値を [0, 1] の範囲に収めます。
+    /// @brief_ko 값을 [0, 1] 안에 가둘다.
+    ///
+    /// @param_en x The value to map.
+    /// @param_es x El valor que se transforma.
+    /// @param_pt x O valor a mapear.
+    /// @param_fr x La valeur à transformer.
+    /// @param_it x Il valore da mappare.
+    /// @param_de x Der abzubildende Wert.
+    /// @param_ru x Отображаемое значение.
+    /// @param_zh x 要映射的值。
+    /// @param_ja x 対応付ける値。
+    /// @param_ko x 대응시킬 값.
+    ///
+    /// @result_en The value, clamped.
+    /// @result_es El valor, recortado.
+    /// @result_pt O valor, recortado.
+    /// @result_fr La valeur, bornée.
+    /// @result_it Il valore, limitato.
+    /// @result_de Der begrenzte Wert.
+    /// @result_ru Значение после обрезки.
+    /// @result_zh 截断后的值。
+    /// @result_ja クランプされた値。
+    /// @result_ko 잘린 값.
+    fn clamp01(x: f32) -> f32 { saturate(x) }
+
+    /// Hermite smoothstep over [e0, e1].
+    /// @brief_en Hermite smoothstep over [e0, e1] — a ramp whose slope is zero at both ends, so it starts and stops without a visible corner.
+    /// @brief_es Suavizado de Hermite sobre [e0, e1]: una rampa cuya pendiente es cero en ambos extremos, así que arranca y se detiene sin una esquina visible.
+    /// @brief_pt Suavização de Hermite sobre [e0, e1] — uma rampa cuja inclinação é zero nas duas pontas, então começa e para sem um canto visível.
+    /// @brief_fr Adoucissement de Hermite sur [e0, e1] — une rampe dont la pente est nulle aux deux extrémités, elle démarre et s'arrête donc sans angle visible.
+    /// @brief_it Attenuazione di Hermite su [e0, e1]: una rampa la cui pendenza è nulla a entrambe le estremità, quindi parte e si ferma senza spigoli visibili.
+    /// @brief_de Hermite-Glättung über [e0, e1] — eine Rampe, deren Steigung an beiden Enden null ist, die also ohne sichtbare Ecke anfängt und aufhört.
+    /// @brief_ru Сглаживание Эрмита на [e0, e1] — пандус с нулевым наклоном на обоих концах, так что он начинается и заканчивается без заметного излома.
+    /// @brief_zh 在 [e0, e1] 上的 Hermite 平滑过渡 —— 它在两端的斜率都为零，因此起止都看不到折角。
+    /// @brief_ja [e0, e1] 上のエルミートスムースステップです。両端で傾きがゼロになるため、始まりも終わりも角が見えません。
+    /// @brief_ko [e0, e1] 구간의 에르미트 스무스스텝입니다. 양 끝에서 기울기가 0이므로 시작과 끝에 각이 보이지 않습니다.
+    ///
+    /// @param_en e0 Where the ramp starts.
+    /// @param_es e0 Donde empieza la rampa.
+    /// @param_pt e0 Onde a rampa começa.
+    /// @param_fr e0 Où la rampe commence.
+    /// @param_it e0 Dove inizia la rampa.
+    /// @param_de e0 Wo die Rampe beginnt.
+    /// @param_ru e0 Где начинается пандус.
+    /// @param_zh e0 过渡开始的位置。
+    /// @param_ja e0 ランプが始まる位置。
+    /// @param_ko e0 경사가 시작하는 지점.
+    ///
+    /// @param_en e1 Where the ramp finishes.
+    /// @param_es e1 Donde acaba la rampa.
+    /// @param_pt e1 Onde a rampa termina.
+    /// @param_fr e1 Où la rampe s'achève.
+    /// @param_it e1 Dove finisce la rampa.
+    /// @param_de e1 Wo die Rampe endet.
+    /// @param_ru e1 Где заканчивается пандус.
+    /// @param_zh e1 过渡结束的位置。
+    /// @param_ja e1 ランプが終わる位置。
+    /// @param_ko e1 경사가 끝나는 지점.
+    ///
+    /// @param_en x The value to map.
+    /// @param_es x El valor que se transforma.
+    /// @param_pt x O valor a mapear.
+    /// @param_fr x La valeur à transformer.
+    /// @param_it x Il valore da mappare.
+    /// @param_de x Der abzubildende Wert.
+    /// @param_ru x Отображаемое значение.
+    /// @param_zh x 要映射的值。
+    /// @param_ja x 対応付ける値。
+    /// @param_ko x 대응시킬 값.
+    ///
+    /// @result_en The smoothed value, 0 to 1.
+    /// @result_es El valor suavizado, de 0 a 1.
+    /// @result_pt O valor suavizado, de 0 a 1.
+    /// @result_fr La valeur adoucie, de 0 à 1.
+    /// @result_it Il valore addolcito, da 0 a 1.
+    /// @result_de Der geglättete Wert von 0 bis 1.
+    /// @result_ru Сглаженное значение от 0 до 1.
+    /// @result_zh 平滑后的值，0 到 1。
+    /// @result_ja 滑らかにされた値。0 から 1 です。
+    /// @result_ko 부드럽게 만든 값. 0에서 1 사이입니다.
+    fn smoothstep(e0: f32, e1: f32, x: f32) -> f32 {
+        let t : f32 = remap(x, e0, e1);
+        t * t * (3.0 - 2.0 * t)
+    }
+
+    // --- generic -------------------------------------------------------------------------------
+
+    /// Linear blend, for any float scalar or vector. `t` is a scalar and broadcasts.
+    /// @brief_en Linear blend, for any float scalar or vector. `t` is a scalar and broadcasts, and is NOT clamped — pass it through `clamp01` first if it might run out of range.
+    /// @brief_es Mezcla lineal, para cualquier escalar o vector de coma flotante. `t` es escalar y se difunde, y NO se recorta: pásalo antes por `clamp01` si puede salirse del rango.
+    /// @brief_pt Mistura linear, para qualquer escalar ou vetor de ponto flutuante. `t` é escalar e se difunde, e NÃO é recortado — passe-o antes por `clamp01` se ele puder sair do intervalo.
+    /// @brief_fr Mélange linéaire, pour tout scalaire ou vecteur flottant. `t` est scalaire et se diffuse, et n'est PAS borné — passez-le d'abord par `clamp01` s'il risque de sortir de l'intervalle.
+    /// @brief_it Fusione lineare, per qualsiasi scalare o vettore in virgola mobile. `t` è scalare e si diffonde, e NON viene limitato: passalo prima per `clamp01` se può uscire dall'intervallo.
+    /// @brief_de Lineare Überblendung, für jeden Gleitkommaskalar oder -vektor. `t` ist skalar und wird gestreut und wird NICHT begrenzt — schicke es zuerst durch `clamp01`, falls es aus dem Bereich laufen kann.
+    /// @brief_ru Линейное смешение для любого вещественного скаляра или вектора. `t` — скаляр, он размножается по ланам и НЕ обрезается: пропустите его сначала через `clamp01`, если он может выйти за пределы.
+    /// @brief_zh 线性混合，适用于任意浮点标量或向量。`t` 是标量并会广播，且不会被截断 —— 如果它可能超出范围，请先用 `clamp01` 处理。
+    /// @brief_ja 浮動小数点のスカラーやベクトルに使える線形補間です。`t` はスカラーでブロードキャストされ、クランプはされません。範囲外になり得るなら先に `clamp01` を通してください。
+    /// @brief_ko 부동소수점 스칼라나 벡터 모두에 쓰는 선형 보간입니다. `t`는 스칼라로 브로드캐스트되며 잘리지 않습니다. 범위를 벗어날 수 있다면 먼저 `clamp01`을 거치세요.
+    ///
+    /// @param_en a The value at t = 0.
+    /// @param_es a El valor en t = 0.
+    /// @param_pt a O valor em t = 0.
+    /// @param_fr a La valeur à t = 0.
+    /// @param_it a Il valore a t = 0.
+    /// @param_de a Der Wert bei t = 0.
+    /// @param_ru a Значение при t = 0.
+    /// @param_zh a t = 0 时的值。
+    /// @param_ja a t = 0 のときの値。
+    /// @param_ko a t = 0일 때의 값.
+    ///
+    /// @param_en b The value at t = 1.
+    /// @param_es b El valor en t = 1.
+    /// @param_pt b O valor em t = 1.
+    /// @param_fr b La valeur à t = 1.
+    /// @param_it b Il valore a t = 1.
+    /// @param_de b Der Wert bei t = 1.
+    /// @param_ru b Значение при t = 1.
+    /// @param_zh b t = 1 时的值。
+    /// @param_ja b t = 1 のときの値。
+    /// @param_ko b t = 1일 때의 값.
+    ///
+    /// @param_en t Where between them to land.
+    /// @param_es t Dónde caer entre ambos.
+    /// @param_pt t Onde cair entre os dois.
+    /// @param_fr t Où se placer entre les deux.
+    /// @param_it t Dove cadere fra i due.
+    /// @param_de t Wo dazwischen gelandet wird.
+    /// @param_ru t Где именно между ними оказаться.
+    /// @param_zh t 落在两者之间的位置。
+    /// @param_ja t 2 つの間のどこに置くか。
+    /// @param_ko t 둘 사이의 어느 위치에 둘지.
+    ///
+    /// @result_en The blended value.
+    /// @result_es El valor mezclado.
+    /// @result_pt O valor misturado.
+    /// @result_fr La valeur mélangée.
+    /// @result_it Il valore fuso.
+    /// @result_de Der überblendete Wert.
+    /// @result_ru Смешанное значение.
+    /// @result_zh 混合后的值。
+    /// @result_ja 混ぜ合わされた値。
+    /// @result_ko 섞인 값.
+    fn blend<T: float>(a: T, b: T, t: f32) -> T { a + (b - a) * t }
+
+    /// Move `cur` toward `target` by a saturated `rate` — the standard per-frame ease.
+    /// @brief_en Move `cur` toward `target` by a saturated `rate` — the standard per-frame ease. Frame-rate dependent by construction: multiply `rate` by `scene.dt` if you want it not to be.
+    /// @brief_es Mueve `cur` hacia `target` según un `rate` saturado: la suavización por fotograma habitual. Depende de la tasa de fotogramas por construcción: multiplica `rate` por `scene.dt` si no quieres que lo haga.
+    /// @brief_pt Move `cur` em direção a `target` por um `rate` saturado — a suavização por quadro habitual. Depende da taxa de quadros por construção: multiplique `rate` por `scene.dt` se não quiser isso.
+    /// @brief_fr Déplace `cur` vers `target` d'un `rate` saturé — l'adoucissement par image habituel. Dépendant de la fréquence d'images par construction : multipliez `rate` par `scene.dt` si vous n'en voulez pas.
+    /// @brief_it Sposta `cur` verso `target` di un `rate` saturato: l'attenuazione per fotogramma abituale. Dipende dal frame rate per costruzione: moltiplica `rate` per `scene.dt` se non lo vuoi.
+    /// @brief_de Bewegt `cur` um eine gesättigte `rate` auf `target` zu — die übliche Glättung je Bild. Bauartbedingt bildratenabhängig: multipliziere `rate` mit `scene.dt`, wenn sie es nicht sein soll.
+    /// @brief_ru Двигает `cur` к `target` на насыщенную `rate` — обычное покадровое сглаживание. По своей природе зависит от частоты кадров: умножьте `rate` на `scene.dt`, если хотите избавиться от этого.
+    /// @brief_zh 以饱和后的 `rate` 将 `cur` 推向 `target` —— 常见的逐帧缓动。它天然依赖帧率：若不希望如此，请把 `rate` 乘上 `scene.dt`。
+    /// @brief_ja 飽和させた `rate` だけ `cur` を `target` に近づけます。フレームごとの定番のイージングです。仕組み上フレームレートに依存するため、依存させたくなければ `rate` に `scene.dt` を掛けてください。
+    /// @brief_ko 포화된 `rate`만큼 `cur`를 `target` 쪽으로 이동시킵니다. 프레임마다 쓰는 전형적인 이징입니다. 구조상 프레임레이트에 의존하므로, 그러기 싫다면 `rate`에 `scene.dt`를 곱하세요.
+    ///
+    /// @param_en cur Where the value is now.
+    /// @param_es cur Dónde está el valor ahora.
+    /// @param_pt cur Onde o valor está agora.
+    /// @param_fr cur Où la valeur se trouve maintenant.
+    /// @param_it cur Dove si trova ora il valore.
+    /// @param_de cur Wo der Wert gerade ist.
+    /// @param_ru cur Где значение сейчас.
+    /// @param_zh cur 当前的值在哪里。
+    /// @param_ja cur 値が今どこにあるか。
+    /// @param_ko cur 값이 지금 어디에 있는지.
+    ///
+    /// @param_en target Where it is heading.
+    /// @param_es target Hacia dónde va.
+    /// @param_pt target Para onde ele vai.
+    /// @param_fr target Vers où elle se dirige.
+    /// @param_it target Verso dove sta andando.
+    /// @param_de target Wohin er strebt.
+    /// @param_ru target Куда оно стремится.
+    /// @param_zh target 它要前往的目标。
+    /// @param_ja target どこへ向かっているか。
+    /// @param_ko target 어디로 향하는지.
+    ///
+    /// @param_en rate How much of the remaining gap to close this call. Saturated, so 1 arrives at once.
+    /// @param_es rate Qué parte de la distancia restante se cubre en esta llamada. Se satura, así que 1 llega de golpe.
+    /// @param_pt rate Que parte da distância restante se cobre nesta chamada. É saturado, então 1 chega de uma vez.
+    /// @param_fr rate Quelle part de l'écart restant est comblée à cet appel. Saturé : 1 arrive d'un coup.
+    /// @param_it rate Quanta parte del divario restante si copre in questa chiamata. È saturato, quindi 1 arriva subito.
+    /// @param_de rate Wie viel der verbleibenden Lücke dieser Aufruf schließt. Gesättigt, 1 kommt also sofort an.
+    /// @param_ru rate Какую часть оставшегося разрыва закрыть за этот вызов. Насыщается, так что 1 прибывает сразу.
+    /// @param_zh rate 本次调用要补上剩余差距的多少。会被 saturate，因此 1 表示一步到位。
+    /// @param_ja rate 今回の呼び出しで残りの差をどれだけ埋めるか。飽和されるので 1 なら一気に到達します。
+    /// @param_ko rate 이번 호출에서 남은 차이를 얼마나 즐일지. 포화되므로 1이면 한 번에 도달합니다.
+    ///
+    /// @result_en The value after one step.
+    /// @result_es El valor tras un paso.
+    /// @result_pt O valor após um passo.
+    /// @result_fr La valeur après un pas.
+    /// @result_it Il valore dopo un passo.
+    /// @result_de Der Wert nach einem Schritt.
+    /// @result_ru Значение после одного шага.
+    /// @result_zh 迈出一步之后的值。
+    /// @result_ja 1 ステップ後の値。
+    /// @result_ko 한 단계 진행한 뒤의 값.
+    fn approach<T: float>(cur: T, target: T, rate: f32) -> T { cur + (target - cur) * saturate(rate) }
+
+    /// Component-wise clamp to [lo, hi], for any float scalar or vector.
+    /// @brief_en Component-wise clamp to [lo, hi], for any float scalar or vector.
+    /// @brief_es Recorte componente a componente a [lo, hi], para cualquier escalar o vector de coma flotante.
+    /// @brief_pt Recorte componente a componente para [lo, hi], para qualquer escalar ou vetor de ponto flutuante.
+    /// @brief_fr Bornage composante par composante à [lo, hi], pour tout scalaire ou vecteur flottant.
+    /// @brief_it Limitazione componente per componente a [lo, hi], per qualsiasi scalare o vettore in virgola mobile.
+    /// @brief_de Komponentenweise Begrenzung auf [lo, hi], für jeden Gleitkommaskalar oder -vektor.
+    /// @brief_ru Покомпонентное ограничение до [lo, hi] для любого вещественного скаляра или вектора.
+    /// @brief_zh 按分量截断到 [lo, hi]，适用于任意浮点标量或向量。
+    /// @brief_ja 任意の浮動小数点スカラー・ベクトルに対し、成分ごとに [lo, hi] へクランプします。
+    /// @brief_ko 임의의 부동소수점 스칼라나 벡터에 대해 성분별로 [lo, hi]로 자릅니다.
+    ///
+    /// @param_en v The value to clamp.
+    /// @param_es v El valor que se recorta.
+    /// @param_pt v O valor a recortar.
+    /// @param_fr v La valeur à borner.
+    /// @param_it v Il valore da limitare.
+    /// @param_de v Der zu begrenzende Wert.
+    /// @param_ru v Ограничиваемое значение.
+    /// @param_zh v 要截断的值。
+    /// @param_ja v クランプする値。
+    /// @param_ko v 자를 값.
+    ///
+    /// @param_en lo The floor, per component.
+    /// @param_es lo El suelo, por componente.
+    /// @param_pt lo O piso, por componente.
+    /// @param_fr lo Le plancher, par composante.
+    /// @param_it lo Il pavimento, per componente.
+    /// @param_de lo Die Untergrenze, je Komponente.
+    /// @param_ru lo Нижняя граница по каждой компоненте.
+    /// @param_zh lo 每个分量的下限。
+    /// @param_ja lo 成分ごとの下限。
+    /// @param_ko lo 성분별 하한.
+    ///
+    /// @param_en hi The ceiling, per component.
+    /// @param_es hi El techo, por componente.
+    /// @param_pt hi O teto, por componente.
+    /// @param_fr hi Le plafond, par composante.
+    /// @param_it hi Il soffitto, per componente.
+    /// @param_de hi Die Obergrenze, je Komponente.
+    /// @param_ru hi Верхняя граница по каждой компоненте.
+    /// @param_zh hi 每个分量的上限。
+    /// @param_ja hi 成分ごとの上限。
+    /// @param_ko hi 성분별 상한.
+    ///
+    /// @result_en The clamped value.
+    /// @result_es El valor recortado.
+    /// @result_pt O valor recortado.
+    /// @result_fr La valeur bornée.
+    /// @result_it Il valore limitato.
+    /// @result_de Der begrenzte Wert.
+    /// @result_ru Ограниченное значение.
+    /// @result_zh 截断后的值。
+    /// @result_ja クランプされた値。
+    /// @result_ko 잘린 값.
+    fn clamp_to<T: float>(v: T, lo: T, hi: T) -> T { min(max(v, lo), hi) }
+
+    // --- guarded arithmetic ---------------------------------------------------------------------
+
+    // NOTE: `select(cond, whenTrue, whenFalse)` — the CONDITION comes first, then the true value.
+    // Both arms are always evaluated (there is no branching), so these guard the *result*, not the
+    // division: `rcp(0)` still executes and yields ±inf, and `select` then discards it.
+
+    /// `1/x`, or `fallback` when `x` is 0 (the engine's `rcp(0)` is ±inf, which propagates as NaN).
+    /// @brief_en `1/x`, or `fallback` when `x` is 0 — the engine's `rcp(0)` is ±inf, which propagates as NaN. Guards the RESULT, not the division: both arms always run.
+    /// @brief_es `1/x`, o `fallback` cuando `x` es 0: el `rcp(0)` del motor es ±inf y se propaga como NaN. Protege el RESULTADO, no la división: ambas ramas se ejecutan siempre.
+    /// @brief_pt `1/x`, ou `fallback` quando `x` é 0 — o `rcp(0)` do motor é ±inf, que se propaga como NaN. Protege o RESULTADO, não a divisão: os dois ramos sempre rodam.
+    /// @brief_fr `1/x`, ou `fallback` lorsque `x` vaut 0 — le `rcp(0)` du moteur donne ±inf, qui se propage en NaN. Protège le RÉSULTAT, pas la division : les deux branches s'exécutent toujours.
+    /// @brief_it `1/x`, oppure `fallback` quando `x` è 0: il `rcp(0)` del motore è ±inf e si propaga come NaN. Protegge il RISULTATO, non la divisione: entrambi i rami vengono sempre eseguiti.
+    /// @brief_de `1/x`, oder `fallback`, wenn `x` 0 ist — das `rcp(0)` der Engine ist ±inf und breitet sich als NaN aus. Schützt das ERGEBNIS, nicht die Division: beide Zweige laufen immer.
+    /// @brief_ru `1/x` или `fallback`, когда `x` равен 0: `rcp(0)` движка даёт ±inf, который распространяется как NaN. Защищает РЕЗУЛЬТАТ, а не деление: обе ветви выполняются всегда.
+    /// @brief_zh 返回 `1/x`，当 `x` 为 0 时返回 `fallback` —— 引擎的 `rcp(0)` 是 ±inf，会以 NaN 的形式传播。它保护的是结果而非除法：两个分支总是都会求值。
+    /// @brief_ja `1/x` を返し、`x` が 0 のときは `fallback` を返します。エンジンの `rcp(0)` は ±inf で、NaN として伝播します。守っているのは結果であって除算ではなく、両方の分岐が常に評価されます。
+    /// @brief_ko `1/x`을 돌려주고 `x`가 0이면 `fallback`을 돌려줍니다. 엔진의 `rcp(0)`은 ±inf이며 NaN으로 번집니다. 나눗셈이 아니라 결과를 보호하며, 두 가지 모두 항상 계산됩니다.
+    ///
+    /// @param_en x The value to invert.
+    /// @param_es x El valor que se invierte.
+    /// @param_pt x O valor a inverter.
+    /// @param_fr x La valeur à inverser.
+    /// @param_it x Il valore da invertire.
+    /// @param_de x Der zu invertierende Wert.
+    /// @param_ru x Обращаемое значение.
+    /// @param_zh x 要取倒数的值。
+    /// @param_ja x 逆数を取る値。
+    /// @param_ko x 역수를 구할 값.
+    ///
+    /// @param_en fallback What to answer when `x` is exactly 0.
+    /// @param_es fallback Qué responder cuando `x` es exactamente 0.
+    /// @param_pt fallback O que responder quando `x` é exatamente 0.
+    /// @param_fr fallback Que répondre quand `x` vaut exactement 0.
+    /// @param_it fallback Che cosa rispondere quando `x` è esattamente 0.
+    /// @param_de fallback Was zu antworten ist, wenn `x` genau 0 ist.
+    /// @param_ru fallback Что ответить, когда `x` ровно 0.
+    /// @param_zh fallback 当 `x` 恰好为 0 时返回什么。
+    /// @param_ja fallback `x` がちょうど 0 のときに返す値。
+    /// @param_ko fallback `x`가 정확히 0일 때 돌려줄 값.
+    ///
+    /// @result_en The reciprocal, or the fallback.
+    /// @result_es El recíproco, o el valor de reserva.
+    /// @result_pt O recíproco, ou o valor de reserva.
+    /// @result_fr L'inverse, ou la valeur de repli.
+    /// @result_it Il reciproco, oppure il valore di riserva.
+    /// @result_de Der Kehrwert oder der Ersatzwert.
+    /// @result_ru Обратная величина или запасное значение.
+    /// @result_zh 倒数，或者那个回退值。
+    /// @result_ja 逆数、またはフォールバック値。
+    /// @result_ko 역수 또는 대체값.
+    fn safe_rcp(x: f32, fallback: f32 = 0.0) -> f32 { select(x == 0.0, fallback, rcp(x)) }
+
+    /// `a/b`, or `fallback` when `b` is 0.
+    /// @brief_en `a/b`, or `fallback` when `b` is 0. Guards the RESULT, not the division — the divide still runs and its ±inf is discarded.
+    /// @brief_es `a/b`, o `fallback` cuando `b` es 0. Protege el RESULTADO, no la división: la división se ejecuta igual y su ±inf se descarta.
+    /// @brief_pt `a/b`, ou `fallback` quando `b` é 0. Protege o RESULTADO, não a divisão — a divisão roda mesmo assim e seu ±inf é descartado.
+    /// @brief_fr `a/b`, ou `fallback` quand `b` vaut 0. Protège le RÉSULTAT, pas la division — la division s'exécute quand même et son ±inf est jeté.
+    /// @brief_it `a/b`, oppure `fallback` quando `b` è 0. Protegge il RISULTATO, non la divisione: la divisione viene comunque eseguita e il suo ±inf viene scartato.
+    /// @brief_de `a/b`, oder `fallback`, wenn `b` 0 ist. Schützt das ERGEBNIS, nicht die Division — die Division läuft trotzdem und ihr ±inf wird verworfen.
+    /// @brief_ru `a/b` или `fallback`, когда `b` равен 0. Защищает РЕЗУЛЬТАТ, а не деление: деление всё равно выполняется, а его ±inf отбрасывается.
+    /// @brief_zh 返回 `a/b`，当 `b` 为 0 时返回 `fallback`。它保护的是结果而非除法 —— 除法照样执行，其 ±inf 会被丢弃。
+    /// @brief_ja `a/b` を返し、`b` が 0 のときは `fallback` を返します。守っているのは結果であって除算ではなく、除算自体は実行され、その ±inf が捨てられます。
+    /// @brief_ko `a/b`를 돌려주고 `b`가 0이면 `fallback`을 돌려줍니다. 나눗셈이 아니라 결과를 보호하며, 나눗셈은 그대로 수행되고 그 ±inf는 버려집니다.
+    ///
+    /// @param_en a The numerator.
+    /// @param_es a El numerador.
+    /// @param_pt a O numerador.
+    /// @param_fr a Le numérateur.
+    /// @param_it a Il numeratore.
+    /// @param_de a Der Zähler.
+    /// @param_ru a Числитель.
+    /// @param_zh a 分子。
+    /// @param_ja a 分子。
+    /// @param_ko a 분자.
+    ///
+    /// @param_en b The denominator.
+    /// @param_es b El denominador.
+    /// @param_pt b O denominador.
+    /// @param_fr b Le dénominateur.
+    /// @param_it b Il denominatore.
+    /// @param_de b Der Nenner.
+    /// @param_ru b Знаменатель.
+    /// @param_zh b 分母。
+    /// @param_ja b 分母。
+    /// @param_ko b 분모.
+    ///
+    /// @param_en fallback What to answer when `b` is exactly 0.
+    /// @param_es fallback Qué responder cuando `b` es exactamente 0.
+    /// @param_pt fallback O que responder quando `b` é exatamente 0.
+    /// @param_fr fallback Que répondre quand `b` vaut exactement 0.
+    /// @param_it fallback Che cosa rispondere quando `b` è esattamente 0.
+    /// @param_de fallback Was zu antworten ist, wenn `b` genau 0 ist.
+    /// @param_ru fallback Что ответить, когда `b` ровно 0.
+    /// @param_zh fallback 当 `b` 恰好为 0 时返回什么。
+    /// @param_ja fallback `b` がちょうど 0 のときに返す値。
+    /// @param_ko fallback `b`가 정확히 0일 때 돌려줄 값.
+    ///
+    /// @result_en The quotient, or the fallback.
+    /// @result_es El cociente, o el valor de reserva.
+    /// @result_pt O quociente, ou o valor de reserva.
+    /// @result_fr Le quotient, ou la valeur de repli.
+    /// @result_it Il quoziente, oppure il valore di riserva.
+    /// @result_de Der Quotient oder der Ersatzwert.
+    /// @result_ru Частное или запасное значение.
+    /// @result_zh 商，或者那个回退值。
+    /// @result_ja 商、またはフォールバック値。
+    /// @result_ko 몫 또는 대체값.
+    fn safe_div(a: f32, b: f32, fallback: f32 = 0.0) -> f32 { select(b == 0.0, fallback, a * rcp(b)) }
+
+    /// `sign(x)`, but returns `zero` exactly at 0 instead of the engine's 0.
+    /// @brief_en `sign(x)`, but returns `zero` exactly at 0 instead of the engine's own answer — for when "neither direction" needs to mean something specific.
+    /// @brief_es `sign(x)`, pero devuelve `zero` exactamente en 0 en lugar de la respuesta propia del motor: para cuando «ninguna dirección» tiene que significar algo concreto.
+    /// @brief_pt `sign(x)`, mas devolve `zero` exatamente em 0 em vez da resposta do próprio motor — para quando «nenhuma direção» precisa significar algo específico.
+    /// @brief_fr `sign(x)`, mais renvoie `zero` exactement en 0 au lieu de la réponse propre du moteur — pour quand « aucune direction » doit vouloir dire quelque chose de précis.
+    /// @brief_it `sign(x)`, ma restituisce `zero` esattamente in 0 invece della risposta del motore stesso: per quando «nessuna direzione» deve significare qualcosa di preciso.
+    /// @brief_de `sign(x)`, gibt aber genau bei 0 `zero` zurück statt der engineeigenen Antwort — für den Fall, dass „keine Richtung“ etwas Bestimmtes heißen soll.
+    /// @brief_ru `sign(x)`, но ровно в нуле возвращает `zero`, а не собственный ответ движка, — на случай, когда «ни туда ни сюда» должно значить что-то определённое.
+    /// @brief_zh 即 `sign(x)`，但在恰好为 0 时返回 `zero` 而不是引擎自己的结果 —— 适用于“无方向”必须有具体含义的场合。
+    /// @brief_ja `sign(x)` と同じですが、ちょうど 0 のときはエンジンの答えではなく `zero` を返します。「どちらでもない」に特定の意味を持たせたいときに使います。
+    /// @brief_ko `sign(x)`와 같지만 정확히 0일 때 엔진의 답 대신 `zero`를 돌려줍니다. "어느 쪽도 아니다"가 특정한 의미를 가져야 할 때 씁니다.
+    ///
+    /// @param_en x The value whose sign is wanted.
+    /// @param_es x El valor cuyo signo se quiere.
+    /// @param_pt x O valor cujo sinal se quer.
+    /// @param_fr x La valeur dont on veut le signe.
+    /// @param_it x Il valore di cui si vuole il segno.
+    /// @param_de x Der Wert, dessen Vorzeichen gesucht ist.
+    /// @param_ru x Значение, знак которого нужен.
+    /// @param_zh x 要取符号的值。
+    /// @param_ja x 符号を知りたい値。
+    /// @param_ko x 부호를 알고 싶은 값.
+    ///
+    /// @param_en zero What to answer exactly at 0.
+    /// @param_es zero Qué responder exactamente en 0.
+    /// @param_pt zero O que responder exatamente em 0.
+    /// @param_fr zero Que répondre exactement en 0.
+    /// @param_it zero Che cosa rispondere esattamente in 0.
+    /// @param_de zero Was genau bei 0 zu antworten ist.
+    /// @param_ru zero Что ответить ровно в нуле.
+    /// @param_zh zero 恰好为 0 时返回什么。
+    /// @param_ja zero ちょうど 0 のときに返す値。
+    /// @param_ko zero 정확히 0일 때 돌려줄 값.
+    ///
+    /// @result_en -1, `zero`, or +1.
+    /// @result_es -1, `zero` o +1.
+    /// @result_pt -1, `zero` ou +1.
+    /// @result_fr -1, `zero` ou +1.
+    /// @result_it -1, `zero` oppure +1.
+    /// @result_de -1, `zero` oder +1.
+    /// @result_ru -1, `zero` или +1.
+    /// @result_zh -1、`zero` 或 +1。
+    /// @result_ja -1、`zero`、または +1。
+    /// @result_ko -1, `zero`, 또는 +1.
+    fn sign_or(x: f32, zero: f32 = 0.0) -> f32 { select(x == 0.0, zero, sign(x)) }
+}
+
+// --- degrees ---------------------------------------------------------------------------------
+
+/// The `radians.*` intrinsic family, in degrees. Mirrors the engine's own dotted naming so
+/// `degrees.sin(78.0)` reads exactly like `radians.sin(1.36)`.
+///
+/// It sits BESIDE `math` rather than inside it for exactly that reason: `math.degrees.sin` no
+/// longer mirrors anything, and the parallel with `radians.` is the whole point of the name.
+namespace degrees {
+    /// @brief_en The sine of an angle given in degrees.
+    /// @brief_es El seno de un ángulo dado en grados.
+    /// @brief_pt O seno de um ângulo dado em graus.
+    /// @brief_fr Le sinus d'un angle donné en degrés.
+    /// @brief_it Il seno di un angolo dato in gradi.
+    /// @brief_de Der Sinus eines in Grad angegebenen Winkels.
+    /// @brief_ru Синус угла, заданного в градусах.
+    /// @brief_zh 以度给出的角度的正弦值。
+    /// @brief_ja 度で与えられた角度のサイン。
+    /// @brief_ko 도로 주어진 각도의 사인.
+    ///
+    /// @param_en x The angle in degrees.
+    /// @param_es x El ángulo en grados.
+    /// @param_pt x O ângulo em graus.
+    /// @param_fr x L'angle en degrés.
+    /// @param_it x L'angolo in gradi.
+    /// @param_de x Der Winkel in Grad.
+    /// @param_ru x Угол в градусах.
+    /// @param_zh x 以度为单位的角度。
+    /// @param_ja x 度単位の角度。
+    /// @param_ko x 도 단위의 각도.
+    ///
+    /// @result_en The sine, -1 to 1.
+    /// @result_es El seno, de -1 a 1.
+    /// @result_pt O seno, de -1 a 1.
+    /// @result_fr Le sinus, de -1 à 1.
+    /// @result_it Il seno, da -1 a 1.
+    /// @result_de Der Sinus, von -1 bis 1.
+    /// @result_ru Синус от -1 до 1.
+    /// @result_zh 正弦值，-1 到 1。
+    /// @result_ja サインの値。-1 から 1 です。
+    /// @result_ko 사인 값. -1에서 1 사이입니다.
+    fn sin(x: f32) -> f32 { radians.sin(x * math.DEG2RAD) }
+    /// @brief_en The cosine of an angle given in degrees.
+    /// @brief_es El coseno de un ángulo dado en grados.
+    /// @brief_pt O cosseno de um ângulo dado em graus.
+    /// @brief_fr Le cosinus d'un angle donné en degrés.
+    /// @brief_it Il coseno di un angolo dato in gradi.
+    /// @brief_de Der Kosinus eines in Grad angegebenen Winkels.
+    /// @brief_ru Косинус угла, заданного в градусах.
+    /// @brief_zh 以度给出的角度的余弦值。
+    /// @brief_ja 度で与えられた角度のコサイン。
+    /// @brief_ko 도로 주어진 각도의 코사인.
+    ///
+    /// @param_en x The angle in degrees.
+    /// @param_es x El ángulo en grados.
+    /// @param_pt x O ângulo em graus.
+    /// @param_fr x L'angle en degrés.
+    /// @param_it x L'angolo in gradi.
+    /// @param_de x Der Winkel in Grad.
+    /// @param_ru x Угол в градусах.
+    /// @param_zh x 以度为单位的角度。
+    /// @param_ja x 度単位の角度。
+    /// @param_ko x 도 단위의 각도.
+    ///
+    /// @result_en The cosine, -1 to 1.
+    /// @result_es El coseno, de -1 a 1.
+    /// @result_pt O cosseno, de -1 a 1.
+    /// @result_fr Le cosinus, de -1 à 1.
+    /// @result_it Il coseno, da -1 a 1.
+    /// @result_de Der Kosinus, von -1 bis 1.
+    /// @result_ru Косинус от -1 до 1.
+    /// @result_zh 余弦值，-1 到 1。
+    /// @result_ja コサインの値。-1 から 1 です。
+    /// @result_ko 코사인 값. -1에서 1 사이입니다.
+    fn cos(x: f32) -> f32 { radians.cos(x * math.DEG2RAD) }
+    /// @brief_en The tangent of an angle given in degrees.
+    /// @brief_es La tangente de un ángulo dado en grados.
+    /// @brief_pt A tangente de um ângulo dado em graus.
+    /// @brief_fr La tangente d'un angle donné en degrés.
+    /// @brief_it La tangente di un angolo dato in gradi.
+    /// @brief_de Der Tangens eines in Grad angegebenen Winkels.
+    /// @brief_ru Тангенс угла, заданного в градусах.
+    /// @brief_zh 以度给出的角度的正切值。
+    /// @brief_ja 度で与えられた角度のタンジェント。
+    /// @brief_ko 도로 주어진 각도의 탄젠트.
+    ///
+    /// @param_en x The angle in degrees.
+    /// @param_es x El ángulo en grados.
+    /// @param_pt x O ângulo em graus.
+    /// @param_fr x L'angle en degrés.
+    /// @param_it x L'angolo in gradi.
+    /// @param_de x Der Winkel in Grad.
+    /// @param_ru x Угол в градусах.
+    /// @param_zh x 以度为单位的角度。
+    /// @param_ja x 度単位の角度。
+    /// @param_ko x 도 단위의 각도.
+    ///
+    /// @result_en The tangent, unbounded near 90 degrees.
+    /// @result_es La tangente, sin cota cerca de 90 grados.
+    /// @result_pt A tangente, sem limite perto de 90 graus.
+    /// @result_fr La tangente, non bornée près de 90 degrés.
+    /// @result_it La tangente, illimitata vicino ai 90 gradi.
+    /// @result_de Der Tangens, unbeschränkt nahe 90 Grad.
+    /// @result_ru Тангенс, неограниченный вблизи 90 градусов.
+    /// @result_zh 正切值，在接近 90 度处无界。
+    /// @result_ja タンジェントの値。90 度付近で発散します。
+    /// @result_ko 탄젠트 값. 90도 근처에서 발산합니다.
+    fn tan(x: f32) -> f32 { radians.tan(x * math.DEG2RAD) }
+    /// @brief_en The inverse sine, answered in degrees.
+    /// @brief_es El arcoseno, respondido en grados.
+    /// @brief_pt O arco-seno, respondido em graus.
+    /// @brief_fr L'arc sinus, donné en degrés.
+    /// @brief_it L'arcoseno, dato in gradi.
+    /// @brief_de Der Arkussinus, in Grad geantwortet.
+    /// @brief_ru Арксинус, ответ в градусах.
+    /// @brief_zh 反正弦，以度为单位返回。
+    /// @brief_ja 逆サインを度で返します。
+    /// @brief_ko 역사인을 도 단위로 돌려줍니다.
+    ///
+    /// @param_en x The ratio to take the inverse function of.
+    /// @param_es x La razón de la que se toma la función inversa.
+    /// @param_pt x A razão da qual se toma a função inversa.
+    /// @param_fr x Le rapport dont on prend la fonction inverse.
+    /// @param_it x Il rapporto di cui si prende la funzione inversa.
+    /// @param_de x Das Verhältnis, dessen Umkehrfunktion genommen wird.
+    /// @param_ru x Отношение, от которого берётся обратная функция.
+    /// @param_zh x 要取反函数的比值。
+    /// @param_ja x 逆関数を取る比。
+    /// @param_ko x 역함수를 구할 비율.
+    ///
+    /// @result_en The angle in degrees.
+    /// @result_es El ángulo en grados.
+    /// @result_pt O ângulo em graus.
+    /// @result_fr L'angle en degrés.
+    /// @result_it L'angolo in gradi.
+    /// @result_de Der Winkel in Grad.
+    /// @result_ru Угол в градусах.
+    /// @result_zh 以度为单位的角度。
+    /// @result_ja 度単位の角度。
+    /// @result_ko 도 단위의 각도.
+    fn asin(x: f32) -> f32 { radians.asin(x) * math.RAD2DEG }
+    /// @brief_en The inverse cosine, answered in degrees.
+    /// @brief_es El arcocoseno, respondido en grados.
+    /// @brief_pt O arco-cosseno, respondido em graus.
+    /// @brief_fr L'arc cosinus, donné en degrés.
+    /// @brief_it L'arcocoseno, dato in gradi.
+    /// @brief_de Der Arkuskosinus, in Grad geantwortet.
+    /// @brief_ru Арккосинус, ответ в градусах.
+    /// @brief_zh 反余弦，以度为单位返回。
+    /// @brief_ja 逆コサインを度で返します。
+    /// @brief_ko 역코사인을 도 단위로 돌려줍니다.
+    ///
+    /// @param_en x The ratio to take the inverse function of.
+    /// @param_es x La razón de la que se toma la función inversa.
+    /// @param_pt x A razão da qual se toma a função inversa.
+    /// @param_fr x Le rapport dont on prend la fonction inverse.
+    /// @param_it x Il rapporto di cui si prende la funzione inversa.
+    /// @param_de x Das Verhältnis, dessen Umkehrfunktion genommen wird.
+    /// @param_ru x Отношение, от которого берётся обратная функция.
+    /// @param_zh x 要取反函数的比值。
+    /// @param_ja x 逆関数を取る比。
+    /// @param_ko x 역함수를 구할 비율.
+    ///
+    /// @result_en The angle in degrees.
+    /// @result_es El ángulo en grados.
+    /// @result_pt O ângulo em graus.
+    /// @result_fr L'angle en degrés.
+    /// @result_it L'angolo in gradi.
+    /// @result_de Der Winkel in Grad.
+    /// @result_ru Угол в градусах.
+    /// @result_zh 以度为单位的角度。
+    /// @result_ja 度単位の角度。
+    /// @result_ko 도 단위의 각도.
+    fn acos(x: f32) -> f32 { radians.acos(x) * math.RAD2DEG }
+    /// @brief_en The inverse tangent, answered in degrees. Use `atan2` when you have both legs, so the quadrant survives.
+    /// @brief_es El arcotangente, respondido en grados. Usa `atan2` cuando tengas ambos catetos, para que sobreviva el cuadrante.
+    /// @brief_pt O arco-tangente, respondido em graus. Use `atan2` quando tiver os dois catetos, para que o quadrante sobreviva.
+    /// @brief_fr L'arc tangente, donné en degrés. Utilisez `atan2` quand vous avez les deux côtés, pour que le quadrant survive.
+    /// @brief_it L'arcotangente, dato in gradi. Usa `atan2` quando hai entrambi i cateti, così il quadrante sopravvive.
+    /// @brief_de Der Arkustangens, in Grad geantwortet. Nutze `atan2`, wenn du beide Katheten hast, damit der Quadrant erhalten bleibt.
+    /// @brief_ru Арктангенс, ответ в градусах. Когда есть оба катета, берите `atan2`, чтобы сохранилась четверть.
+    /// @brief_zh 反正切，以度为单位返回。如果两个直角边都有，请用 `atan2`，以保留象限信息。
+    /// @brief_ja 逆タンジェントを度で返します。両方の辺が分かっている場合は、象限を保つため `atan2` を使ってください。
+    /// @brief_ko 역탄젠트를 도 단위로 돌려줍니다. 두 변을 모두 알고 있다면 사분면을 살리기 위해 `atan2`를 쓰세요.
+    ///
+    /// @param_en x The ratio to take the inverse function of.
+    /// @param_es x La razón de la que se toma la función inversa.
+    /// @param_pt x A razão da qual se toma a função inversa.
+    /// @param_fr x Le rapport dont on prend la fonction inverse.
+    /// @param_it x Il rapporto di cui si prende la funzione inversa.
+    /// @param_de x Das Verhältnis, dessen Umkehrfunktion genommen wird.
+    /// @param_ru x Отношение, от которого берётся обратная функция.
+    /// @param_zh x 要取反函数的比值。
+    /// @param_ja x 逆関数を取る比。
+    /// @param_ko x 역함수를 구할 비율.
+    ///
+    /// @result_en The angle in degrees.
+    /// @result_es El ángulo en grados.
+    /// @result_pt O ângulo em graus.
+    /// @result_fr L'angle en degrés.
+    /// @result_it L'angolo in gradi.
+    /// @result_de Der Winkel in Grad.
+    /// @result_ru Угол в градусах.
+    /// @result_zh 以度为单位的角度。
+    /// @result_ja 度単位の角度。
+    /// @result_ko 도 단위의 각도.
+    fn atan(x: f32) -> f32 { radians.atan(x) * math.RAD2DEG }
+    /// @brief_en The angle of the vector (x, y), answered in degrees over the full circle — unlike `atan`, the signs of both arguments are kept, so the quadrant survives.
+    /// @brief_es El ángulo del vector (x, y), respondido en grados sobre el círculo completo: a diferencia de `atan`, se conservan los signos de ambos argumentos, así que sobrevive el cuadrante.
+    /// @brief_pt O ângulo do vetor (x, y), respondido em graus sobre o círculo inteiro — ao contrário de `atan`, os sinais dos dois argumentos são mantidos, então o quadrante sobrevive.
+    /// @brief_fr L'angle du vecteur (x, y), donné en degrés sur le cercle entier — contrairement à `atan`, les signes des deux arguments sont conservés, si bien que le quadrant survit.
+    /// @brief_it L'angolo del vettore (x, y), dato in gradi sull'intero cerchio: a differenza di `atan`, i segni di entrambi gli argomenti vengono conservati, quindi il quadrante sopravvive.
+    /// @brief_de Der Winkel des Vektors (x, y), in Grad über den ganzen Kreis geantwortet — anders als bei `atan` bleiben die Vorzeichen beider Argumente erhalten, der Quadrant überlebt also.
+    /// @brief_ru Угол вектора (x, y), ответ в градусах по всей окружности — в отличие от `atan` знаки обоих аргументов сохраняются, так что четверть уцелевает.
+    /// @brief_zh 向量 (x, y) 的角度，以度为单位覆盖整个圆周 —— 与 `atan` 不同，它保留两个参数的符号，因此象限不会丢失。
+    /// @brief_ja ベクトル (x, y) の角度を、全周にわたって度で返します。`atan` と違い両引数の符号が保たれるため、象限が失われません。
+    /// @brief_ko 벡터 (x, y)의 각도를 원 전체에 걸쳐 도 단위로 돌려줍니다. `atan`과 달리 두 인자의 부호가 보존되므로 사분면이 살아남습니다.
+    ///
+    /// @param_en y The vertical leg.
+    /// @param_es y El cateto vertical.
+    /// @param_pt y O cateto vertical.
+    /// @param_fr y Le côté vertical.
+    /// @param_it y Il cateto verticale.
+    /// @param_de y Die senkrechte Kathete.
+    /// @param_ru y Вертикальный катет.
+    /// @param_zh y 竖直方向的那条边。
+    /// @param_ja y 垂直方向の辺。
+    /// @param_ko y 수직 변.
+    ///
+    /// @param_en x The horizontal leg.
+    /// @param_es x El cateto horizontal.
+    /// @param_pt x O cateto horizontal.
+    /// @param_fr x Le côté horizontal.
+    /// @param_it x Il cateto orizzontale.
+    /// @param_de x Die waagerechte Kathete.
+    /// @param_ru x Горизонтальный катет.
+    /// @param_zh x 水平方向的那条边。
+    /// @param_ja x 水平方向の辺。
+    /// @param_ko x 수평 변.
+    ///
+    /// @result_en The angle in degrees.
+    /// @result_es El ángulo en grados.
+    /// @result_pt O ângulo em graus.
+    /// @result_fr L'angle en degrés.
+    /// @result_it L'angolo in gradi.
+    /// @result_de Der Winkel in Grad.
+    /// @result_ru Угол в градусах.
+    /// @result_zh 以度为单位的角度。
+    /// @result_ja 度単位の角度。
+    /// @result_ko 도 단위의 각도.
+    fn atan2(y: f32, x: f32) -> f32 { radians.atan2(y, x) * math.RAD2DEG }
+}

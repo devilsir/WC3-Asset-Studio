@@ -37,6 +37,35 @@
   function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
   function basename(path){ return String(path||'').replace(/\\/g,'/').split('/').pop()||''; }
   function normalizePath(path){ return String(path||'').replace(/\\/g,'/').toLowerCase(); }
+  function tag4At(bytes,offset){
+    if(!bytes||offset<0||offset+4>bytes.length)return '';
+    return String.fromCharCode(bytes[offset],bytes[offset+1],bytes[offset+2],bytes[offset+3]);
+  }
+  function readSkinChunk(bytesLike,offset,recEnd,formatVersion=0){
+    const bytes=bytesLike instanceof Uint8Array?bytesLike:new Uint8Array(bytesLike||0);
+    const endLimit=Math.min(Number.isFinite(recEnd)?recEnd:bytes.length,bytes.length);
+    if(offset<0||offset+8>endLimit||tag4At(bytes,offset)!=='SKIN')return null;
+    const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+    const count=view.getUint32(offset+4,true),start=offset+8,end8=start+count,end16=start+count*2;
+    if(count>SAFE_LIMITS.elements)return null;
+    const uvas8=end8+4<=endLimit&&tag4At(bytes,end8)==='UVAS';
+    const uvas16=end16+4<=endLimit&&tag4At(bytes,end16)==='UVAS';
+    // Warcraft 3.x MDX1800 stores the SKIN element count exactly as before, but
+    // the physical index/weight elements are uint16. Prefer structural UVAS
+    // alignment so transition/custom files are still handled safely.
+    let elementBytes=1;
+    if(end16<=endLimit&&(uvas16&&(!uvas8||formatVersion>=1800)))elementBytes=2;
+    else if(formatVersion>=1800&&end16<=endLimit&&!uvas8)elementBytes=2;
+    const end=start+count*elementBytes;
+    if(end>endLimit)return null;
+    const skin=new Array(count);
+    if(elementBytes===2){
+      for(let i=0;i<count;i++)skin[i]=view.getUint16(start+i*2,true);
+    }else{
+      for(let i=0;i<count;i++)skin[i]=bytes[start+i];
+    }
+    return{skin,count,start,end,next:end,elementBytes,uvAligned:tag4At(bytes,end)==='UVAS'};
+  }
   function blockEnd(text, braceStart){ let depth=0; for(let i=braceStart;i<text.length;i++){ const ch=text[i]; if(ch==='{')depth++; else if(ch==='}'){depth--;if(depth===0)return i;} } return -1; }
   function parseBraceBlocks(text, keyword){ const out=[]; const re=new RegExp('\\b'+keyword+'\\b','g'); let m; while((m=re.exec(text))){ const brace=text.indexOf('{',m.index+m[0].length); if(brace<0)continue; const end=blockEnd(text,brace); if(end<0)continue; out.push(text.slice(brace+1,end)); re.lastIndex=end+1; } return out; }
   function parseNamedBlocks(text, keyword){ const out=[]; const re=new RegExp('\\b'+keyword+'\\s+"([^"]+)"\\s*\\{','g'); let m; while((m=re.exec(text))){ const brace=text.indexOf('{',m.index+m[0].length-1); if(brace<0)continue; const end=blockEnd(text,brace); if(end<0)continue; out.push({name:m[1],body:text.slice(brace+1,end),start:m.index,end:end+1}); re.lastIndex=end+1; } return out; }
@@ -75,7 +104,7 @@
   function parseMdlGeneric(type,obj,pivots){
     const body=obj.body; const objectId=extractInt(body,'ObjectId',-1); const p=body.match(/Parent\s+(\d+)/i); const parentId=p?+p[1]:-1;
     const tracks=collectMdlTracks(body,{Translation:'KGTR',Rotation:'KGRT',Scaling:'KGSC'});
-    // Node flag bits: 0x1 translation, 0x2 rotation, 0x4 scaling.
+    // Node flag bits: 0x1 translation, 0x2 scaling, 0x4 rotation.
     let flags=0; if(/DontInherit\s*\{[^}]*Translation/i.test(body))flags|=1; if(/DontInherit\s*\{[^}]*Rotation/i.test(body))flags|=2; if(/DontInherit\s*\{[^}]*Scaling/i.test(body))flags|=4; if(/Billboarded\b/i.test(body))flags|=8; if(/BillboardedLockX/i.test(body))flags|=16; if(/BillboardedLockY/i.test(body))flags|=32; if(/BillboardedLockZ/i.test(body))flags|=64; if(/CameraAnchored/i.test(body))flags|=128;
     return convenienceTracks({id:objectId,type,name:obj.name,parentId,flags,pivot:objectId>=0?pivots[objectId]||null:null,tracks});
   }
@@ -111,8 +140,9 @@
       const uvSets=[]; const tvRe=/TVertices\s+\d+\s*\{/gi; let tvm; while((tvm=tvRe.exec(body))){const b=body.indexOf('{',tvm.index),e=blockEnd(body,b);if(e>b){uvSets.push(extractPairs(body.slice(b+1,e)).map(v=>({u:v[0],v:v[1]})));tvRe.lastIndex=e+1;}}
       const triMatch=/Triangles\s*\{/i.exec(body); let triBlock=''; if(triMatch){const b=body.indexOf('{',triMatch.index),e=blockEnd(body,b);if(e>b)triBlock=body.slice(b+1,e);} const triNums=(triBlock.match(/-?\d+/g)||[]).map(n=>n|0),faces=[]; for(let fi=0;fi+2<triNums.length;fi+=3)faces.push([triNums[fi],triNums[fi+1],triNums[fi+2]]);
       const materialId=extractInt(body,'MaterialID',0),vertexGroups=((body.match(/VertexGroup\s*\{([\s\S]*?)\}/i)||[])[1]||'').match(/-?\d+/g)||[],matrixGroups=parseMdlMatrixGroups(body),skinBlock=extractNumberBlock(body,'SkinWeights');
-      const skin=skinBlock?(skinBlock.match(/-?\d+/g)||[]).map(n=>clamp(n|0,0,255)):[]; const lod=extractInt(body,'LevelOfDetail',-1),name=extractString(body,'Name','');
-      return{id:i,materialId,textureId:(materials[materialId]&&materials[materialId].textureId)||0,vertices,normals,uvSets,tverts:uvSets[0]||[],faces,vertexGroups:vertexGroups.map(Number),matrixGroups,skin,tangents:extractTriplets(extractNumberBlock(body,'Tangents')),lod,name,selectionGroup:extractInt(body,'SelectionGroup',0),selectionFlags:/Unselectable/i.test(body)?4:0,extent:{boundsRadius:extractScalar(body,'BoundsRadius',0),min:extractVector(body,'MinimumExtent',3,[0,0,0]),max:extractVector(body,'MaximumExtent',3,[0,0,0])},sequenceExtents:[]};
+      const skinElementBytes=formatVersion>=1800?2:1,skinMax=skinElementBytes===2?65535:255;
+      const skin=skinBlock?(skinBlock.match(/-?\d+/g)||[]).map(n=>clamp(n|0,0,skinMax)):[]; const lod=extractInt(body,'LevelOfDetail',-1),name=extractString(body,'Name','');
+      return{id:i,materialId,textureId:(materials[materialId]&&materials[materialId].textureId)||0,vertices,normals,uvSets,tverts:uvSets[0]||[],faces,vertexGroups:vertexGroups.map(Number),matrixGroups,skin,skinElementBytes,tangents:extractTriplets(extractNumberBlock(body,'Tangents')),lod,name,selectionGroup:extractInt(body,'SelectionGroup',0),selectionFlags:/Unselectable/i.test(body)?4:0,extent:{boundsRadius:extractScalar(body,'BoundsRadius',0),min:extractVector(body,'MinimumExtent',3,[0,0,0]),max:extractVector(body,'MaximumExtent',3,[0,0,0])},sequenceExtents:[]};
     }).filter(g=>g.vertices.length&&g.faces.length);
 
     const geosetAnimations=parseBraceBlocks(text,'GeosetAnim').map((body,i)=>({id:i,alpha:extractScalar(body,'Alpha',1),flags:(/DropShadow/i.test(body)?1:0)|(/\bColor\b/i.test(body)?2:0),color:extractVector(body,'Color',3,[1,1,1]),geosetId:extractInt(body,'GeosetId',-1),tracks:collectMdlTracks(body,{Alpha:'KGAO',Color:'KGAC'})}));
@@ -134,6 +164,14 @@
     // SkinWeights use this bone-order index space, just like the binary BONE chunk.
     const bones=nodes.filter(n=>n.type==='Bone');
     const helpers=nodes.filter(n=>n.type==='Helper');
+    const lights=nodes.filter(n=>n.type==='Light');
+    const attachments=nodes.filter(n=>n.type==='Attachment');
+    const particleEmitters=nodes.filter(n=>n.type==='ParticleEmitter');
+    const particleEmitters2=nodes.filter(n=>n.type==='ParticleEmitter2');
+    const popcornEmitters=nodes.filter(n=>n.type==='ParticleEmitterPopcorn');
+    const ribbonEmitters=nodes.filter(n=>n.type==='RibbonEmitter');
+    const eventObjects=nodes.filter(n=>n.type==='EventObject');
+    const collisionShapes=nodes.filter(n=>n.type==='CollisionShape');
     nodes.sort((a,b)=>a.id-b.id);
 
     const cameras=parseNamedBlocks(text,'Camera').map((c,i)=>({id:i,name:c.name,position:extractVector(c.body,'Position',3,[0,0,0]),fieldOfView:extractScalar(c.body,'FieldOfView',0),farClippingPlane:extractScalar(c.body,'FarClip',0),nearClippingPlane:extractScalar(c.body,'NearClip',0),targetPosition:(()=>{const tm=/Target\s*\{/i.exec(c.body);if(!tm)return[0,0,0];const b=c.body.indexOf('{',tm.index),e=blockEnd(c.body,b);return extractVector(c.body.slice(b+1,e),'Position',3,[0,0,0]);})(),tracks:collectMdlTracks(c.body,{Translation:'KCTR',Rotation:'KCRL'})}));
@@ -144,7 +182,7 @@
     const hdSkinGeosets=geosets.filter(g=>g.skin&&g.skin.length>=g.vertices.length*8).length;
     const skinningScheme=hdSkinGeosets?'reforged-skin4':'classic-matrix-groups';
     const summary=`MDL text model v${formatVersion}\nTextures: ${textures.length}\nMaterials: ${materials.length}\nGeosets: ${geosets.length}\nSkinning: ${skinningScheme}\nSequences: ${sequences.length}\nNodes/effects: ${nodes.length}`;
-    return {type:'MDL',formatVersion,version:formatVersion,name:modelName,animationFile,blendTime,extent,sequences,globalSequences,textures:textures.map(t=>t.path),textureDefs:textures,textureAnimations,materials,geosets,geosetAnimations,pivots,nodes,bones,helpers,cameras,faceEffects,bindPose,unknownChunks,skinningScheme,bounds:computeBounds(geosets),summary};
+    return {type:'MDL',formatVersion,version:formatVersion,name:modelName,animationFile,blendTime,extent,sequences,globalSequences,textures:textures.map(t=>t.path),textureDefs:textures,textureAnimations,materials,geosets,geosetAnimations,pivots,nodes,bones,lights,helpers,attachments,particleEmitters,particleEmitters2,popcornEmitters,ribbonEmitters,eventObjects,collisionShapes,cameras,faceEffects,bindPose,unknownChunks,skinningScheme,bounds:computeBounds(geosets),summary};
   }
 
   function parseMDX(buffer){
@@ -180,7 +218,7 @@
       const flags=view.getUint32(p,true);p+=4;
       let shader='',layout='classic';
       if(p+8<=end && tagAt(p)==='LAYS'){
-        layout=formatVersion>=1200?'reforged-1200':'classic';
+        layout=formatVersion>=1100?'reforged-combined':'classic';
       }else if(p+88<=end && tagAt(p+80)==='LAYS'){
         shader=zstr(p,80);p+=80;layout='legacy-reforged-shader-name';
       }
@@ -200,14 +238,19 @@
           const coordId=view.getUint32(q,true);q+=4;
           const alpha=view.getFloat32(q,true);q+=4;
           let emissiveGain=1,fresnelColor=[1,1,1],fresnelOpacity=0,fresnelTeamColor=0;
-          if(formatVersion>800&&q+24<=le&&!TRACK_INFO[tagAt(q)]){
-            emissiveGain=view.getFloat32(q,true);q+=4;
+          // Reforged version gates follow Blizzard/Retera's MDX layout. v900 adds
+          // emissive gain, v1000 adds Fresnel fields, and v1100+ stores the HD
+          // shader type plus the combined texture-slot table inside the layer.
+          if(formatVersion>=900&&q+4<=le&&!TRACK_INFO[tagAt(q)]){
+            emissiveGain=view.getFloat32(q,true);if(!Number.isFinite(emissiveGain))emissiveGain=1;q+=4;
+          }
+          if(formatVersion>=1000&&q+20<=le&&!TRACK_INFO[tagAt(q)]){
             fresnelColor=[view.getFloat32(q,true),view.getFloat32(q+4,true),view.getFloat32(q+8,true)];q+=12;
             fresnelOpacity=view.getFloat32(q,true);q+=4;
             fresnelTeamColor=view.getFloat32(q,true);q+=4;
           }
           const textureSlots={}; let slotTableUnknown=null,slotCount=0;
-          if(q+8<=le&&!TRACK_INFO[tagAt(q)]){
+          if(formatVersion>=1100&&q+8<=le&&!TRACK_INFO[tagAt(q)]){
             const unknown=view.getInt32(q,true),possibleCount=view.getInt32(q+4,true);
             const tableEnd=q+8+possibleCount*8;
             let plausible=(unknown===0||unknown===1)&&possibleCount>=0&&possibleCount<=16&&tableEnd<=le;
@@ -228,7 +271,8 @@
             }
           }
           const tracks=parseAnimations(q,le).tracks;
-          layers.push({id:li,filterModeId,filterMode:FILTER_MODES[filterModeId]||`Filter ${filterModeId}`,flags:lflags,textureId,textureAnimationId,coordId,alpha,emissiveGain,fresnelColor,fresnelOpacity,fresnelTeamColor,textureSlots,slotTableUnknown,slotCount,normalTextureId:textureSlots[1]??-1,ormTextureId:textureSlots[2]??-1,emissiveTextureId:textureSlots[3]??-1,teamColorTextureId:textureSlots[4]??-1,reflectionsTextureId:textureSlots[5]??-1,tracks,twoSided:!!(lflags&16),unshaded:!!(lflags&1)});
+          const shaderTypeId=slotTableUnknown==null?0:slotTableUnknown;
+          layers.push({id:li,filterModeId,filterMode:FILTER_MODES[filterModeId]||`Filter ${filterModeId}`,flags:lflags,textureId,textureAnimationId,coordId,alpha,emissiveGain,fresnelColor,fresnelOpacity,fresnelTeamColor,textureSlots,slotTableUnknown,shaderTypeId,slotCount,isHdCombined:shaderTypeId===1&&slotCount>0,normalTextureId:textureSlots[1]??-1,ormTextureId:textureSlots[2]??-1,emissiveTextureId:textureSlots[3]??-1,teamColorTextureId:textureSlots[4]??-1,reflectionsTextureId:textureSlots[5]??-1,tracks,twoSided:!!(lflags&16),unshaded:!!(lflags&1)});
           p=le;
         }
       }
@@ -248,10 +292,10 @@
       if(p+12>recEnd)break;const materialId=view.getUint32(p,true),selectionGroup=view.getUint32(p+4,true),selectionFlags=view.getUint32(p+8,true);p+=12;let lod=-1,geosetName='';if(formatVersion>800){if(p+84>recEnd)break;lod=view.getInt32(p,true);geosetName=zstr(p+4,80);p+=84;}
       if(p+28>recEnd)break;const geoExtent=readExtent(p);p+=28;if(p+4>recEnd)break;const seqCount=view.getUint32(p,true);p+=4;const sequenceExtents=[];for(let i=0;i<seqCount&&p+28<=recEnd;i++,p+=28)sequenceExtents.push(readExtent(p));
       // Optional Reforged chunks are detected structurally, not only from VERS.
-      let tangents=[],skin=[];if(p+8<=recEnd&&tagAt(p)==='TANG'){const n=view.getUint32(p+4,true),s=p+8,e=s+n*16;if(e<=recEnd){for(let x=s;x<e;x+=16)tangents.push([view.getFloat32(x,true),view.getFloat32(x+4,true),view.getFloat32(x+8,true),view.getFloat32(x+12,true)]);p=e;}}
-      if(p+8<=recEnd&&tagAt(p)==='SKIN'){const n=view.getUint32(p+4,true),s=p+8,e=s+n;if(e<=recEnd){skin=Array.from(bytes.slice(s,e));p=e;}}
+      let tangents=[],skin=[],skinElementBytes=1;if(p+8<=recEnd&&tagAt(p)==='TANG'){const n=view.getUint32(p+4,true),s=p+8,e=s+n*16;if(e<=recEnd){for(let x=s;x<e;x+=16)tangents.push([view.getFloat32(x,true),view.getFloat32(x+4,true),view.getFloat32(x+8,true),view.getFloat32(x+12,true)]);p=e;}}
+      if(p+8<=recEnd&&tagAt(p)==='SKIN'){const parsedSkin=readSkinChunk(bytes,p,recEnd,formatVersion);if(parsedSkin){skin=parsedSkin.skin;skinElementBytes=parsedSkin.elementBytes;p=parsedSkin.next;}}
       const uvSets=[];if(p+8<=recEnd&&tagAt(p)==='UVAS'){const n=view.getUint32(p+4,true);if(n>SAFE_LIMITS.uvSets)throw new Error(`Invalid UV set count: ${n}`);p+=8;for(let u=0;u<n;u++){if(p+8>recEnd||tagAt(p)!=='UVBS')break;const count=view.getUint32(p+4,true),s=p+8,e=s+count*8;if(e>recEnd)break;const uv=[];for(let x=s;x<e;x+=8)uv.push({u:view.getFloat32(x,true),v:view.getFloat32(x+4,true)});uvSets.push(uv);p=e;}}
-      const faces=[];for(let i=0;i+2<indices.length;i+=3)faces.push([indices[i],indices[i+1],indices[i+2]]);out.push({id:out.length,materialId,textureId:(materials[materialId]&&materials[materialId].textureId)||0,vertices,normals,uvSets,tverts:uvSets[0]||[],faces,faceTypeGroups,faceGroups,vertexGroups,matrixGroups,matrixIndices,skin,tangents,lod,name:geosetName,selectionGroup,selectionFlags,extent:geoExtent,sequenceExtents});off=recEnd;}return out;}
+      const faces=[];for(let i=0;i+2<indices.length;i+=3)faces.push([indices[i],indices[i+1],indices[i+2]]);out.push({id:out.length,materialId,textureId:(materials[materialId]&&materials[materialId].textureId)||0,vertices,normals,uvSets,tverts:uvSets[0]||[],faces,faceTypeGroups,faceGroups,vertexGroups,matrixGroups,matrixIndices,skin,skinElementBytes,tangents,lod,name:geosetName,selectionGroup,selectionFlags,extent:geoExtent,sequenceExtents});off=recEnd;}return out;}
     const geosets=parseGeosets();
 
     const geosetAnimations=parseDynamicOuter(first('GEOA'),(off,size,i)=>{let p=off+4;const alpha=view.getFloat32(p,true);p+=4;const flags=view.getUint32(p,true);p+=4;const color=[view.getFloat32(p,true),view.getFloat32(p+4,true),view.getFloat32(p+8,true)];p+=12;const geosetId=view.getInt32(p,true);p+=4;return{id:i,alpha,flags,color,geosetId,tracks:parseAnimations(p,off+size).tracks};});
@@ -316,11 +360,11 @@
   }
 
   window.WAR3_MODEL_CORE={
-    version:'9.1',
+    version:'9.2',
     uvConvention:'warcraft-authored',
     provenance:'Structure-aware MDX/MDL reader. UVBS/TVertices are preserved in authored Warcraft coordinates; display-space conversion is handled only by render/paint code. Node flag bits and Reforged SKIN behavior cross-checked against war3-model and mdx-m3-viewer.',
     TRACK_INFO,FILTER_MODES,P2_FILTER_MODES,
     parseModel,parseMDL,parseMDX,patchTexturePaths,computeBounds,basename,normalizePath,
-    helpers:{blockEnd,parseBraceBlocks,parseNamedBlocks,parseMdlTrack,collectMdlTracks}
+    helpers:{blockEnd,parseBraceBlocks,parseNamedBlocks,parseMdlTrack,collectMdlTracks,readSkinChunk}
   };
 })();

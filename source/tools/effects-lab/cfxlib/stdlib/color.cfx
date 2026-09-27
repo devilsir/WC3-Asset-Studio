@@ -1,0 +1,277 @@
+// stdlib/color.cfx — colour helpers. Colours are f32x4 (r, g, b, a), linear-space.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "math.cfx";
+
+namespace color {
+
+    // --- alpha ----------------------------------------------------------------------------------
+
+    /// @brief_en Replace a colour's alpha, leaving RGB untouched.
+    /// @brief_es Reemplaza el alfa de un color, dejando el RGB intacto.
+    /// @brief_pt Substitui o alfa de uma cor, deixando o RGB intacto.
+    /// @brief_fr Remplace l'alpha d'une couleur, en laissant le RVB intact.
+    /// @brief_it Sostituisce l'alfa di un colore, lasciando intatto l'RGB.
+    /// @brief_de Ersetzt den Alphawert einer Farbe und lässt RGB unberührt.
+    /// @brief_ru Заменяет альфу цвета, не трогая RGB.
+    /// @brief_zh 替换颜色的 alpha，保持 RGB 不变。
+    /// @brief_ja 色のアルファだけを差し替え、RGB はそのままにします。
+    /// @brief_ko 색의 알파만 바꾸고 RGB는 그대로 둡니다.
+    ///
+    /// @param_en c The colour to rebuild.
+    /// @param_es c El color que se reconstruye.
+    /// @param_pt c A cor a reconstruir.
+    /// @param_fr c La couleur à reconstruire.
+    /// @param_it c Il colore da ricostruire.
+    /// @param_de c Die neu zu bauende Farbe.
+    /// @param_ru c Цвет, который пересобирается.
+    /// @param_zh c 要重建的颜色。
+    /// @param_ja c 作り直す色。
+    /// @param_ko c 다시 만들 색.
+    ///
+    /// @param_en a The new alpha, replacing whatever the colour had.
+    /// @param_es a El nuevo alfa, que sustituye al que tuviera el color.
+    /// @param_pt a O novo alfa, substituindo o que a cor tinha.
+    /// @param_fr a Le nouvel alpha, qui remplace celui de la couleur.
+    /// @param_it a La nuova alfa, che sostituisce quella del colore.
+    /// @param_de a Der neue Alphawert, der den bisherigen ersetzt.
+    /// @param_ru a Новая альфа, заменяющая прежнюю.
+    /// @param_zh a 新的 alpha，覆盖原有的值。
+    /// @param_ja a 新しいアルファ。元の値を置き換えます。
+    /// @param_ko a 새 알파. 기존 값을 대체합니다.
+    ///
+    /// @result_en The same RGB with `a` as its alpha.
+    /// @result_es El mismo RGB con `a` como alfa.
+    /// @result_pt O mesmo RGB com `a` como alfa.
+    /// @result_fr Le même RVB avec `a` pour alpha.
+    /// @result_it Lo stesso RGB con `a` come alfa.
+    /// @result_de Dasselbe RGB mit `a` als Alphawert.
+    /// @result_ru Тот же RGB с альфой `a`.
+    /// @result_zh 相同的 RGB，alpha 为 `a`。
+    /// @result_ja 同じ RGB に `a` をアルファとして持たせた色。
+    /// @result_ko 알파가 `a`인 같은 RGB.
+    fn with_alpha(c: f32x4, a: f32) -> f32x4 { #f32x4(c.x, c.y, c.z, a) }
+
+    /// @brief_en Scale a colour's alpha by `k`, leaving RGB untouched — the fade-out idiom. Multiplies rather than assigns, so it composes: a particle already half-transparent from its spawn colour fades from where it is, not from opaque.
+    /// @brief_es Escala el alfa de un color por `k`, dejando el RGB intacto: el modismo del desvanecido. Multiplica en vez de asignar, así que compone: una partícula ya medio transparente por su color de nacimiento se desvanece desde donde está, no desde opaco.
+    /// @brief_pt Escala o alfa de uma cor por `k`, deixando o RGB intacto — o idioma do esmaecimento. Multiplica em vez de atribuir, então compõe: uma partícula já meio transparente pela cor de nascimento esmaece de onde está, não do opaco.
+    /// @brief_fr Multiplie l'alpha d'une couleur par `k`, en laissant le RVB intact — l'idiome du fondu. Multiplie au lieu d'affecter, donc cela se compose : une particule déjà à demi transparente par sa couleur de naissance s'estompe depuis où elle est, pas depuis l'opaque.
+    /// @brief_it Scala l'alfa di un colore di `k`, lasciando intatto l'RGB: l'idioma della dissolvenza. Moltiplica invece di assegnare, quindi si compone: una particella già semitrasparente per il suo colore di nascita sfuma da dov'è, non dall'opaco.
+    /// @brief_de Skaliert den Alphawert einer Farbe mit `k` und lässt RGB unberührt — die Ausblend-Redewendung. Multipliziert statt zuzuweisen, also ist sie kombinierbar: ein Partikel, das durch seine Geburtsfarbe schon halbtransparent ist, blendet von dort aus ab, nicht von deckend.
+    /// @brief_ru Умножает альфу цвета на `k`, не трогая RGB, — приём затухания. Именно умножает, а не присваивает, поэтому приёмы складываются: частица, уже полупрозрачная из-за своего цвета рождения, гаснет с того места, где она есть, а не с непрозрачного.
+    /// @brief_zh 将颜色的 alpha 乘以 `k`，保持 RGB 不变 —— 即淡出写法。是相乘而非赋值，因此可以叠加：一个因出生颜色已经半透明的粒子会从当前状态继续淡出，而不是从不透明重新开始。
+    /// @brief_ja 色のアルファに `k` を掛け、RGB はそのままにします。フェードアウトの定石です。代入ではなく乗算なので合成でき、出生色ですでに半透明なパーティクルは不透明からではなく今の状態からフェードします。
+    /// @brief_ko 색의 알파에 `k`를 곱하고 RGB는 그대로 둡니다 — 페이드아웃 관용구입니다. 대입이 아니라 곱셈이므로 겹쳐 쓸 수 있어, 출생 색으로 이미 반투명한 파티클은 불투명이 아니라 현재 상태에서 이어서 사라집니다.
+    ///
+    /// @param_en c The colour to fade.
+    /// @param_es c El color que se desvanece.
+    /// @param_pt c A cor a esmaecer.
+    /// @param_fr c La couleur à estomper.
+    /// @param_it c Il colore da dissolvere.
+    /// @param_de c Die auszublendende Farbe.
+    /// @param_ru c Затухающий цвет.
+    /// @param_zh c 要淡出的颜色。
+    /// @param_ja c フェードさせる色。
+    /// @param_ko c 사라지게 할 색.
+    ///
+    /// @param_en k The factor the alpha is multiplied by. 1 leaves it alone, 0 makes it invisible.
+    /// @param_es k El factor por el que se multiplica el alfa. 1 lo deja igual, 0 lo vuelve invisible.
+    /// @param_pt k O fator pelo qual o alfa é multiplicado. 1 não muda nada, 0 torna invisível.
+    /// @param_fr k Le facteur par lequel l'alpha est multiplié. 1 ne change rien, 0 rend invisible.
+    /// @param_it k Il fattore per cui l'alfa viene moltiplicata. 1 non cambia nulla, 0 rende invisibile.
+    /// @param_de k Der Faktor, mit dem der Alphawert multipliziert wird. 1 lässt ihn unverändert, 0 macht unsichtbar.
+    /// @param_ru k Множитель альфы. 1 оставляет как есть, 0 делает невидимым.
+    /// @param_zh k alpha 的乘数。1 表示不变，0 表示完全不可见。
+    /// @param_ja k アルファに掛ける係数。1 は変化なし、0 で見えなくなります。
+    /// @param_ko k 알파에 곱할 계수. 1이면 그대로, 0이면 보이지 않습니다.
+    ///
+    /// @result_en The same RGB with its alpha scaled.
+    /// @result_es El mismo RGB con su alfa escalado.
+    /// @result_pt O mesmo RGB com o alfa escalado.
+    /// @result_fr Le même RVB avec son alpha mis à l'échelle.
+    /// @result_it Lo stesso RGB con l'alfa scalata.
+    /// @result_de Dasselbe RGB mit skaliertem Alphawert.
+    /// @result_ru Тот же RGB с масштабированной альфой.
+    /// @result_zh 相同的 RGB，alpha 已被缩放。
+    /// @result_ja アルファだけを掛け合わせた同じ RGB。
+    /// @result_ko 알파만 조정된 같은 RGB.
+    fn fade(c: f32x4, k: f32) -> f32x4 { with_alpha(c, c.w * k) }
+
+    // --- transforms -----------------------------------------------------------------------------
+
+    /// @brief_en Blend between two colours, alpha included.
+    /// @brief_es Mezcla entre dos colores, alfa incluido.
+    /// @brief_pt Mistura duas cores, alfa incluído.
+    /// @brief_fr Mélange deux couleurs, alpha compris.
+    /// @brief_it Fonde due colori, alfa compresa.
+    /// @brief_de Blendet zwischen zwei Farben über, den Alphawert eingeschlossen.
+    /// @brief_ru Смешивает два цвета вместе с альфой.
+    /// @brief_zh 在两个颜色之间混合，包含 alpha。
+    /// @brief_ja 2 つの色をアルファも含めて混ぜます。
+    /// @brief_ko 두 색을 알파까지 포함해 섞습니다.
+    ///
+    /// @param_en a The colour at t = 0.
+    /// @param_es a El color en t = 0.
+    /// @param_pt a A cor em t = 0.
+    /// @param_fr a La couleur à t = 0.
+    /// @param_it a Il colore a t = 0.
+    /// @param_de a Die Farbe bei t = 0.
+    /// @param_ru a Цвет при t = 0.
+    /// @param_zh a t = 0 时的颜色。
+    /// @param_ja a t = 0 のときの色。
+    /// @param_ko a t = 0일 때의 색.
+    ///
+    /// @param_en b The colour at t = 1.
+    /// @param_es b El color en t = 1.
+    /// @param_pt b A cor em t = 1.
+    /// @param_fr b La couleur à t = 1.
+    /// @param_it b Il colore a t = 1.
+    /// @param_de b Die Farbe bei t = 1.
+    /// @param_ru b Цвет при t = 1.
+    /// @param_zh b t = 1 时的颜色。
+    /// @param_ja b t = 1 のときの色。
+    /// @param_ko b t = 1일 때의 색.
+    ///
+    /// @param_en t Where between them to land. Saturated, so values outside [0, 1] clamp instead of extrapolating.
+    /// @param_es t Dónde caer entre ambos. Se satura, así que los valores fuera de [0, 1] se recortan en vez de extrapolar.
+    /// @param_pt t Onde cair entre as duas. É saturado, então valores fora de [0, 1] são recortados em vez de extrapolar.
+    /// @param_fr t Où se placer entre les deux. Saturé : les valeurs hors de [0, 1] sont bornées plutôt qu'extrapolées.
+    /// @param_it t Dove cadere fra i due. È saturato, quindi i valori fuori da [0, 1] vengono limitati invece che estrapolati.
+    /// @param_de t Wo dazwischen gelandet wird. Gesättigt, also werden Werte außerhalb von [0, 1] begrenzt statt extrapoliert.
+    /// @param_ru t Где именно между ними оказаться. Значение насыщается, поэтому выходящее за [0, 1] обрезается, а не экстраполируется.
+    /// @param_zh t 落在两者之间的位置。会被 saturate，因此 [0, 1] 之外的值被截断而不是外推。
+    /// @param_ja t 2 色の間のどこに置くか。飽和されるため、[0, 1] の外側は外挿ではなくクランプされます。
+    /// @param_ko t 두 색 사이의 위치. saturate되므로 [0, 1] 밖의 값은 외삽되지 않고 잘립니다.
+    ///
+    /// @result_en The blended colour.
+    /// @result_es El color mezclado.
+    /// @result_pt A cor misturada.
+    /// @result_fr La couleur mélangée.
+    /// @result_it Il colore fuso.
+    /// @result_de Die überblendete Farbe.
+    /// @result_ru Смешанный цвет.
+    /// @result_zh 混合后的颜色。
+    /// @result_ja 混ぜ合わされた色。
+    /// @result_ko 섞인 색.
+    fn mix(a: f32x4, b: f32x4, t: f32) -> f32x4 { a + (b - a) * saturate(t) }
+
+    /// @brief_en Approximate gamma correction on RGB (alpha untouched).
+    /// @brief_es Corrección gamma aproximada sobre el RGB (el alfa no se toca).
+    /// @brief_pt Correção gama aproximada no RGB (o alfa não é tocado).
+    /// @brief_fr Correction gamma approximative sur le RVB (l'alpha n'est pas touché).
+    /// @brief_it Correzione gamma approssimata sull'RGB (l'alfa non viene toccata).
+    /// @brief_de Näherungsweise Gammakorrektur auf RGB (der Alphawert bleibt unberührt).
+    /// @brief_ru Приближённая гамма-коррекция по RGB (альфа не трогается).
+    /// @brief_zh 对 RGB 做近似伽马校正（不改动 alpha）。
+    /// @brief_ja RGB に対する近似的なガンマ補正です（アルファは変更しません）。
+    /// @brief_ko RGB에 대한 근사 감마 보정입니다(알파는 건드리지 않습니다).
+    ///
+    /// @param_en c The colour to correct.
+    /// @param_es c El color que se corrige.
+    /// @param_pt c A cor a corrigir.
+    /// @param_fr c La couleur à corriger.
+    /// @param_it c Il colore da correggere.
+    /// @param_de c Die zu korrigierende Farbe.
+    /// @param_ru c Корректируемый цвет.
+    /// @param_zh c 要校正的颜色。
+    /// @param_ja c 補正する色。
+    /// @param_ko c 보정할 색.
+    ///
+    /// @param_en g The exponent each RGB channel is raised to. 2.2 is the usual display gamma.
+    /// @param_es g El exponente al que se eleva cada canal RGB. 2.2 es la gamma de pantalla habitual.
+    /// @param_pt g O expoente a que cada canal RGB é elevado. 2.2 é a gama de tela habitual.
+    /// @param_fr g L'exposant appliqué à chaque canal RVB. 2,2 est le gamma d'affichage usuel.
+    /// @param_it g L'esponente a cui viene elevato ogni canale RGB. 2.2 è la gamma di schermo abituale.
+    /// @param_de g Der Exponent, mit dem jeder RGB-Kanal potenziert wird. 2,2 ist das übliche Anzeigegamma.
+    /// @param_ru g Показатель степени для каждого канала RGB. 2.2 — обычная экранная гамма.
+    /// @param_zh g 每个 RGB 通道所取的指数。2.2 是常见的显示伽马值。
+    /// @param_ja g 各 RGB チャンネルに掛ける指数。2.2 が一般的なディスプレイガンマです。
+    /// @param_ko g 각 RGB 채널에 적용할 지수. 2.2가 일반적인 디스플레이 감마입니다.
+    ///
+    /// @result_en The corrected colour, with its alpha as it was.
+    /// @result_es El color corregido, con su alfa tal cual estaba.
+    /// @result_pt A cor corrigida, com o alfa como estava.
+    /// @result_fr La couleur corrigée, avec son alpha inchangé.
+    /// @result_it Il colore corretto, con l'alfa invariata.
+    /// @result_de Die korrigierte Farbe mit unverändertem Alphawert.
+    /// @result_ru Скорректированный цвет с прежней альфой.
+    /// @result_zh 校正后的颜色，alpha 保持原样。
+    /// @result_ja 補正後の色。アルファは元のままです。
+    /// @result_ko 보정된 색. 알파는 원래대로입니다.
+    fn gamma(c: f32x4, g: f32 = 2.2) -> f32x4 {
+        #f32x4(exp2(log2(c.x) * g), exp2(log2(c.y) * g), exp2(log2(c.z) * g), c.w)
+    }
+
+    // hdr
+
+    // `exp_exposure` is a f32x4, not a scalar, because that is how the baker stores it: a uniform
+    // exposure is baked as `#f32x4(k, k, k, k)`, not as a scalar broadcast. Declaring it `f32` makes
+    // this function unmatchable — the reconstruction would have to bind a vector constant to a scalar
+    // parameter, which cannot recompile. Defaulting to ones means an effect that sets no exposure folds
+    // the multiply away (`x * 1` is exact) and still matches.
+
+    /// @brief_en Exposure, then a hue/saturation/value offset, then back to RGB — the standard colour-grading chain.
+    /// @brief_es Exposición, luego un desplazamiento de tono/saturación/valor y vuelta a RGB: la cadena estándar de gradación de color.
+    /// @brief_pt Exposição, depois um deslocamento de matiz/saturação/valor e volta a RGB — a cadeia padrão de gradação de cor.
+    /// @brief_fr Exposition, puis un décalage teinte/saturation/valeur, puis retour au RVB — la chaîne d'étalonnage classique.
+    /// @brief_it Esposizione, poi uno scostamento di tinta/saturazione/valore e ritorno all'RGB: la catena standard di correzione colore.
+    /// @brief_de Belichtung, dann ein Farbton-/Sättigungs-/Helligkeitsversatz und zurück nach RGB — die übliche Farbkorrekturkette.
+    /// @brief_ru Экспозиция, затем сдвиг тона, насыщенности и яркости, затем обратно в RGB — стандартная цепочка цветокоррекции.
+    /// @brief_zh 先曝光，再做色相/饱和度/明度偏移，最后转回 RGB —— 标准的调色链路。
+    /// @brief_ja 露出を掛け、色相・彩度・明度をずらし、RGB に戻す標準的なカラーグレーディングの流れです。
+    /// @brief_ko 노출을 적용하고 색상·채도·명도를 이동한 뒤 RGB로 되돌리는 표준 색보정 과정입니다.
+    ///
+    /// @param_en rgba The colour to grade.
+    /// @param_es rgba El color que se gradúa.
+    /// @param_pt rgba A cor a graduar.
+    /// @param_fr rgba La couleur à étalonner.
+    /// @param_it rgba Il colore da correggere.
+    /// @param_de rgba Die zu korrigierende Farbe.
+    /// @param_ru rgba Цвет, который корректируется.
+    /// @param_zh rgba 要调色的颜色。
+    /// @param_ja rgba グレーディングする色。
+    /// @param_ko rgba 보정할 색.
+    ///
+    /// @param_en hsv_offset Added to the HSV form: hue shift, saturation shift, value shift, and the alpha offset in the last lane.
+    /// @param_es hsv_offset Se suma a la forma HSV: desplazamiento de tono, de saturación, de valor y el desplazamiento de alfa en el último carril.
+    /// @param_pt hsv_offset Somado à forma HSV: deslocamento de matiz, de saturação, de valor e o deslocamento de alfa na última faixa.
+    /// @param_fr hsv_offset Ajouté à la forme TSV : décalage de teinte, de saturation, de valeur, et le décalage d'alpha dans la dernière voie.
+    /// @param_it hsv_offset Sommato alla forma HSV: scostamento di tinta, di saturazione, di valore e lo scostamento di alfa nell'ultima corsia.
+    /// @param_de hsv_offset Wird zur HSV-Form addiert: Farbton-, Sättigungs- und Helligkeitsversatz sowie der Alphaversatz in der letzten Spur.
+    /// @param_ru hsv_offset Прибавляется к HSV-представлению: сдвиг тона, насыщенности, яркости и сдвиг альфы в последней дорожке.
+    /// @param_zh hsv_offset 加到 HSV 形式上：色相偏移、饱和度偏移、明度偏移，最后一个通道是 alpha 偏移。
+    /// @param_ja hsv_offset HSV 形式に加算されます。色相・彩度・明度のずれと、最後のレーンにアルファのずれ。
+    /// @param_ko hsv_offset HSV 형태에 더해집니다. 색상·채도·명도 이동과 마지막 레인의 알파 이동.
+    ///
+    /// @param_en exp_exposure The exposure multiplier, as a vector because that is how the baker stores a uniform one. Ones leave the colour alone.
+    /// @param_es exp_exposure El multiplicador de exposición, como vector porque así lo guarda el compilador cuando es uniforme. Unos dejan el color igual.
+    /// @param_pt exp_exposure O multiplicador de exposição, como vetor porque é assim que o compilador guarda um valor uniforme. Uns deixam a cor igual.
+    /// @param_fr exp_exposure Le multiplicateur d'exposition, sous forme de vecteur car c'est ainsi que le compilateur stocke une valeur uniforme. Des uns laissent la couleur inchangée.
+    /// @param_it exp_exposure Il moltiplicatore di esposizione, come vettore perché è così che il compilatore memorizza un valore uniforme. Tutti uno lascia il colore invariato.
+    /// @param_de exp_exposure Der Belichtungsfaktor, als Vektor, weil der Compiler einen einheitlichen Wert so ablegt. Einsen lassen die Farbe unverändert.
+    /// @param_ru exp_exposure Множитель экспозиции — вектор, потому что именно так компилятор хранит однородное значение. Единицы оставляют цвет без изменений.
+    /// @param_zh exp_exposure 曝光乘数。之所以是向量，是因为编译器就是这样存储统一值的。全为 1 时颜色不变。
+    /// @param_ja exp_exposure 露出の倍率。コンパイラが一様な値をこの形で保持するため、スカラーではなくベクトルです。すべて 1 なら色は変わりません。
+    /// @param_ko exp_exposure 노출 배수. 컴파일러가 균일한 값을 이 형태로 저장하기 때문에 스칼라가 아닌 벡터입니다. 모두 1이면 색이 그대로입니다.
+    ///
+    /// @result_en The graded colour, back in RGB.
+    /// @result_es El color graduado, de vuelta en RGB.
+    /// @result_pt A cor graduada, de volta em RGB.
+    /// @result_fr La couleur étalonnée, de retour en RVB.
+    /// @result_it Il colore corretto, di nuovo in RGB.
+    /// @result_de Die korrigierte Farbe, zurück in RGB.
+    /// @result_ru Скорректированный цвет, снова в RGB.
+    /// @result_zh 调色后的颜色，已转回 RGB。
+    /// @result_ja グレーディング後の色。RGB に戻されています。
+    /// @result_ko 보정된 색. RGB로 되돌아온 상태입니다.
+    fn grading(rgba : f32x4, hsv_offset : f32x4, exp_exposure: f32x4 = #f32x4(1.0, 1.0, 1.0, 1.0)) -> f32x4 {
+        let expanded_rgba : f32x4 = rgba * exp_exposure;
+        let hsv : f32x4 = rgb2hsv(expanded_rgba);
+        let new_hsv : f32x4 = hsv + hsv_offset;
+        let new_rgba : f32x4 = hsv2rgb(new_hsv);
+        new_rgba
+    }
+
+} // namespace color

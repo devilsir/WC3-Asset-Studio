@@ -22,7 +22,7 @@ const PATCH = Object.freeze({
 const PRODUCT = 'w3';
 const MAX_HTTP_BYTES = 96 * 1024 * 1024;
 const MAX_DECODE_BYTES = 256 * 1024 * 1024;
-const USER_AGENT = 'WC3-Asset-Studio/1.3 CASC-TACT';
+const USER_AGENT = 'WC3-Asset-Studio/1.4 CASC-TACT';
 
 function trace(message) {
   try { process.stderr.write(`CASC_CDN_STAGE ${message}\n`); } catch (_) {}
@@ -33,6 +33,86 @@ function normalizeVirtual(value) {
     .replace(/\//g, '\\')
     .replace(/^\\+/, '')
     .toLowerCase();
+}
+
+function normalizeArtSet(value) {
+  const v = String(value || '').trim().toLowerCase();
+  if (v === 'hd' || v === 'auto-hd') return 'hd';
+  if (v === 'de') return 'de';
+  return 'sd';
+}
+function logicalVirtualPath(value) {
+  const low = normalizeVirtual(value);
+  const at = low.lastIndexOf(':');
+  return at >= 0 ? low.slice(at + 1) : low;
+}
+function virtualArtSetInfo(value) {
+  const low = normalizeVirtual(value);
+  const sd = /^war3sd\.w3mod:/.test(low);
+  const hd = /:_hd\.w3mod:/.test(low);
+  const de = /:_de\.w3mod:/.test(low);
+  const moduleMatches = [...low.matchAll(/:_([a-z0-9_-]+)\.w3mod:/g)].map(m => m[1]);
+  const otherModule = moduleMatches.some(x => x !== 'hd' && x !== 'de');
+  const base = /^war3\.w3mod:/.test(low) && !hd && !de && !otherModule;
+  const bare = !/^war3(?:sd)?\.w3mod:/.test(low);
+  return { low, sd, hd, de, base, bare, otherModule };
+}
+function artSetPreference(value, selected='sd') {
+  const set = normalizeArtSet(selected), f = virtualArtSetInfo(value);
+  // Locale/censorship overlays (_fr, _teen, etc.) are intentionally excluded
+  // from the SD/HD/DE gallery choices. They remain directly readable by path.
+  if (f.otherModule) return 1000;
+  if (set === 'hd') {
+    if (f.hd) return 0;
+    if (f.base) return 10;
+    if (f.sd) return 20;
+    if (f.bare) return 30;
+    if (f.de) return 40;
+  } else if (set === 'de') {
+    if (f.de) return 0;
+    if (f.base) return 10;
+    if (f.hd) return 20;
+    if (f.sd) return 30;
+    if (f.bare) return 40;
+  } else {
+    if (f.sd) return 0;
+    if (f.base) return 10;
+    if (f.bare) return 20;
+    if (f.hd) return 30;
+    if (f.de) return 40;
+  }
+  return 1000;
+}
+function modelPathFlags(value) {
+  const low = normalizeVirtual(value);
+  const model = /\.(mdx|mdl)$/.test(low);
+  const portrait = model && (/(^|[:\\])portraits?([\\]|$)/.test(low) || /(?:^|[\\])[^\\]*portrait[^\\]*\.(?:mdx|mdl)$/.test(low));
+  const building = model && /(^|[:\\])buildings([\\]|$)/.test(low);
+  const doodad = model && /(^|[:\\])doodads([\\]|$)/.test(low);
+  const effect = model && /(^|[:\\])(abilities|effects|spells|sharedmodels)([\\]|$)/.test(low);
+  const projectile = model && (/(^|[:\\])(missiles?|projectiles?)([\\]|$)/.test(low) || /(?:missile|projectile)[^\\]*\.(?:mdx|mdl)$/.test(low));
+  const item = model && /(^|[:\\])(items|inventoryitems)([\\]|$)|(^|[:\\])objects[\\]inventoryitems([\\]|$)/.test(low);
+  const environment = model && /(^|[:\\])(environment|terrain|cliffs?|water)([\\]|$)/.test(low);
+  const hero = model && (/(^|[:\\])heroes?([\\]|$)/.test(low) || /(^|[\\])hero[^\\]*([\\]|$)/.test(low) || /(?:^|[\\])hero[^\\]*\.(?:mdx|mdl)$/.test(low));
+  const unitRoot = model && /(^|[:\\])(units|characters|creatures)([\\]|$)/.test(low);
+  const unit = unitRoot && !hero && !portrait;
+  return { low, model, unit, hero, building, doodad, effect, projectile, item, environment, portrait };
+}
+function modelCategoryMatches(type, value) {
+  const mode = String(type || 'models').toLowerCase();
+  const f = modelPathFlags(value);
+  if (mode === 'models' || mode === 'model') return f.model;
+  if (mode === 'model-units' || mode === 'unit-models') return f.unit;
+  if (mode === 'heroes' || mode === 'hero') return f.hero && !f.portrait;
+  if (mode === 'buildings' || mode === 'building') return f.building;
+  if (mode === 'doodads' || mode === 'doodad') return f.doodad;
+  if (mode === 'effects' || mode === 'effect' || mode === 'fx') return f.effect && !f.projectile;
+  if (mode === 'projectiles' || mode === 'projectile' || mode === 'missiles' || mode === 'missile') return f.projectile;
+  if (mode === 'items' || mode === 'item') return f.item;
+  if (mode === 'environment' || mode === 'terrain') return f.environment;
+  if (mode === 'portraits' || mode === 'portrait') return f.portrait;
+  if (mode === 'model-other' || mode === 'other-models') return f.model && !(f.unit || f.hero || f.building || f.doodad || f.effect || f.projectile || f.item || f.environment || f.portrait);
+  return null;
 }
 function safeKey(value) {
   const s = String(value || '').trim().toLowerCase();
@@ -305,6 +385,152 @@ function parseArchiveIndex(buffer, archiveHash, wanted, found) {
   }
 }
 
+function parseIndexFooter(buffer) {
+  // TACT has shipped two closely related index-footer layouts:
+  //  1) fixed 16-byte TOC hashes + 12-byte metadata + N-byte footer hash
+  //     (CascLib FILE_INDEX_FOOTER; total = 28 + N)
+  //  2) N-byte last-page hash + N-byte contents hash + the same 12-byte
+  //     metadata + N-byte footer hash (TACT.Net; total = 12 + 3*N).
+  // Warcraft III builds can use either representation. Probe both layouts,
+  // both endian variants of ElementCount, and choose the dimensions that best
+  // explain the complete file rather than rejecting a valid archive-group.
+  if (!Buffer.isBuffer(buffer) || buffer.length < 28) return null;
+
+  const candidates = [];
+  const pushCandidate = (layout, hashBytes, footer, meta, footerSize, pageHashMode='minus1') => {
+    if (footer < 0 || meta < 0 || meta + 12 + hashBytes > buffer.length) return;
+    const version = buffer[meta];
+    const pageSizeKB = buffer[meta + 3];
+    const offsetBytes = buffer[meta + 4];
+    const sizeBytes = buffer[meta + 5];
+    const keyBytes = buffer[meta + 6];
+    const storedHashBytes = buffer[meta + 7];
+    if (storedHashBytes !== hashBytes || version !== 1) return;
+    if (!pageSizeKB || pageSizeKB > 64 || sizeBytes < 1 || sizeBytes > 8 || keyBytes < 8 || keyBytes > 32) return;
+    if (![0,4,5,6].includes(offsetBytes)) return;
+
+    const pageSize = pageSizeKB * 1024;
+    const entrySize = keyBytes + sizeBytes + offsetBytes;
+    const entriesPerPage = Math.floor(pageSize / entrySize);
+    if (!entriesPerPage) return;
+
+    const rawCounts = [
+      { endian:'le', value:buffer.readUInt32LE(meta + 8) },
+      { endian:'be', value:buffer.readUInt32BE(meta + 8) }
+    ];
+    const seen = new Set();
+    for (const row of rawCounts) {
+      const entryCount = Number(row.value) || 0;
+      if (!entryCount || entryCount > 50_000_000 || seen.has(entryCount)) continue;
+      seen.add(entryCount);
+      const pageCount = Math.ceil(entryCount / entriesPerPage);
+      const pageBytes = pageCount * pageSize;
+      if (!pageCount || pageBytes > footer) continue;
+
+      const tocBytes = pageCount * keyBytes;
+      const pageHashBytes = (pageHashMode === 'all' ? pageCount : Math.max(0, pageCount - 1)) * hashBytes;
+      const expectedSize = pageBytes + tocBytes + pageHashBytes + footerSize;
+      const slack = buffer.length - expectedSize;
+      const preFooterSlack = footer - pageBytes;
+      if (preFooterSlack < 0) continue;
+
+      let score = Math.abs(slack);
+      if (slack < 0) score += pageSize * 32;
+      if (preFooterSlack < tocBytes) score += pageSize * 16;
+      if (row.endian === 'be') score += 0.25;
+
+      candidates.push({
+        layout, footer, footerSize, checksumSize:hashBytes, version, pageSize,
+        offsetBytes, sizeBytes, keyBytes, entryCount, entrySize,
+        entriesPerPage, pageCount, countEndian:row.endian,
+        expectedSize, slack, preFooterSlack, score
+      });
+    }
+  };
+
+  for (let hashBytes = 1; hashBytes <= 32; hashBytes++) {
+    {
+      const meta = buffer.length - (12 + hashBytes);
+      const footer = meta - 16;
+      const footerSize = 28 + hashBytes;
+      pushCandidate('fixed16', hashBytes, footer, meta, footerSize);
+    }
+    {
+      const footerSize = 12 + hashBytes * 3;
+      const footer = buffer.length - footerSize;
+      const meta = footer + hashBytes * 2;
+      pushCandidate('dynamic', hashBytes, footer, meta, footerSize);
+    }
+    {
+      // Current Warcraft III group indices can use the compact Blizzard layout:
+      // N-byte TOC hash + 12-byte metadata + N-byte footer hash. Unlike the
+      // older dynamic layout, the TOC contains one page hash for every page.
+      const footerSize = 12 + hashBytes * 2;
+      const footer = buffer.length - footerSize;
+      const meta = footer + hashBytes;
+      pushCandidate('compact', hashBytes, footer, meta, footerSize, 'all');
+    }
+  }
+
+  if (!candidates.length) return null;
+  candidates.sort((a,b) => a.score-b.score || Math.abs(a.slack)-Math.abs(b.slack) || a.footer-b.footer);
+  return candidates[0];
+}
+function compareIndexKey(buffer, pos, target, keyBytes) {
+  for (let i = 0; i < keyBytes; i++) {
+    const d = buffer[pos + i] - target[i];
+    if (d) return d;
+  }
+  return 0;
+}
+
+function readUIntBE(buffer, pos, bytes) {
+  if (bytes <= 6) return buffer.readUIntBE(pos, bytes);
+  let value = 0n;
+  for (let i = 0; i < bytes; i++) value = (value << 8n) | BigInt(buffer[pos + i]);
+  return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : Number.MAX_SAFE_INTEGER;
+}
+
+function parseGroupIndex(buffer, archives, wanted, found) {
+  // archive-group is the merged TACT index. Group entries are sorted by EKey
+  // and use Key + compressed-size + archive-ordinal(2 BE) + offset(4 BE).
+  // Resolve only requested EKeys with binary search instead of linearly scanning
+  // the whole ~7 MB group index for every gallery batch.
+  if (!Buffer.isBuffer(buffer) || !Array.isArray(archives) || !(wanted instanceof Set) || !(found instanceof Map)) return false;
+  const footer = parseIndexFooter(buffer);
+  if (!footer || (footer.offsetBytes !== 5 && footer.offsetBytes !== 6)) return false;
+  const { pageSize, sizeBytes, keyBytes, entryCount, entrySize, entriesPerPage } = footer;
+  trace(`archive-group footer layout=${footer.layout} page=${pageSize} entry=${entrySize} count=${entryCount} key=${keyBytes} size=${sizeBytes} offset=${footer.offsetBytes} hash=${footer.checksumSize} countEndian=${footer.countEndian} slack=${footer.slack}`);
+
+  const entryPos = (index) => Math.floor(index / entriesPerPage) * pageSize + (index % entriesPerPage) * entrySize;
+  for (const originalKey of wanted) {
+    const fullKey = safeKey(originalKey);
+    if (!fullKey || fullKey.length < keyBytes * 2 || found.has(originalKey)) continue;
+    const target = Buffer.from(fullKey.slice(0, keyBytes * 2), 'hex');
+    let lo = 0, hi = entryCount - 1, match = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      const pos = entryPos(mid);
+      if (pos + entrySize > footer.footer) return false;
+      const cmp = compareIndexKey(buffer, pos, target, keyBytes);
+      if (cmp < 0) lo = mid + 1;
+      else if (cmp > 0) hi = mid - 1;
+      else { match = pos; break; }
+    }
+    if (match < 0) continue;
+    const size = readUIntBE(buffer, match + keyBytes, sizeBytes);
+    const ordinalAt = match + keyBytes + sizeBytes;
+    const archiveIndexBytes = footer.offsetBytes - 4;
+    const archiveIndex = readUIntBE(buffer, ordinalAt, archiveIndexBytes);
+    const offset = buffer.readUInt32BE(ordinalAt + archiveIndexBytes);
+    const archiveHash = archives[archiveIndex];
+    if (archiveHash && size > 0 && size <= MAX_HTTP_BYTES) {
+      found.set(originalKey, { archiveHash, offset, size });
+    }
+  }
+  return true;
+}
+
 function parseWar3Root(buffer) {
   const decoded = decodeBlte(buffer);
   if (decoded.length < 4 || decoded.toString('ascii', 0, 4) !== 'War3') throw new Error('Warcraft III root is not in War3 format.');
@@ -329,7 +555,9 @@ class W3Cdn {
     this.region = PATCH[region] ? region : 'us'; this.cacheDir = cacheDir;
     this.installPath = validInstallRoot(installPath) ? path.resolve(installPath) : '';
     this.encoding = new Map(); this.root = new Map(); this.locationCache = new Map();
-    this.sourceBuild = '';
+    this.locationMapComplete = false; this.locationMapPromise = null;
+    this.archiveGroup = ''; this.groupIndexBuffer = null; this.groupIndexUnavailable = false;
+    this.sourceBuild = ''; this.hosts = [];
   }
   async init() {
     trace(`init region=${this.region} local=${this.installPath ? 'yes' : 'no'}`);
@@ -346,7 +574,8 @@ class W3Cdn {
       this.buildHash = local.buildHash;
       this.cdnHash = local.cdnHash;
       this.cdnPath = local.cdnPath;
-      this.host = local.hosts[0] || '';
+      this.hosts = [...new Set((local.hosts || []).filter(Boolean))];
+      this.host = this.hosts[0] || '';
       this.sourceBuild = `local:${local.version || local.buildHash.slice(0,8)}`;
       trace(`local-build version=${local.version || ''} build=${this.buildHash} cdn=${this.cdnHash}`);
     }
@@ -364,7 +593,8 @@ class W3Cdn {
       ver = versions.find(x => x.Region === this.region) || versions.find(x => x.Region === 'us') || versions[0];
       if (!cdn || !ver) throw new Error('Blizzard patch service returned no Warcraft III CDN/version row.');
       const hosts = String(cdn.Hosts || cdn.Servers || '').split(/\s+/).filter(Boolean);
-      if (!this.host) this.host = hosts[0] || '';
+      this.hosts = [...new Set([...(this.hosts || []), ...hosts])];
+      if (!this.host) this.host = this.hosts[0] || '';
       if (!this.cdnPath) this.cdnPath = String(cdn.Path || '').trim().replace(/^\/+|\/+$/g,'');
       if (!this.buildHash) this.buildHash = safeKey(ver.BuildConfig);
       if (!this.cdnHash) this.cdnHash = safeKey(ver.CDNConfig);
@@ -385,6 +615,8 @@ class W3Cdn {
     const cdnCfg = parseConfig(cdnBuf.toString('utf8'));
     this.archives = Array.isArray(cdnCfg.archives) ? cdnCfg.archives.filter(safeKey) : String(cdnCfg.archives || '').split(/\s+/).map(safeKey).filter(Boolean);
     if (!this.archives.length) throw new Error('Warcraft III CDN config contains no archives.');
+    this.archiveGroup = safeKey(Array.isArray(cdnCfg['archive-group']) ? cdnCfg['archive-group'][0] : String(cdnCfg['archive-group'] || '').split(/\s+/)[0]);
+    trace(`archive-group=${this.archiveGroup ? 'yes' : 'no'}`);
 
     const encField = Array.isArray(build.encoding) ? build.encoding.join(' ') : String(build.encoding || '');
     const encParts = encField.split(/\s+/).map(safeKey).filter(Boolean); const encKey = encParts[1] || encParts[0];
@@ -403,6 +635,49 @@ class W3Cdn {
     this.root = parseWar3Root(rootBuf);
     trace(`root entries=${this.root.size} archives=${this.archives.length}`);
   }
+  locationMapFile(){ return cacheFile(this.cacheDir,'locmap',`${this.cdnHash}.bin`); }
+  loadLocationMap(){
+    if(this.locationMapComplete) return true;
+    const b=readCache(this.locationMapFile());
+    if(!b||b.length<12||b.toString('ascii',0,8)!=='W3LIDX1\0') return false;
+    const count=b.readUInt32LE(8),recordSize=26,expected=12+count*recordSize;
+    if(count>2000000||expected!==b.length) return false;
+    const cache=new Map();
+    for(let i=0,p=12;i<count;i++,p+=recordSize){
+      const eKey=b.toString('hex',p,p+16),archiveIndex=b.readUInt16LE(p+16),offset=b.readUInt32LE(p+18),size=b.readUInt32LE(p+22),archiveHash=this.archives[archiveIndex];
+      if(archiveHash&&size>0&&size<=MAX_HTTP_BYTES) cache.set(eKey,{archiveHash,offset,size});
+    }
+    this.locationCache=cache;this.locationMapComplete=true;trace(`location map loaded entries=${cache.size}`);return true;
+  }
+  saveLocationMap(){
+    if(!this.locationCache.size)return;
+    const archiveIndex=new Map(this.archives.map((hash,i)=>[hash,i])),rows=[];
+    for(const [eKey,loc] of this.locationCache){const ai=archiveIndex.get(loc.archiveHash);if(ai==null||ai>65535||!safeKey(eKey))continue;rows.push([eKey,ai,loc]);}
+    const b=Buffer.allocUnsafe(12+rows.length*26);b.write('W3LIDX1\0',0,8,'ascii');b.writeUInt32LE(rows.length,8);let p=12;
+    for(const [eKey,ai,loc] of rows){Buffer.from(eKey,'hex').copy(b,p);b.writeUInt16LE(ai,p+16);b.writeUInt32LE(loc.offset>>>0,p+18);b.writeUInt32LE(loc.size>>>0,p+22);p+=26;}
+    writeCache(this.locationMapFile(),b);trace(`location map saved entries=${rows.length} bytes=${b.length}`);
+  }
+  async ensureLocationMap(){
+    if(!this.locationMapComplete)this.loadLocationMap();
+    if(this.locationMapComplete)return this.locationCache;
+    if(this.locationMapPromise)return this.locationMapPromise;
+    this.locationMapPromise=(async()=>{
+      const wanted=new Set();let failedIndexes=0;
+      for(const cKey of this.root.values()) for(const eKey of (this.encoding.get(cKey)||[])) if(safeKey(eKey)) wanted.add(eKey);
+      for(const eKey of this.locationCache.keys())wanted.delete(eKey);
+      trace(`location map build targets=${wanted.size} cached=${this.locationCache.size}`);
+      const concurrency=12;
+      for(let i=0;i<this.archives.length;i+=concurrency){
+        const batch=this.archives.slice(i,i+concurrency);
+        await Promise.all(batch.map(async archiveHash=>{
+          try{const f=cacheFile(this.cacheDir,'index',`${archiveHash}.index`),b=await fetchCdnCached(dataUrl(this.host,this.cdnPath,archiveHash,true),f,{maxBytes:32*1024*1024,timeout:20000}),localFound=new Map();parseArchiveIndex(b,archiveHash,wanted,localFound);for(const [eKey,loc] of localFound){this.locationCache.set(eKey,loc);wanted.delete(eKey);}}catch(e){failedIndexes++;trace(`index failed ${archiveHash} ${e.message}`);}
+        }));
+        trace(`location map progress ${Math.min(i+concurrency,this.archives.length)}/${this.archives.length} remaining=${wanted.size}`);
+      }
+      this.locationMapComplete=failedIndexes===0;if(this.locationMapComplete)this.saveLocationMap();else trace(`location map incomplete failedIndexes=${failedIndexes}`);return this.locationCache;
+    })().finally(()=>{this.locationMapPromise=null;});
+    return this.locationMapPromise;
+  }
   eKeysFor(value) {
     const key = safeKey(value); if (!key) return [];
     return [...new Set([...(this.encoding.get(key) || []), key])];
@@ -413,22 +688,154 @@ class W3Cdn {
     }
     return null;
   }
+  candidateHosts() {
+    const regionHost = this.region && this.region !== 'cn' ? `${this.region}.cdn.blizzard.com` : '';
+    const values = [this.host, ...(this.hosts || []), regionHost, 'level3.ssl.blizzard.com'];
+    return [...new Set(values.map(v => String(v || '').trim()).filter(Boolean))];
+  }
+  dataCandidates(hash, index=false) {
+    const out = [];
+    for (const host of this.candidateHosts()) {
+      const base = dataUrl(host, this.cdnPath, hash, index);
+      if (/^http:\/\//i.test(base)) out.push(base.replace(/^http:/i,'https:'), base);
+      else out.push(base);
+    }
+    return [...new Set(out)];
+  }
   async readLoose(eKey) {
     const cache = cacheFile(this.cacheDir, 'asset', eKey);
     const existing = readCache(cache); if (existing) return existing;
     try {
-      const u = dataUrl(this.host,this.cdnPath,eKey);
       let encoded = null, last = null;
-      for (const candidate of [u.replace(/^http:/,'https:'), u]) { try { encoded = await requestBuffer(candidate, { maxBytes:64*1024*1024, timeout:15000 }); break; } catch (e) { last=e; } }
+      for (const candidate of this.dataCandidates(eKey, false)) { try { encoded = await requestBuffer(candidate, { maxBytes:64*1024*1024, timeout:15000 }); break; } catch (e) { last=e; } }
       if (!encoded) throw last || new Error('Loose CDN asset unavailable.');
       const decoded = decodeBlte(encoded); writeCache(cache, decoded); return decoded;
     } catch (_) { return null; }
   }
+  locationFile(eKey) { return cacheFile(this.cacheDir,'loc',`${this.cdnHash}-${safeKey(eKey)}.json`); }
   loadSavedLocation(eKey) {
-    const f = cacheFile(this.cacheDir,'loc',`${this.cdnHash}-${eKey}.json`);
+    const key=safeKey(eKey); if(!key)return null;
+    const f = this.locationFile(key);
     try { const v = JSON.parse(fs.readFileSync(f,'utf8')); return v && v.archiveHash && Number.isFinite(v.offset) && Number.isFinite(v.size) ? v : null; } catch (_) { return null; }
   }
-  saveLocation(eKey, loc) { writeCache(cacheFile(this.cacheDir,'loc',`${this.cdnHash}-${eKey}.json`), Buffer.from(JSON.stringify(loc))); }
+  saveLocation(eKey, loc) { const key=safeKey(eKey);if(key&&loc)writeCache(this.locationFile(key), Buffer.from(JSON.stringify(loc))); }
+  invalidateLocation(eKey, reason='') {
+    const key=safeKey(eKey); if(!key)return;
+    this.locationCache.delete(key);
+    try{fs.rmSync(this.locationFile(key),{force:true});}catch(_){}
+    // A failed range can mean a compact map produced by an older/broken
+    // index parser is stale. Drop that map once so the next lookup is rebuilt
+    // from the authoritative group/per-archive index instead of poisoning every
+    // future helper process.
+    if(this.locationMapComplete){
+      this.locationMapComplete=false;
+      try{fs.rmSync(this.locationMapFile(),{force:true});}catch(_){}
+    }
+    trace(`stale location invalidated ${key}${reason?` reason=${reason}`:''}`);
+  }
+  async loadGroupIndex() {
+    if (this.groupIndexBuffer) return this.groupIndexBuffer;
+    if (!this.archiveGroup || this.groupIndexUnavailable) return null;
+    try {
+      let data = null;
+      if (this.installPath) {
+        const local = path.join(this.installPath, 'Data', 'indices', `${this.archiveGroup}.index`);
+        try { data = fs.readFileSync(local); trace(`archive-group local bytes=${data.length}`); } catch (_) {}
+      }
+      if (!data) {
+        const f = cacheFile(this.cacheDir, 'group-index', `${this.archiveGroup}.index`);
+        data = await fetchCdnCached(dataUrl(this.host, this.cdnPath, this.archiveGroup, true), f, { maxBytes:64*1024*1024, timeout:20000 });
+        trace(`archive-group cache/cdn bytes=${data.length}`);
+      }
+      this.groupIndexBuffer = data;
+      return data;
+    } catch (e) {
+      this.groupIndexUnavailable = true;
+      trace(`archive-group unavailable ${e.message}`);
+      return null;
+    }
+  }
+  async locateFromGroupIndex(wanted) {
+    const found = new Map();
+    if (!wanted?.size || !this.archiveGroup || this.groupIndexUnavailable) return { usable:false, found };
+    const b = await this.loadGroupIndex();
+    if (!b) return { usable:false, found };
+    const usable = parseGroupIndex(b, this.archives, wanted, found);
+    if (!usable) {
+      this.groupIndexUnavailable = true;
+      trace(`archive-group parse rejected bytes=${b.length} tail=${b.subarray(Math.max(0,b.length-64)).toString('hex')}; falling back to per-archive indices`);
+      return { usable:false, found:new Map() };
+    }
+    for (const [eKey, loc] of found) {
+      this.locationCache.set(eKey, loc);
+      this.saveLocation(eKey, loc);
+    }
+    trace(`archive-group lookup wanted=${wanted.size} found=${found.size}`);
+    return { usable:true, found };
+  }
+  readCachedAsset(eKey) {
+    const key=safeKey(eKey); if(!key) return null;
+    return readCache(cacheFile(this.cacheDir,'asset',key));
+  }
+  async locatePlans(plans) {
+    const pending=new Set(), wanted=new Set(), owners=new Map(), found=new Map();
+    const accept=(eKey,loc)=>{
+      if(!loc)return;
+      if(!found.has(eKey)){found.set(eKey,loc);this.locationCache.set(eKey,loc);this.saveLocation(eKey,loc);}
+      const planIds=owners.get(eKey);if(!planIds)return;
+      for(const planId of planIds){
+        if(!pending.has(planId))continue;
+        const plan=plans[planId];plan.location=loc;plan.eKey=eKey;pending.delete(planId);
+        for(const sibling of plan.eKeys)wanted.delete(sibling);
+      }
+    };
+    for(let i=0;i<(plans||[]).length;i++){
+      const plan=plans[i]; if(!plan?.root||!plan.eKeys?.length||plan.data) continue;
+      for(const eKey of plan.eKeys){
+        const saved=this.locationCache.get(eKey)||this.loadSavedLocation(eKey);
+        if(saved){ plan.location=saved; plan.eKey=eKey; found.set(eKey,saved); break; }
+      }
+      if(plan.location) continue;
+      pending.add(i);
+      for(const eKey of plan.eKeys){
+        wanted.add(eKey);
+        if(!owners.has(eKey)) owners.set(eKey,new Set());
+        owners.get(eKey).add(i);
+      }
+    }
+    if(!pending.size||this.locationMapComplete) return found;
+
+    // Current TACT builds publish one archive-group index containing the
+    // locations for all CDN archives. A single 4-8 MB scan is dramatically
+    // cheaper than parsing up to ~190 individual .index files per thumbnail.
+    const group=await this.locateFromGroupIndex(new Set(wanted));
+    if(group.usable){
+      for(const [eKey,loc] of group.found)accept(eKey,loc);
+      // archive-group is authoritative for archived assets. Anything left is
+      // normally a loose CDN file, which readRequests will try directly.
+      trace(`archive-group batch remainingPlans=${pending.size}`);
+      return found;
+    }
+
+    // Compatibility fallback for builds that do not publish a usable group
+    // index. One pass resolves the entire request batch, never one pass/card.
+    trace(`index batch plans=${pending.size} keys=${wanted.size}`);
+    const concurrency=12;
+    for(let i=0;i<this.archives.length&&pending.size;i+=concurrency){
+      const batch=this.archives.slice(i,i+concurrency);
+      await Promise.all(batch.map(async archiveHash=>{
+        if(!pending.size)return;
+        try{
+          const f=cacheFile(this.cacheDir,'index',`${archiveHash}.index`);
+          const b=await fetchCdnCached(dataUrl(this.host,this.cdnPath,archiveHash,true),f,{maxBytes:32*1024*1024,timeout:20000});
+          const localFound=new Map();parseArchiveIndex(b,archiveHash,wanted,localFound);
+          for(const [eKey,loc] of localFound)accept(eKey,loc);
+        }catch(e){trace(`index failed ${archiveHash} ${e.message}`);}
+      }));
+      trace(`index batch progress ${Math.min(i+concurrency,this.archives.length)}/${this.archives.length} remainingPlans=${pending.size}`);
+    }
+    return found;
+  }
   async locate(eKeys) {
     const wanted = new Set(eKeys.map(safeKey).filter(Boolean)); const found = new Map();
     for (const k of [...wanted]) { const saved = this.loadSavedLocation(k); if (saved) { found.set(k,saved); wanted.delete(k); } }
@@ -452,25 +859,27 @@ class W3Cdn {
   }
   async readArchive(eKey, loc) {
     const cache = cacheFile(this.cacheDir,'asset',eKey); const existing = readCache(cache); if (existing) return existing;
-    const url = dataUrl(this.host,this.cdnPath,loc.archiveHash);
     const opts = { range:{offset:loc.offset,size:loc.size}, headers:{Range:`bytes=${loc.offset}-${loc.offset+loc.size-1}`}, maxBytes:Math.min(MAX_HTTP_BYTES,loc.size+1024), timeout:25000 };
     let encoded = null, last = null;
-    for (const candidate of [url.replace(/^http:/,'https:'), url]) { try { encoded = await requestBuffer(candidate, opts); break; } catch (e) { last=e; } }
+    for (const candidate of this.dataCandidates(loc.archiveHash, false)) { try { encoded = await requestBuffer(candidate, opts); break; } catch (e) { last=e; } }
     if (!encoded) throw last || new Error('Archive range request failed.');
     const decoded = decodeBlte(encoded); writeCache(cache,decoded); return decoded;
   }
-  searchPaths(query='', type='all', limit=200) {
+  searchPaths(query='', type='all', limit=200, offset=0, artSet='sd') {
     const q = normalizeVirtual(query).replace(/\\/g,' ').trim().replace(/\s+/g,' ');
     const terms = q.split(' ').filter(Boolean);
     const mode = String(type || 'all').toLowerCase();
+    const selectedArtSet = normalizeArtSet(artSet);
     const max = Math.max(1, Math.min(500, Number(limit) || 200));
+    const start = Math.max(0, Math.min(100000, Number(offset) || 0));
     const extOk = (p) => {
       const low=String(p||'').toLowerCase();
       if(mode==='textures'||mode==='texture') return /\.(blp|dds|tga|png|jpg|jpeg)$/.test(low);
-      if(mode==='models'||mode==='model') return /\.(mdx|mdl)$/.test(low);
+      const categoryMatch=modelCategoryMatches(mode,low);
+      if(categoryMatch!==null) return categoryMatch;
       if(mode==='units'||mode==='unit'||mode==='creatures'||mode==='creature') return /\.(mdx|mdl)$/.test(low) && /(^|[:\\])(units|characters|creatures|heroes|buildings)([\\]|$)/.test(low);
-      if(mode==='effects'||mode==='effect'||mode==='fx') return /\.(mdx|mdl)$/.test(low) && /(^|[:\\])(abilities|effects|sharedmodels|spells|environment|doodads)([\\]|$)/.test(low);
-      if(mode==='sounds'||mode==='sound') return /\.(wav|mp3|ogg|flac)$/.test(low);
+      if(mode==='effects'||mode==='effect'||mode==='fx') return modelPathFlags(low).effect;
+      if(mode==='sounds'||mode==='sound') return /\.(wav|mp3|ogg|flac|opus)$/.test(low);
       return true;
     };
     const score = (p) => {
@@ -479,60 +888,96 @@ class W3Cdn {
       if(/(^|[:\\])(abilities|effects|spells)([\\]|$)/.test(low)) n+=2;
       return n;
     };
-    const rows=[];
+
+    // Collapse namespace variants to one logical Warcraft path. This avoids
+    // showing the same model three times while still preferring the user's
+    // selected SD / HD / DE storage namespace.
+    const preferred=new Map();
     for(const p of this.root.keys()){
       if(!extOk(p)) continue;
       const sc=score(p);if(sc<0)continue;
-      rows.push({path:p,score:sc});
+      const pref=artSetPreference(p,selectedArtSet);
+      if(pref>=1000) continue;
+      const logical=logicalVirtualPath(p);
+      const current=preferred.get(logical);
+      if(!current || pref<current.pref || (pref===current.pref && sc>current.score) || (pref===current.pref && sc===current.score && String(p).length<current.path.length)){
+        preferred.set(logical,{path:p,score:sc,pref,logical});
+      }
     }
-    rows.sort((a,b)=>b.score-a.score||a.path.length-b.path.length||a.path.localeCompare(b.path));
-    return rows.slice(0,max).map(x=>x.path);
+    const rows=[...preferred.values()];
+    const modelBrowseRank=(p)=>{const low=String(p||'').toLowerCase();let rank=0;if(/(^|[:\\])(units|characters|creatures|heroes|buildings)([\\]|$)/.test(low))rank-=12;else if(/(^|[:\\])(doodads|environment)([\\]|$)/.test(low))rank-=4;else if(/(^|[:\\])(abilities|effects|spells|sharedmodels)([\\]|$)/.test(low))rank+=4;if(/(?:camera|portrait|target)\.(?:mdx|mdl)$/.test(low))rank+=3;return rank;};
+    rows.sort(terms.length
+      ? (a,b)=>b.score-a.score||a.pref-b.pref||modelBrowseRank(a.path)-modelBrowseRank(b.path)||a.path.length-b.path.length||a.path.localeCompare(b.path)
+      : ((modelCategoryMatches(mode,'x.mdx')!==null||mode==='models'||mode==='model')
+        ? (a,b)=>a.pref-b.pref||modelBrowseRank(a.path)-modelBrowseRank(b.path)||a.logical.localeCompare(b.logical)
+        : (a,b)=>a.pref-b.pref||a.logical.localeCompare(b.logical)));
+    return {results:rows.slice(start,start+max).map(x=>x.path),total:rows.length,offset:start,limit:max,artSet:selectedArtSet};
   }
 
   async readRequests(requests) {
-    const plans = [];
-    for (const req of requests || []) {
-      const root = this.findRootKey(req.candidates || []);
-      plans.push({ id:req.id, root, eKeys:root ? this.eKeysFor(root.key) : [] });
+    const plans=[];
+    for(const req of requests||[]){
+      const root=this.findRootKey(req.candidates||[]),eKeys=root?this.eKeysFor(root.key):[];
+      const plan={id:req.id,root,eKeys};
+      // Decoded assets are persistent across helper processes. Check them
+      // before any network/INDEX work so reopening a gallery is instant.
+      for(const eKey of eKeys){const cached=this.readCachedAsset(eKey);if(cached){plan.data=cached;plan.eKey=eKey;break;}}
+      plans.push(plan);
     }
-    const unresolvedKeys = [];
-    // Try loose files first; this also covers manifests that Blizzard publishes outside archives.
-    for (const plan of plans) {
-      if (!plan.root) continue;
-      for (const eKey of plan.eKeys) {
-        const data = await this.readLoose(eKey);
-        if (data) { plan.data=data; plan.eKey=eKey; break; }
+
+    const unresolved=plans.filter(p=>p.root&&!p.data);
+    if(unresolved.length&&!this.locationMapComplete)this.loadLocationMap();
+    // Gallery-sized reads pay the archive-index cost once and persist a compact
+    // build-specific eKey->archive map. Later helper processes load that map
+    // instead of rescanning up to 191 .index files for every card/texture.
+    if(unresolved.length>=6&&!this.locationMapComplete&&!this.archiveGroup) await this.ensureLocationMap();
+    if(unresolved.length) await this.locatePlans(plans);
+
+    // Archive reads can run together once their locations are known. This is
+    // especially important for Model Gallery where 8-12 visible MDX files are
+    // requested as one batch instead of spawning an index scan per card.
+    const failedLocations=[];
+    await Promise.all(plans.map(async plan=>{
+      if(!plan.root||plan.data||!plan.location||!plan.eKey)return;
+      try{plan.data=await this.readArchive(plan.eKey,plan.location);}
+      catch(e){
+        trace(`archive read failed ${plan.eKey} ${e.message}`);
+        failedLocations.push({plan,eKey:plan.eKey,error:String(e?.message||e)});
       }
-      if (!plan.data) unresolvedKeys.push(...plan.eKeys);
-    }
-    const unresolvedPlans = plans.filter(p=>p.root&&!p.data);
-    let locations = new Map();
-    if (unresolvedPlans.length > 4) {
-      locations = unresolvedKeys.length ? await this.locate([...new Set(unresolvedKeys)]) : new Map();
-    } else {
-      // Interactive texture lookup is usually one missing asset with multiple
-      // possible encoding keys. Do not scan all 190 archive indexes waiting for
-      // every alternate key: stop as soon as one encoding key can be located
-      // and read successfully. This cuts first-time Search CASC latency sharply.
-      for (const plan of unresolvedPlans) {
-        for (const eKey of plan.eKeys) {
-          const one = await this.locate([eKey]);
-          const loc = one.get(eKey); if (!loc) continue;
-          try { plan.data=await this.readArchive(eKey,loc); plan.eKey=eKey; break; }
-          catch (e) { trace(`archive read failed ${eKey} ${e.message}`); }
-        }
+    }));
+
+    // Location caches survive helper processes. If an older parser ever wrote a
+    // bad archive ordinal/offset, a perfectly valid model can otherwise fail in
+    // ~100 ms forever. Invalidate only the failed keys, resolve the batch once
+    // more from the authoritative index, and retry the range request.
+    if(failedLocations.length){
+      for(const row of failedLocations){
+        this.invalidateLocation(row.eKey,row.error);
+        row.plan.location=null;row.plan.eKey='';
       }
+      trace(`archive location retry plans=${failedLocations.length}`);
+      await this.locatePlans(failedLocations.map(x=>x.plan));
+      await Promise.all(failedLocations.map(async({plan})=>{
+        if(plan.data||!plan.location||!plan.eKey)return;
+        try{plan.data=await this.readArchive(plan.eKey,plan.location);}
+        catch(e){trace(`archive retry failed ${plan.eKey} ${e.message}`);}
+      }));
     }
+
+    // Loose CDN files are uncommon for normal Warcraft models/textures. Try
+    // them only after the archive lookup/retry misses, avoiding a speculative
+    // HTTP request for every thumbnail.
+    await Promise.all(plans.map(async plan=>{
+      if(!plan.root||plan.data)return;
+      for(const eKey of plan.eKeys){
+        const data=await this.readLoose(eKey);
+        if(data){plan.data=data;plan.eKey=eKey;break;}
+      }
+    }));
+
     const results=[];
-    for (const plan of plans) {
-      if (!plan.root) { results.push({id:plan.id,path:'',size:0,base64:''}); continue; }
-      if (!plan.data) {
-        for (const eKey of plan.eKeys) {
-          const loc = locations.get(eKey); if (!loc) continue;
-          try { plan.data=await this.readArchive(eKey,loc); plan.eKey=eKey; break; } catch (e) { trace(`archive read failed ${eKey} ${e.message}`); }
-        }
-      }
-      if (!plan.data) results.push({id:plan.id,path:'',size:0,base64:''});
+    for(const plan of plans){
+      if(!plan.root||!plan.data) results.push({id:plan.id,path:'',size:0,base64:''});
       else results.push({id:plan.id,path:plan.root.path,size:plan.data.length,base64:plan.data.toString('base64')});
     }
     return results;
@@ -548,7 +993,8 @@ async function main() {
   if (payload.probeOnly) return { probe:true, backend:'cdn', region:client.region, sourceBuild:client.sourceBuild, rootEntries:client.root.size, archives:client.archives.length, results:[] };
   if (payload.search) {
     const s=payload.search||{};
-    return { backend:'cdn', region:client.region, sourceBuild:client.sourceBuild, search:true, results:client.searchPaths(s.query||'',s.type||'all',s.limit||200) };
+    const page=client.searchPaths(s.query||'',s.type||'all',s.limit||200,s.offset||0,s.artSet||'sd');
+    return { backend:'cdn', region:client.region, sourceBuild:client.sourceBuild, search:true, artSet:page.artSet, results:page.results, total:page.total, offset:page.offset, limit:page.limit };
   }
   const requests = Array.isArray(payload.requests) ? payload.requests.slice(0,64) : [];
   const results = await client.readRequests(requests);
@@ -562,5 +1008,5 @@ if (require.main === module) {
     process.exitCode=2;
   });
 } else {
-  module.exports = { decodeLz4Block, decodeBlte, parseWar3Root, parseArchiveIndex, parseConfig, parsePipeTable, normalizeVirtual, readLocalBuildInfo, localConfigPath };
+  module.exports = { W3Cdn, modelPathFlags, modelCategoryMatches, normalizeArtSet, logicalVirtualPath, virtualArtSetInfo, artSetPreference, decodeLz4Block, decodeBlte, parseWar3Root, parseArchiveIndex, parseGroupIndex, parseIndexFooter, parseConfig, parsePipeTable, normalizeVirtual, readLocalBuildInfo, localConfigPath };
 }
