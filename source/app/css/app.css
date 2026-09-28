@@ -1072,3 +1072,92 @@ body[data-module="casc"] #cascClearThumbnailCache{
 
 /* v1.4 · Sanity safe/conservative repair policy */
 .sanity-conservative-toggle{display:flex;align-items:flex-start;gap:7px;margin-top:6px;padding:8px 9px;border:1px solid #2e3640;background:#10151b;color:#a8b2bd;font-size:8px;line-height:1.35;cursor:pointer}.sanity-conservative-toggle input{margin-top:2px;accent-color:#d7aa3b}.sanity-conservative-toggle span{display:grid;gap:2px}.sanity-conservative-toggle strong{color:#d8e0e8;font-size:9px}.sanity-conservative-toggle small{color:#7f8c98;font-size:8px}
+
+
+/* v1.4 · More popup overflow guard + CASC performance controls */
+.header-more-popover{box-sizing:border-box;min-width:0;max-width:calc(100vw - 16px);max-height:calc(100vh - 56px);overflow:auto;overscroll-behavior:contain}
+body[data-module="casc"] .header-more-popover{
+  width:min(340px,calc(100vw - 16px))!important;
+  min-width:0!important;
+  max-width:calc(100vw - 16px)!important;
+  max-height:calc(100vh - 56px)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+}
+body[data-module="casc"] .casc-more-settings,
+body[data-module="casc"] .more-menu-field{
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+}
+body[data-module="casc"] .more-menu-field select{
+  inline-size:100%!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+body[data-module="casc"] #cascClearThumbnailCache{max-width:100%!important;box-sizing:border-box!important}
+
+/* v1.4 · compact CASC More menu (no scrollbars) */
+body[data-module="casc"] .unified-header:has(.header-more-menu[open]),
+body[data-module="casc"] .unified-menubar.onebar:has(.header-more-menu[open]){
+  overflow:visible!important;
+}
+body[data-module="casc"] .header-more-menu{z-index:3600!important}
+body[data-module="casc"] .header-more-popover{
+  width:220px!important;
+  min-width:220px!important;
+  max-width:min(220px,calc(100vw - 10px))!important;
+  max-height:none!important;
+  overflow:visible!important;
+  overscroll-behavior:auto!important;
+  padding:7px!important;
+  gap:0!important;
+  top:32px!important;
+}
+body[data-module="casc"] .casc-more-settings{
+  gap:5px!important;
+  align-items:start!important;
+}
+body[data-module="casc"] .more-menu-section-title{
+  font-size:8px!important;
+  line-height:10px!important;
+  padding:0 0 1px!important;
+}
+body[data-module="casc"] .more-menu-field{
+  gap:2px!important;
+  width:176px!important;
+  max-width:176px!important;
+}
+body[data-module="casc"] .more-menu-field>span{
+  font-size:8px!important;
+  line-height:10px!important;
+}
+body[data-module="casc"] .more-menu-field select{
+  inline-size:176px!important;
+  width:176px!important;
+  min-width:176px!important;
+  max-width:176px!important;
+  height:23px!important;
+  min-height:23px!important;
+  padding:1px 22px 1px 6px!important;
+  font-size:8.5px!important;
+  line-height:19px!important;
+}
+body[data-module="casc"] .more-menu-hint{
+  font-size:7px!important;
+  line-height:1.18!important;
+}
+body[data-module="casc"] #cascClearThumbnailCache{
+  width:176px!important;
+  max-width:176px!important;
+  height:23px!important;
+  min-height:23px!important;
+  padding:2px 6px!important;
+  font-size:8.5px!important;
+  line-height:17px!important;
+}

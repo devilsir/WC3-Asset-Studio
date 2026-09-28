@@ -7,8 +7,8 @@
 <meta content="width=device-width, initial-scale=1" name="viewport"/>
 <meta content="dark" name="color-scheme"/>
 <title>WC3 Asset Studio v1.4</title>
-<link href="css/app.css?v6-sanity-tabs-texturelookup-v14-20260927" rel="stylesheet"/>
-<link href="css/model-lab.css?v6-casc-workspace-20260923" rel="stylesheet"/>
+<link href="css/app.css?v8-compact-more-gallery120-20260927" rel="stylesheet"/>
+<link href="css/model-lab.css?v7-gallery120-progress-20260927" rel="stylesheet"/>
 <link href="css/effects-lab.css?v1-effects-lab-20260925" rel="stylesheet"/>
 </head>
 <body>
@@ -39,7 +39,7 @@
         <button class="btn" id="exportPngBtn">PNG</button>
         <button class="btn" id="exportGameBtn">War3</button>
       </div>
-      <details class="header-more-menu"><summary class="btn">More</summary><div class="header-more-popover"><button class="btn" id="convertBtn">Convert File</button><button class="btn" id="defaultFileTypesBtn" type="button">Default File Types</button><button class="btn" id="resizeBtn">Resize Image</button><button class="btn" id="canvasSizeBtn">Canvas Size</button><div class="casc-more-settings" id="cascMoreSettings"><div class="more-menu-section-title">MODEL GALLERY PERFORMANCE</div><label class="more-menu-field"><span>Thumbnail resolution</span><select id="cascThumbnailQuality"><option value="320">Original · 320 px</option><option value="256">High · 256 px</option><option value="192" selected>Balanced · 192 px</option><option value="128">Low · 128 px</option><option value="96">Very low · 96 px</option></select></label><label class="more-menu-field"><span>Thumbnail detail</span><select id="cascThumbnailTextureMode"><option value="textured" selected>Textured · visible cards</option><option value="mesh">Mesh only · fastest</option></select></label><div class="more-menu-hint">Lower resolution reduces GPU/CPU use. Mesh only skips gallery texture downloads and decoding; full Viewer / Export quality is unaffected.</div><button class="btn" id="cascClearThumbnailCache" type="button">Clear thumbnail cache</button></div></div></details>
+      <details class="header-more-menu"><summary class="btn">More</summary><div class="header-more-popover"><button class="btn" id="convertBtn">Convert File</button><button class="btn" id="defaultFileTypesBtn" type="button">Default File Types</button><button class="btn" id="resizeBtn">Resize Image</button><button class="btn" id="canvasSizeBtn">Canvas Size</button><div class="casc-more-settings" id="cascMoreSettings"><div class="more-menu-section-title">MODEL GALLERY PERFORMANCE</div><label class="more-menu-field"><span>Thumbnail resolution</span><select id="cascThumbnailQuality"><option value="320" selected>Original · 320 px</option><option value="256">High · 256 px</option><option value="192">Balanced · 192 px</option><option value="128">Low · 128 px</option><option value="96">Very low · 96 px</option></select></label><label class="more-menu-field"><span>Thumbnail detail</span><select id="cascThumbnailTextureMode"><option value="textured" selected>Lite textured · Stand + particles</option><option value="mesh">Mesh only · fastest</option></select></label><div class="more-menu-hint">Lite previews keep the primary mesh, used textures, minimal rig, Stand and PE2 only. Viewer / Editor always reopen the full original model.</div><button class="btn" id="cascClearThumbnailCache" type="button">Clear thumbnail cache</button></div></div></details>
       <div class="blender-window-actions">
         <button class="icon-btn" id="undoBtn" title="Undo (Ctrl+Z)">↶</button>
         <button class="icon-btn" id="redoBtn" title="Redo (Ctrl+Y)">↷</button>
@@ -429,6 +429,10 @@
           <button class="casc-gallery-filter" type="button" data-gallery-category="other">OTHER</button>
         </div>
       </header>
+      <div class="casc-gallery-progress" id="cascGalleryProgress" hidden>
+        <div class="casc-gallery-progress-copy"><strong>LOADING THUMBNAIL LITE</strong><span id="cascGalleryProgressText">Waiting for model list…</span></div>
+        <div class="casc-gallery-progress-track" id="cascGalleryProgressBar" role="progressbar" aria-label="Model Gallery thumbnail loading" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span id="cascGalleryProgressFill"></span></div>
+      </div>
       <div class="casc-model-gallery" id="cascModelGallery" aria-live="polite"></div>
       <footer class="casc-gallery-footer">
         <div><strong id="cascGallerySelected">Nothing selected.</strong><span>Click a card to select it. Double-click to open the full CASC viewer.</span></div>
@@ -748,6 +752,6 @@
 
 <div class="busy-overlay hidden" id="busyOverlay"><div class="spinner"></div><strong id="busyText">Processing…</strong></div>
 <script src="js/logging.js?v1-log-20260914"></script><script src="js/blp-jpeg-decoder.js?v1-credits-20260912"></script><script src="js/blp.js?v2-quality-20260918"></script><script src="js/tga.js?v1-credits-20260912"></script><script src="js/dds.js?v2-quality-20260918"></script><script src="js/editor.js?v3-texture-scroll-stage-20260920"></script><script src="js/zip.js?v1-credits-20260912"></script><script src="js/app.js?v6-full-autotest-coverage-20260920"></script><script src="js/war3-model-core.js?v3-mdx1800-skin16-20260926"></script><script src="js/model-animation-save.js?v1-animation-editor-20260919"></script><script src="js/model-save.js?v5-mdx1800-skin16-20260926"></script><script src="js/model-lab-geometry.js?v1-credits-20260912"></script>
-<script src="js/effects-lab-core.js?v2-effects-autotest-20260925"></script><script src="js/effects-lab.js?v4-layout-reflow-20260927"></script><script src="js/effects-lab-autotest.js?v4-layout-reflow-20260927"></script><script src="js/model-lab.js?v13-artset-refresh-20260927"></script><script src="js/model-lab-pro.js?v6-artset-refresh-20260927"></script><script src="js/model-lab-autotest.js?v15-effects-layout-20260927"></script><script src="js/buttons-studio.js?v3-buttons-frame-20260918"></script><script src="js/sanity.js?v5-pe2-fix-order-20260927"></script><script src="js/workspace-ui.js?v2-casc-workspace-20260923"></script>
+<script src="js/effects-lab-core.js?v2-effects-autotest-20260925"></script><script src="js/effects-lab.js?v4-layout-reflow-20260927"></script><script src="js/effects-lab-autotest.js?v4-layout-reflow-20260927"></script><script src="js/model-lab.js?v14-casc-fx-priority-20260927"></script><script src="js/model-lab-pro.js?v8-gallery120-preload-20260927"></script><script src="js/model-lab-autotest.js?v17-gallery120-cascfx-20260927"></script><script src="js/buttons-studio.js?v3-buttons-frame-20260918"></script><script src="js/sanity.js?v5-pe2-fix-order-20260927"></script><script src="js/workspace-ui.js?v2-casc-workspace-20260923"></script>
 </body>
 </html>

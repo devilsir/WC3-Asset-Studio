@@ -725,6 +725,109 @@
       first:seqs[0]||null
     };
   }
+
+  // Model Gallery thumbnails deliberately use a reduced, disposable model.
+  // The original CASC bytes are always read again when the user opens/imports
+  // the asset in Model Lab; this object is renderer-only and is never saved.
+  function createGalleryThumbnailModel(model){
+    if(!model)return null;
+    const pref=preferredCascEffectSequences(model),stand=pref.stand||pref.first||null;
+    const cloneValue=v=>Array.isArray(v)?v.slice():v;
+    const cloneKey=k=>({...k,value:cloneValue(k.value),inTan:cloneValue(k.inTan),outTan:cloneValue(k.outTan)});
+    const liteTrack=track=>{
+      if(!track||!Array.isArray(track.keys))return null;
+      const global=Number(track.globalSequenceId)>=0;
+      const keys=global?track.keys:(stand?track.keys.filter(k=>Number(k.frame)>=Number(stand.start)&&Number(k.frame)<=Number(stand.end)):[]);
+      if(!keys.length)return null;
+      return {...track,keys:keys.map(cloneKey)};
+    };
+    const liteTracks=tracks=>{const out={};for(const [tag,tr] of Object.entries(tracks||{})){const next=liteTrack(tr);if(next)out[tag]=next;}return out;};
+    const liteNode=node=>{
+      const tracks=liteTracks(node?.tracks);
+      return {...node,tracks,translation:tracks.KGTR||null,rotation:tracks.KGRT||null,scaling:tracks.KGSC||null};
+    };
+
+    // Render only the default / primary LOD mesh. Alternate Reforged LODs are
+    // editor data and only waste CPU/GPU in a small gallery card.
+    const renderEntries=modelRenderableGeosetEntries(model),oldGeoToNew=new Map();
+    const materialIds=[];
+    for(const {geo,index} of renderEntries){oldGeoToNew.set(index,oldGeoToNew.size);const mid=Number(geo?.materialId);if(Number.isInteger(mid)&&mid>=0&&!materialIds.includes(mid))materialIds.push(mid);}
+    const oldMaterials=model.materials||[],materialMap=new Map(materialIds.map((id,i)=>[id,i]));
+
+    // Keep only texture animations referenced by visible material layers.
+    const textureAnimIds=[];
+    for(const mid of materialIds){for(const layer of (oldMaterials[mid]?.layers||[])){const id=Number(layer?.textureAnimationId);if(Number.isInteger(id)&&id>=0&&!textureAnimIds.includes(id))textureAnimIds.push(id);}}
+    const textureAnimMap=new Map(textureAnimIds.map((id,i)=>[id,i]));
+
+    // Resolve exactly the texture slots the visible mesh / PE2 emitters can use.
+    const textureIds=new Set(),textureFields=['textureId','normalTextureId','ormTextureId','emissiveTextureId','teamColorTextureId','reflectionsTextureId'];
+    const addTexture=id=>{id=Number(id);if(Number.isInteger(id)&&id>=0)textureIds.add(id);};
+    const standTrack=track=>liteTrack(track);
+    for(const {geo} of renderEntries)addTexture(geo?.textureId);
+    for(const mid of materialIds){
+      const mat=oldMaterials[mid];addTexture(mat?.textureId);
+      for(const layer of (mat?.layers||[])){
+        for(const field of textureFields)addTexture(layer?.[field]);
+        for(const value of Object.values(layer?.textureSlots||{}))addTexture(value);
+        const kmtf=standTrack(layer?.tracks?.KMTF);for(const key of (kmtf?.keys||[])){const v=Array.isArray(key.value)?key.value[0]:key.value;addTexture(v);}
+      }
+    }
+    for(const emitter of (model.particleEmitters2||[]))addTexture(emitter?.textureId);
+    const textureList=[...textureIds].sort((a,b)=>a-b),textureMap=new Map(textureList.map((id,i)=>[id,i]));
+    const remapTexture=id=>textureMap.has(Number(id))?textureMap.get(Number(id)):-1;
+    const remapTextureTrack=track=>{
+      const out=liteTrack(track);if(!out)return null;
+      out.keys=out.keys.map(key=>{const raw=Array.isArray(key.value)?key.value[0]:key.value,next=remapTexture(raw);return{...key,value:Array.isArray(key.value)?[next]:next};});
+      return out;
+    };
+
+    const materials=materialIds.map(oldId=>{
+      const mat=oldMaterials[oldId]||{};
+      const layers=(mat.layers||[]).map(layer=>{
+        const tracks=liteTracks(layer.tracks);if(layer?.tracks?.KMTF){const kmtf=remapTextureTrack(layer.tracks.KMTF);if(kmtf)tracks.KMTF=kmtf;else delete tracks.KMTF;}
+        const next={...layer,tracks,textureAnimationId:textureAnimMap.has(Number(layer.textureAnimationId))?textureAnimMap.get(Number(layer.textureAnimationId)):-1};
+        for(const field of textureFields)if(field in next)next[field]=remapTexture(next[field]);
+        if(next.textureSlots&&typeof next.textureSlots==='object'){next.textureSlots={...next.textureSlots};for(const key of Object.keys(next.textureSlots))next.textureSlots[key]=remapTexture(next.textureSlots[key]);}
+        return next;
+      });
+      return {...mat,id:materialMap.get(oldId),layers,textureId:remapTexture(mat.textureId)};
+    });
+    const textureAnimations=textureAnimIds.map((oldId,i)=>({...((model.textureAnimations||[])[oldId]||{}),id:i,tracks:liteTracks((model.textureAnimations||[])[oldId]?.tracks)}));
+    const textureDefs=textureList.map((oldId,i)=>({...((model.textureDefs||[])[oldId]||{path:(model.textures||[])[oldId]||''}),id:i}));
+    const textures=textureDefs.map(x=>String(x?.path||''));
+
+    const geosets=renderEntries.map(({geo,index},newIndex)=>({...geo,id:newIndex,materialId:materialMap.has(Number(geo.materialId))?materialMap.get(Number(geo.materialId)):-1,textureId:remapTexture(geo.textureId),galleryOriginalGeosetIndex:index}));
+    const geosetAnimations=(model.geosetAnimations||[]).filter(ga=>oldGeoToNew.has(Number(ga?.geosetId))).map(ga=>({...ga,geosetId:oldGeoToNew.get(Number(ga.geosetId)),tracks:liteTracks(ga.tracks)}));
+
+    // Keep only bones that actually skin the visible mesh, PE2 nodes, and their
+    // parent chain. HD skin indices retain the original sparse bones[] positions.
+    const byId=new Map((model.nodes||[]).filter(Boolean).map(node=>[Number(node.id),node])),requiredIds=new Set();
+    for(const {geo} of renderEntries){
+      if(Array.isArray(geo?.skin)&&geo.skin.length>=(geo.vertices||[]).length*8){
+        for(let vi=0;vi<(geo.vertices||[]).length;vi++){const o=vi*8;for(let k=0;k<4;k++){if(Number(geo.skin[o+4+k])<=0)continue;const bi=Number(geo.skin[o+k]),bone=(model.bones||[])[bi]||(model.bones||[]).find(b=>Number(b?.id)===bi);if(bone&&Number.isFinite(Number(bone.id)))requiredIds.add(Number(bone.id));}}
+      }else for(const group of (geo?.matrixGroups||[]))for(const id of (group||[]))if(Number.isFinite(Number(id))&&Number(id)>=0)requiredIds.add(Number(id));
+    }
+    for(const p of (model.particleEmitters2||[]))if(Number.isFinite(Number(p?.id)))requiredIds.add(Number(p.id));
+    const stack=[...requiredIds];while(stack.length){const id=stack.pop(),node=byId.get(id),pid=Number(node?.parentId);if(Number.isFinite(pid)&&pid>=0&&!requiredIds.has(pid)&&byId.has(pid)){requiredIds.add(pid);stack.push(pid);}}
+    const nodeMap=new Map();for(const node of (model.nodes||[]))if(node&&requiredIds.has(Number(node.id)))nodeMap.set(Number(node.id),liteNode(node));
+    const nodes=(model.nodes||[]).filter(node=>node&&nodeMap.has(Number(node.id))).map(node=>nodeMap.get(Number(node.id)));
+    const bones=(model.bones||[]).map(b=>b&&nodeMap.has(Number(b.id))?nodeMap.get(Number(b.id)):null);
+    const particleEmitters2=(model.particleEmitters2||[]).map(p=>nodeMap.get(Number(p?.id))||liteNode(p)).map(p=>({...p,textureId:remapTexture(p.textureId)}));
+    for(const p of particleEmitters2){const idx=nodes.findIndex(n=>Number(n.id)===Number(p.id));if(idx>=0)nodes[idx]=p;nodeMap.set(Number(p.id),p);}
+    for(let i=0;i<bones.length;i++)if(bones[i]&&nodeMap.has(Number(bones[i].id)))bones[i]=nodeMap.get(Number(bones[i].id));
+
+    const lite={
+      type:model.type,formatVersion:model.formatVersion,version:model.version,name:model.name,sourceName:model.sourceName,animationFile:'',blendTime:model.blendTime,
+      extent:model.extent,sequences:stand?[{...stand}]:[],globalSequences:(model.globalSequences||[]).slice(),
+      textures,textureDefs,textureAnimations,materials,geosets,geosetAnimations,nodes,bones,particleEmitters2,
+      lights:[],helpers:[],attachments:[],particleEmitters:[],popcornEmitters:[],ribbonEmitters:[],eventObjects:[],collisionShapes:[],cameras:[],faceEffects:[],bindPose:[],unknownChunks:[],
+      skinningScheme:model.skinningScheme,bounds:computeBounds(geosets),galleryLite:true,gallerySequence:stand?.name||'Rest'
+    };
+    lite.galleryLiteStats={
+      geosets:[(model.geosets||[]).length,geosets.length],materials:[oldMaterials.length,materials.length],textures:[(model.textureDefs||model.textures||[]).length,textureDefs.length],nodes:[(model.nodes||[]).length,nodes.length],sequences:[(model.sequences||[]).length,lite.sequences.length],particleEmitters2:particleEmitters2.length
+    };
+    return lite;
+  }
   function cascEffectFrame(runtime,nowMs){
     const model=runtime&&runtime.parsed;if(!model)return{seq:null,frame:0,elapsedMs:0};
     const elapsedMs=Math.max(0,(nowMs-(runtime.startedAt||state.fxPreviewStartedAt||nowMs)));
@@ -2531,9 +2634,13 @@
   }
   function getEmitterTextureCanvas(n){
     if(!n||n.textureId<0)return null;
-    const direct=currentTextureCanvas(n.textureId);if(direct)return direct;
     const def=state.model&&state.model.textureDefs&&state.model.textureDefs[n.textureId],ref=def&&def.path||'';
-    if(ref){const c=state.casc.effectTextures.get(normalizePath(ref));if(c)return c;}
+    // Effects tab explicitly prefers the texture decoded from Warcraft CASC/CDN.
+    // Local/model-slot textures remain the fallback when external FX access is off
+    // or the referenced stock texture could not be resolved.
+    if(state.casc.enabled&&ref){const casc=state.casc.effectTextures.get(normalizePath(ref));if(casc)return casc;}
+    const direct=currentTextureCanvas(n.textureId);if(direct)return direct;
+    if(ref){const casc=state.casc.effectTextures.get(normalizePath(ref));if(casc)return casc;}
     return null;
   }
   function effectSourceForNode(n){
@@ -4604,7 +4711,7 @@
     const rows=[...all,...(state.model.cameras||[]).map((c,i)=>({...c,type:'Camera',id:c.__cameraId||`C${i}`}))];
     if(!rows.length){list.classList.add('empty');list.textContent='No effect objects detected.';return;}
     list.classList.remove('empty');
-    rows.forEach(obj=>{const item=document.createElement('div');item.className='model-node-item';if(String(state.selectedNodeId)===String(obj.id))item.classList.add('active');let meta=`${obj.type} · ID ${obj.id}`;if(obj.type==='ParticleEmitter2')meta+=` · rate ${Number(obj.emissionRate||0).toFixed(1)} · life ${Number(obj.lifeSpan||0).toFixed(2)} · texture ${obj.textureId}`;if(obj.type==='ParticleEmitterPopcorn')meta+=` · PopcornFX · ${obj.path||'(no path)'}`;if(obj.type==='RibbonEmitter')meta+=` · material ${obj.materialId} · rate ${obj.emissionRate}`;if(obj.type==='Attachment'&&obj.path)meta+=` · ${obj.path}`;if(obj.type==='ParticleEmitter'&&obj.path)meta+=` · ${obj.path}`;if(obj.type==='EventObject')meta+=` · ${(obj.eventTracks||[]).length} events`;if(obj.path&&state.casc.enabled){const k=normalizePath(obj.path),rt=state.casc.effectRuntimes.get(k);meta+=state.casc.loaded.has(k)?' · CASC loaded':state.casc.missing.has(k)?' · CASC missing':'';if(rt)meta+=` · REAL CASC ANIM · ${(rt.parsed.sequences||[]).length} seq${rt.lastSequenceName?` · ${rt.lastSequenceName}`:''}`;}item.innerHTML=`<div class="model-node-name">${escapeHtml(obj.name||obj.type)}</div><div class="model-node-meta">${escapeHtml(meta)}</div>`;item.addEventListener('click',()=>{state.selectedNodeId=obj.id;focusNodeInViewport(obj.id);renderEverything();});item.addEventListener('dblclick',()=>{state.selectedNodeId=obj.id;if(obj.type==='Camera')lookThroughCamera(obj.id);else focusNodeInViewport(obj.id,{fit:true});renderEverything();});list.appendChild(item);});
+    rows.forEach(obj=>{const item=document.createElement('div');item.className='model-node-item';if(String(state.selectedNodeId)===String(obj.id))item.classList.add('active');let meta=`${obj.type} · ID ${obj.id}`;if(obj.type==='ParticleEmitter2')meta+=` · rate ${Number(obj.emissionRate||0).toFixed(1)} · life ${Number(obj.lifeSpan||0).toFixed(2)} · texture ${obj.textureId} · source ${effectSourceForNode(obj).toUpperCase()}`;if(obj.type==='ParticleEmitterPopcorn')meta+=` · PopcornFX · ${obj.path||'(no path)'}`;if(obj.type==='RibbonEmitter')meta+=` · material ${obj.materialId} · rate ${obj.emissionRate}`;if(obj.type==='Attachment'&&obj.path)meta+=` · ${obj.path}`;if(obj.type==='ParticleEmitter'&&obj.path)meta+=` · ${obj.path}`;if(obj.type==='EventObject')meta+=` · ${(obj.eventTracks||[]).length} events`;if(obj.path&&state.casc.enabled){const k=normalizePath(obj.path),rt=state.casc.effectRuntimes.get(k);meta+=state.casc.loaded.has(k)?' · CASC loaded':state.casc.missing.has(k)?' · CASC missing':'';if(rt)meta+=` · REAL CASC ANIM · ${(rt.parsed.sequences||[]).length} seq${rt.lastSequenceName?` · ${rt.lastSequenceName}`:''}`;}item.innerHTML=`<div class="model-node-name">${escapeHtml(obj.name||obj.type)}</div><div class="model-node-meta">${escapeHtml(meta)}</div>`;item.addEventListener('click',()=>{state.selectedNodeId=obj.id;focusNodeInViewport(obj.id);renderEverything();});item.addEventListener('dblclick',()=>{state.selectedNodeId=obj.id;if(obj.type==='Camera')lookThroughCamera(obj.id);else focusNodeInViewport(obj.id,{fit:true});renderEverything();});list.appendChild(item);});
     if(unknown){const item=document.createElement('div');item.className='model-node-item';item.innerHTML=`<div class="model-node-name">Unknown MDX chunks</div><div class="model-node-meta">${escapeHtml((state.model.unknownChunks||[]).map(x=>`${x.tag} (${x.size} B)`).join(' · '))}</div>`;list.appendChild(item);}
   }
 
@@ -5196,7 +5303,7 @@
       selectGeoset,pushModelHistorySnapshot,captureAnimationSnapshot,captureModelEditSnapshot,captureGeosetSnapshot,captureGeosetStructureSnapshot,
       markDirty,invalidateGeometryCache,invalidatePickCache,focusNodeInViewport,selectedSequenceIndex,currentSequence,currentSequenceProgress,
       rebuildNodeTypeArrays,cloneHistoryData,translateSelectedGeoset,scaleSelectedGeoset,rotateSelectedGeoset,cloneSelectedGeoset,buildTextureExportFiles,clonedModelForPaths,serializeCurrentModel,buildEditedModelArtifact,buildTexturePackageArtifact,buildModelPackageArtifact,autoLoadMissingModelTexturesFromCasc,searchCascTextureCandidates,
-      setReferenceModel,clearReferenceModel,setReferenceTransform,selectReferenceItem,referenceModelState,frameReferenceScene,copyReferenceGeoset,copyReferenceObject,addEffectAttachmentFromPath,captureReferenceImportSnapshot,ensureCascOnDemand,loadCascEffectAssets,prepareReferenceModelRuntime,prepareReferenceModelRuntimesBatch,drawRuntimeAssetPreview,modelPrimaryLod,modelRenderableGeosetEntries,modelLodSummary,renderableModelBounds,hdMaterialInfo,hdMaterialSample,particleCompositeMode,particleSpriteTexture,referenceLayerPolicy,referenceLayerStackPolicy,renderGlReferenceModel,addedObjectEntries,applyAddedObjectTransform,cloneAddedObject,attachAddedObjectToBone,detachAddedObjectFromBone,focusAddedObject,setParticleEmitterTiming,buildParticleVisibilityTrack,particleHeartbeatSignature,particleHeartbeatDecision,particleHeartbeatStats,maybeLogParticleHeartbeat
+      setReferenceModel,clearReferenceModel,setReferenceTransform,selectReferenceItem,referenceModelState,frameReferenceScene,copyReferenceGeoset,copyReferenceObject,addEffectAttachmentFromPath,captureReferenceImportSnapshot,ensureCascOnDemand,loadCascEffectAssets,prepareReferenceModelRuntime,prepareReferenceModelRuntimesBatch,createGalleryThumbnailModel,drawRuntimeAssetPreview,modelPrimaryLod,modelRenderableGeosetEntries,modelLodSummary,renderableModelBounds,hdMaterialInfo,hdMaterialSample,particleCompositeMode,particleSpriteTexture,getEmitterTextureCanvas,effectSourceForNode,referenceLayerPolicy,referenceLayerStackPolicy,renderGlReferenceModel,addedObjectEntries,applyAddedObjectTransform,cloneAddedObject,attachAddedObjectToBone,detachAddedObjectFromBone,focusAddedObject,setParticleEmitterTiming,buildParticleVisibilityTrack,particleHeartbeatSignature,particleHeartbeatDecision,particleHeartbeatStats,maybeLogParticleHeartbeat
     },
     debug:{
       pickAt(x,y){return pickHitFromCanvas(x,y);},
