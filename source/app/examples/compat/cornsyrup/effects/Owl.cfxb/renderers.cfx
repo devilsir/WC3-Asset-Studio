@@ -1,0 +1,17 @@
+// Readable renderer materials. Header: `renderer H : <Type>` where Type is the geometry
+// (Billboard/Ribbon/Light/Mesh). `material = "…"` overrides the default material; a Mesh's
+// model is `path = "…"`. Then one `Name = value;` per non-default property (sampler-style):
+// `= "path"` = texture, `= true` = enabled, `= 1.0` = float, `= AlphaBlend` = named enum.
+// Properties left at their default are OMITTED and reconstructed from the material template on
+// build. Renderer INPUT bindings live in `code.cfx` (`bind rend<N> { "field" -> Slot; }`).
+
+renderer rend0 : Billboard {
+    material = "Library/PopcornFXCore/Materials/Default_Billboard.pkma";
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = AdditiveNoAlpha;
+    Diffuse.DiffuseMap = "_hd.w3mod/textures/fx/flare/flashspark_bw.dds";
+}
+

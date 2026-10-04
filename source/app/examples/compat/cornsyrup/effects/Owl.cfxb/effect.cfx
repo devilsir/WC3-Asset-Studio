@@ -1,0 +1,21 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+attributes {
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &L0;
+    &L0 emits "Signal" -> &L1;
+    &L1 emits "__e_Child" -> &L2;
+    &L1 emits "__e_OnDeath";
+    entry;
+    entry "Root" fires &L0."Signal";
+}
+

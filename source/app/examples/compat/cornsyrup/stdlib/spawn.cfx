@@ -1,0 +1,358 @@
+// stdlib/spawn.cfx — the generate → initPayload → appendPayload → kick emission chain, packaged.
+//
+// Shapes (verified against `function_signatures.json` and decompiled corpus code):
+//
+//   generate(accum, …)                    -> i32x3   the frame's spawn state (carry, total, key)
+//   evt.initPayload(channel, gen)         -> i32     an opaque payload KEY
+//   buildPayloadElement(gen, prev, cur, f)-> i32     an opaque element HANDLE
+//   evt.appendPayload(key, index, elem)   -> i32     a NEW key — the chain is THREADED
+//   evt.kick(key)                                    fires with the LAST key
+//
+// Two things trip people up: `appendPayload` takes the element INDEX before the element, and it
+// RETURNS the key to use next. Passing the original key to `kick` drops every appended element.
+//
+// `index` is the element's position in that event's `events.cfx` declaration and is load-bearing
+// (CFX_GUIDE §7.3), so every helper here takes it explicitly.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+namespace spawn {
+
+    /// @brief_en Fire `evt` with a spawn count and no per-child payload — the plainest emission there is.
+    /// @brief_es Dispara `evt` con un recuento de nacimientos y sin carga por hija: la emisión más simple que hay.
+    /// @brief_pt Dispara `evt` com uma contagem de nascimentos e sem carga por filha — a emissão mais simples que existe.
+    /// @brief_fr Déclenche `evt` avec un nombre de naissances et sans charge par enfant — l'émission la plus simple qui soit.
+    /// @brief_it Attiva `evt` con un conteggio di nascite e senza payload per figlia: l'emissione più semplice che ci sia.
+    /// @brief_de Löst `evt` mit einer Geburtenzahl und ohne Nutzlast pro Kind aus — die schlichteste Emission überhaupt.
+    /// @brief_ru Запускает `evt` со счётчиком рождений и без нагрузки на потомка — простейшая эмиссия из возможных.
+    /// @brief_zh 用一个生成数量触发 `evt`，不带任何逐子粒子的负载 —— 这是最简单的发射方式。
+    /// @brief_ja 生成数だけを添えて `evt` を発火します。子ごとのペイロードはありません。もっとも素朴な放出です。
+    /// @brief_ko 생성 개수만 붙여 `evt`를 발생시킵니다. 자식별 페이로드는 없습니다. 가장 단순한 방출입니다.
+    ///
+    /// @param_en evt The event to fire.
+    /// @param_es evt El evento que se dispara.
+    /// @param_pt evt O evento a disparar.
+    /// @param_fr evt L'événement à déclencher.
+    /// @param_it evt L'evento da attivare.
+    /// @param_de evt Das auszulösende Ereignis.
+    /// @param_ru evt Запускаемое событие.
+    /// @param_zh evt 要触发的事件。
+    /// @param_ja evt 発火させるイベント。
+    /// @param_ko evt 발생시킬 이벤트.
+    ///
+    /// @param_en gen This frame's spawn state, straight from `generate` — carry, total and key.
+    /// @param_es gen El estado de generación de este fotograma, tal cual sale de `generate`: acarreo, total y clave.
+    /// @param_pt gen O estado de geração deste quadro, direto de `generate` — resto, total e chave.
+    /// @param_fr gen L'état d'engendrement de cette image, tel que le renvoie `generate` — report, total et clé.
+    /// @param_it gen Lo stato di generazione di questo fotogramma, così come esce da `generate`: riporto, totale e chiave.
+    /// @param_de gen Der Spawn-Zustand dieses Bildes, direkt aus `generate` — Übertrag, Gesamtzahl und Schlüssel.
+    /// @param_ru gen Состояние порождения этого кадра прямо из `generate` — перенос, итог и ключ.
+    /// @param_zh gen 本帧的生成状态，直接来自 `generate`：进位、总数和键。
+    /// @param_ja gen 今フレームの生成状態。`generate` の戻り値そのままで、繰り上がり・総数・キーが入っています。
+    /// @param_ko gen 이번 프레임의 생성 상태. `generate`의 반환값 그대로이며 올림, 총합, 키가 들어 있습니다.
+    fn emit(evt: particleEvent, gen: i32x3) {
+        let key : i32 = evt.initPayload(0, gen);
+        evt.kick(key);
+    }
+
+    /// @brief_en Fire `evt` carrying one payload element. Build the element with `buildPayloadElement` first.
+    /// @brief_es Dispara `evt` llevando un elemento de carga. Constrúyelo antes con `buildPayloadElement`.
+    /// @brief_pt Dispara `evt` levando um elemento de carga. Construa o elemento antes com `buildPayloadElement`.
+    /// @brief_fr Déclenche `evt` en portant un élément de charge. Construisez d'abord l'élément avec `buildPayloadElement`.
+    /// @brief_it Attiva `evt` portando un elemento di payload. Costruisci prima l'elemento con `buildPayloadElement`.
+    /// @brief_de Löst `evt` mit einem Nutzlastelement aus. Baue das Element zuvor mit `buildPayloadElement`.
+    /// @brief_ru Запускает `evt`, неся один элемент нагрузки. Сначала соберите элемент через `buildPayloadElement`.
+    /// @brief_zh 触发 `evt` 并携带一个负载元素。请先用 `buildPayloadElement` 构造该元素。
+    /// @brief_ja ペイロード要素を 1 つ載せて `evt` を発火します。要素は事前に `buildPayloadElement` で作ってください。
+    /// @brief_ko 페이로드 요소 하나를 실어 `evt`를 발생시킵니다. 요소는 먼저 `buildPayloadElement`로 만드세요.
+    ///
+    /// @param_en evt The event to fire.
+    /// @param_es evt El evento que se dispara.
+    /// @param_pt evt O evento a disparar.
+    /// @param_fr evt L'événement à déclencher.
+    /// @param_it evt L'evento da attivare.
+    /// @param_de evt Das auszulösende Ereignis.
+    /// @param_ru evt Запускаемое событие.
+    /// @param_zh evt 要触发的事件。
+    /// @param_ja evt 発火させるイベント。
+    /// @param_ko evt 발생시킬 이벤트.
+    ///
+    /// @param_en gen This frame's spawn state, straight from `generate`.
+    /// @param_es gen El estado de generación de este fotograma, tal cual sale de `generate`.
+    /// @param_pt gen O estado de geração deste quadro, direto de `generate`.
+    /// @param_fr gen L'état d'engendrement de cette image, tel que le renvoie `generate`.
+    /// @param_it gen Lo stato di generazione di questo fotogramma, così come esce da `generate`.
+    /// @param_de gen Der Spawn-Zustand dieses Bildes, direkt aus `generate`.
+    /// @param_ru gen Состояние порождения этого кадра прямо из `generate`.
+    /// @param_zh gen 本帧的生成状态，直接来自 `generate`。
+    /// @param_ja gen 今フレームの生成状態。`generate` の戻り値そのままです。
+    /// @param_ko gen 이번 프레임의 생성 상태. `generate`의 반환값 그대로입니다.
+    ///
+    /// @param_en elem The element handle to carry.
+    /// @param_es elem El manejador del elemento que se lleva.
+    /// @param_pt elem O identificador do elemento a levar.
+    /// @param_fr elem L'identifiant de l'élément à porter.
+    /// @param_it elem L'handle dell'elemento da portare.
+    /// @param_de elem Der Handle des mitzuführenden Elements.
+    /// @param_ru elem Дескриптор переносимого элемента.
+    /// @param_zh elem 要携带的元素句柄。
+    /// @param_ja elem 載せる要素のハンドル。
+    /// @param_ko elem 실어 보낼 요소 핸들.
+    ///
+    /// @param_en index The element's position in that event's `events.cfx` declaration. Load-bearing — a wrong index is silent, not an error.
+    /// @param_es index La posición del elemento en la declaración de ese evento en `events.cfx`. Es determinante: un índice equivocado no da error, simplemente falla en silencio.
+    /// @param_pt index A posição do elemento na declaração daquele evento em `events.cfx`. É determinante — um índice errado não dá erro, apenas falha em silêncio.
+    /// @param_fr index La position de l'élément dans la déclaration de cet événement dans `events.cfx`. Déterminante — un mauvais indice ne provoque pas d'erreur, il échoue en silence.
+    /// @param_it index La posizione dell'elemento nella dichiarazione di quell'evento in `events.cfx`. È determinante: un indice sbagliato non dà errore, fallisce in silenzio.
+    /// @param_de index Die Position des Elements in der Deklaration dieses Ereignisses in `events.cfx`. Tragend — ein falscher Index ist kein Fehler, er scheitert stumm.
+    /// @param_ru index Позиция элемента в объявлении этого события в `events.cfx`. Определяющая: неверный индекс не даёт ошибки, он молча ломает результат.
+    /// @param_zh index 该元素在这个事件的 `events.cfx` 声明中的位置。这是关键参数 —— 索引写错不会报错，只会悄悄出问题。
+    /// @param_ja index そのイベントの `events.cfx` 宣言における要素の位置。重要な値で、間違えてもエラーにはならず静かに壊れます。
+    /// @param_ko index 해당 이벤트의 `events.cfx` 선언에서 이 요소의 위치. 중요한 값으로, 잘못 써도 오류가 아니라 조용히 어긋납니다.
+    ///
+    /// @param_en channel Which payload channel to open. 0 unless the layer declares more than one.
+    /// @param_es channel Qué canal de carga se abre. 0 salvo que la capa declare más de uno.
+    /// @param_pt channel Qual canal de carga abrir. 0 a menos que a camada declare mais de um.
+    /// @param_fr channel Le canal de charge à ouvrir. 0 sauf si le calque en déclare plusieurs.
+    /// @param_it channel Quale canale di payload aprire. 0 a meno che il livello ne dichiari più d'uno.
+    /// @param_de channel Welcher Nutzlastkanal geöffnet wird. 0, sofern die Ebene nicht mehrere deklariert.
+    /// @param_ru channel Какой канал нагрузки открыть. 0, если слой не объявляет несколько.
+    /// @param_zh channel 要打开哪个负载通道。除非图层声明了多个，否则用 0。
+    /// @param_ja channel 開くペイロードチャンネル。レイヤーが複数宣言していなければ 0 です。
+    /// @param_ko channel 열 페이로드 채널. 레이어가 여러 개를 선언하지 않았다면 0입니다.
+    fn emit_1(evt: particleEvent, gen: i32x3, elem: i32, index: i32 = 0, channel: i32 = 0) {
+        let k0 : i32 = evt.initPayload(channel, gen);
+        let k1 : i32 = evt.appendPayload(k0, index, elem);
+        evt.kick(k1);
+    }
+
+    /// @brief_en Fire `evt` carrying two payload elements, threading the key through both appends — passing the original key to `kick` would drop them both.
+    /// @brief_es Dispara `evt` llevando dos elementos de carga y enlazando la clave a través de ambos añadidos: pasar la clave original a `kick` los perdería los dos.
+    /// @brief_pt Dispara `evt` levando dois elementos de carga e encadeando a chave pelos dois acréscimos — passar a chave original para `kick` perderia os dois.
+    /// @brief_fr Déclenche `evt` en portant deux éléments de charge, en enchaînant la clé à travers les deux ajouts — passer la clé d'origine à `kick` les perdrait tous les deux.
+    /// @brief_it Attiva `evt` portando due elementi di payload e concatenando la chiave attraverso entrambe le aggiunte: passare la chiave originale a `kick` li perderebbe entrambi.
+    /// @brief_de Löst `evt` mit zwei Nutzlastelementen aus und reicht den Schlüssel durch beide Anhänge weiter — den ursprünglichen Schlüssel an `kick` zu geben verlöre beide.
+    /// @brief_ru Запускает `evt` с двумя элементами нагрузки, протягивая ключ через оба добавления: передать в `kick` исходный ключ значило бы потерять оба.
+    /// @brief_zh 触发 `evt` 并携带两个负载元素，键会在两次追加之间依次传递 —— 若把最初的键交给 `kick`，两个元素都会丢失。
+    /// @brief_ja ペイロード要素を 2 つ載せて `evt` を発火し、キーを両方の追加に通します。最初のキーを `kick` に渡すと 2 つとも失われます。
+    /// @brief_ko 페이로드 요소 두 개를 실어 `evt`를 발생시키며, 키를 두 번의 덧붙이기에 차례로 넘깁니다. 처음 키를 `kick`에 주면 둘 다 사라집니다.
+    ///
+    /// @param_en evt The event to fire.
+    /// @param_es evt El evento que se dispara.
+    /// @param_pt evt O evento a disparar.
+    /// @param_fr evt L'événement à déclencher.
+    /// @param_it evt L'evento da attivare.
+    /// @param_de evt Das auszulösende Ereignis.
+    /// @param_ru evt Запускаемое событие.
+    /// @param_zh evt 要触发的事件。
+    /// @param_ja evt 発火させるイベント。
+    /// @param_ko evt 발생시킬 이벤트.
+    ///
+    /// @param_en gen This frame's spawn state, straight from `generate`.
+    /// @param_es gen El estado de generación de este fotograma, tal cual sale de `generate`.
+    /// @param_pt gen O estado de geração deste quadro, direto de `generate`.
+    /// @param_fr gen L'état d'engendrement de cette image, tel que le renvoie `generate`.
+    /// @param_it gen Lo stato di generazione di questo fotogramma, così come esce da `generate`.
+    /// @param_de gen Der Spawn-Zustand dieses Bildes, direkt aus `generate`.
+    /// @param_ru gen Состояние порождения этого кадра прямо из `generate`.
+    /// @param_zh gen 本帧的生成状态，直接来自 `generate`。
+    /// @param_ja gen 今フレームの生成状態。`generate` の戻り値そのままです。
+    /// @param_ko gen 이번 프레임의 생성 상태. `generate`의 반환값 그대로입니다.
+    ///
+    /// @param_en elem0 The first element handle.
+    /// @param_es elem0 El manejador del primer elemento.
+    /// @param_pt elem0 O identificador do primeiro elemento.
+    /// @param_fr elem0 L'identifiant du premier élément.
+    /// @param_it elem0 L'handle del primo elemento.
+    /// @param_de elem0 Der Handle des ersten Elements.
+    /// @param_ru elem0 Дескриптор первого элемента.
+    /// @param_zh elem0 第一个元素的句柄。
+    /// @param_ja elem0 1 つめの要素ハンドル。
+    /// @param_ko elem0 첫 번째 요소 핸들.
+    ///
+    /// @param_en elem1 The second element handle.
+    /// @param_es elem1 El manejador del segundo elemento.
+    /// @param_pt elem1 O identificador do segundo elemento.
+    /// @param_fr elem1 L'identifiant du second élément.
+    /// @param_it elem1 L'handle del secondo elemento.
+    /// @param_de elem1 Der Handle des zweiten Elements.
+    /// @param_ru elem1 Дескриптор второго элемента.
+    /// @param_zh elem1 第二个元素的句柄。
+    /// @param_ja elem1 2 つめの要素ハンドル。
+    /// @param_ko elem1 두 번째 요소 핸들.
+    ///
+    /// @param_en index0 Where the first element sits in the event's declaration.
+    /// @param_es index0 Dónde se sitúa el primer elemento en la declaración del evento.
+    /// @param_pt index0 Onde o primeiro elemento fica na declaração do evento.
+    /// @param_fr index0 La place du premier élément dans la déclaration de l'événement.
+    /// @param_it index0 Dove si trova il primo elemento nella dichiarazione dell'evento.
+    /// @param_de index0 Wo das erste Element in der Deklaration des Ereignisses steht.
+    /// @param_ru index0 Где в объявлении события стоит первый элемент.
+    /// @param_zh index0 第一个元素在事件声明中的位置。
+    /// @param_ja index0 イベント宣言における 1 つめの要素の位置。
+    /// @param_ko index0 이벤트 선언에서 첫 번째 요소의 위치.
+    ///
+    /// @param_en index1 Where the second element sits in the event's declaration.
+    /// @param_es index1 Dónde se sitúa el segundo elemento en la declaración del evento.
+    /// @param_pt index1 Onde o segundo elemento fica na declaração do evento.
+    /// @param_fr index1 La place du second élément dans la déclaration de l'événement.
+    /// @param_it index1 Dove si trova il secondo elemento nella dichiarazione dell'evento.
+    /// @param_de index1 Wo das zweite Element in der Deklaration des Ereignisses steht.
+    /// @param_ru index1 Где в объявлении события стоит второй элемент.
+    /// @param_zh index1 第二个元素在事件声明中的位置。
+    /// @param_ja index1 イベント宣言における 2 つめの要素の位置。
+    /// @param_ko index1 이벤트 선언에서 두 번째 요소의 위치.
+    ///
+    /// @param_en channel Which payload channel to open. 0 unless the layer declares more than one.
+    /// @param_es channel Qué canal de carga se abre. 0 salvo que la capa declare más de uno.
+    /// @param_pt channel Qual canal de carga abrir. 0 a menos que a camada declare mais de um.
+    /// @param_fr channel Le canal de charge à ouvrir. 0 sauf si le calque en déclare plusieurs.
+    /// @param_it channel Quale canale di payload aprire. 0 a meno che il livello ne dichiari più d'uno.
+    /// @param_de channel Welcher Nutzlastkanal geöffnet wird. 0, sofern die Ebene nicht mehrere deklariert.
+    /// @param_ru channel Какой канал нагрузки открыть. 0, если слой не объявляет несколько.
+    /// @param_zh channel 要打开哪个负载通道。除非图层声明了多个，否则用 0。
+    /// @param_ja channel 開くペイロードチャンネル。レイヤーが複数宣言していなければ 0 です。
+    /// @param_ko channel 열 페이로드 채널. 레이어가 여러 개를 선언하지 않았다면 0입니다.
+    fn emit_2(
+        evt: particleEvent,
+        gen: i32x3,
+        elem0: i32,
+        elem1: i32,
+        index0: i32 = 0,
+        index1: i32 = 1,
+        channel: i32 = 0,
+    ) {
+        let k0 : i32 = evt.initPayload(channel, gen);
+        let k1 : i32 = evt.appendPayload(k0, index0, elem0);
+        let k2 : i32 = evt.appendPayload(k1, index1, elem1);
+        evt.kick(k2);
+    }
+
+    /// @brief_en Fire `evt` carrying three payload elements, threading the key through all three appends.
+    /// @brief_es Dispara `evt` llevando tres elementos de carga y enlazando la clave a través de los tres añadidos.
+    /// @brief_pt Dispara `evt` levando três elementos de carga e encadeando a chave pelos três acréscimos.
+    /// @brief_fr Déclenche `evt` en portant trois éléments de charge, en enchaînant la clé à travers les trois ajouts.
+    /// @brief_it Attiva `evt` portando tre elementi di payload e concatenando la chiave attraverso tutte e tre le aggiunte.
+    /// @brief_de Löst `evt` mit drei Nutzlastelementen aus und reicht den Schlüssel durch alle drei Anhänge weiter.
+    /// @brief_ru Запускает `evt` с тремя элементами нагрузки, протягивая ключ через все три добавления.
+    /// @brief_zh 触发 `evt` 并携带三个负载元素，键会依次穿过这三次追加。
+    /// @brief_ja ペイロード要素を 3 つ載せて `evt` を発火し、キーを 3 回の追加すべてに通します。
+    /// @brief_ko 페이로드 요소 세 개를 실어 `evt`를 발생시키며, 키를 세 번의 덧붙이기에 차례로 넘깁니다.
+    ///
+    /// @param_en evt The event to fire.
+    /// @param_es evt El evento que se dispara.
+    /// @param_pt evt O evento a disparar.
+    /// @param_fr evt L'événement à déclencher.
+    /// @param_it evt L'evento da attivare.
+    /// @param_de evt Das auszulösende Ereignis.
+    /// @param_ru evt Запускаемое событие.
+    /// @param_zh evt 要触发的事件。
+    /// @param_ja evt 発火させるイベント。
+    /// @param_ko evt 발생시킬 이벤트.
+    ///
+    /// @param_en gen This frame's spawn state, straight from `generate`.
+    /// @param_es gen El estado de generación de este fotograma, tal cual sale de `generate`.
+    /// @param_pt gen O estado de geração deste quadro, direto de `generate`.
+    /// @param_fr gen L'état d'engendrement de cette image, tel que le renvoie `generate`.
+    /// @param_it gen Lo stato di generazione di questo fotogramma, così come esce da `generate`.
+    /// @param_de gen Der Spawn-Zustand dieses Bildes, direkt aus `generate`.
+    /// @param_ru gen Состояние порождения этого кадра прямо из `generate`.
+    /// @param_zh gen 本帧的生成状态，直接来自 `generate`。
+    /// @param_ja gen 今フレームの生成状態。`generate` の戻り値そのままです。
+    /// @param_ko gen 이번 프레임의 생성 상태. `generate`의 반환값 그대로입니다.
+    ///
+    /// @param_en elem0 The first element handle.
+    /// @param_es elem0 El manejador del primer elemento.
+    /// @param_pt elem0 O identificador do primeiro elemento.
+    /// @param_fr elem0 L'identifiant du premier élément.
+    /// @param_it elem0 L'handle del primo elemento.
+    /// @param_de elem0 Der Handle des ersten Elements.
+    /// @param_ru elem0 Дескриптор первого элемента.
+    /// @param_zh elem0 第一个元素的句柄。
+    /// @param_ja elem0 1 つめの要素ハンドル。
+    /// @param_ko elem0 첫 번째 요소 핸들.
+    ///
+    /// @param_en elem1 The second element handle.
+    /// @param_es elem1 El manejador del segundo elemento.
+    /// @param_pt elem1 O identificador do segundo elemento.
+    /// @param_fr elem1 L'identifiant du second élément.
+    /// @param_it elem1 L'handle del secondo elemento.
+    /// @param_de elem1 Der Handle des zweiten Elements.
+    /// @param_ru elem1 Дескриптор второго элемента.
+    /// @param_zh elem1 第二个元素的句柄。
+    /// @param_ja elem1 2 つめの要素ハンドル。
+    /// @param_ko elem1 두 번째 요소 핸들.
+    ///
+    /// @param_en elem2 The third element handle.
+    /// @param_es elem2 El manejador del tercer elemento.
+    /// @param_pt elem2 O identificador do terceiro elemento.
+    /// @param_fr elem2 L'identifiant du troisième élément.
+    /// @param_it elem2 L'handle del terzo elemento.
+    /// @param_de elem2 Der Handle des dritten Elements.
+    /// @param_ru elem2 Дескриптор третьего элемента.
+    /// @param_zh elem2 第三个元素的句柄。
+    /// @param_ja elem2 3 つめの要素ハンドル。
+    /// @param_ko elem2 세 번째 요소 핸들.
+    ///
+    /// @param_en index0 Where the first element sits in the event's declaration.
+    /// @param_es index0 Dónde se sitúa el primer elemento en la declaración del evento.
+    /// @param_pt index0 Onde o primeiro elemento fica na declaração do evento.
+    /// @param_fr index0 La place du premier élément dans la déclaration de l'événement.
+    /// @param_it index0 Dove si trova il primo elemento nella dichiarazione dell'evento.
+    /// @param_de index0 Wo das erste Element in der Deklaration des Ereignisses steht.
+    /// @param_ru index0 Где в объявлении события стоит первый элемент.
+    /// @param_zh index0 第一个元素在事件声明中的位置。
+    /// @param_ja index0 イベント宣言における 1 つめの要素の位置。
+    /// @param_ko index0 이벤트 선언에서 첫 번째 요소의 위치.
+    ///
+    /// @param_en index1 Where the second element sits in the event's declaration.
+    /// @param_es index1 Dónde se sitúa el segundo elemento en la declaración del evento.
+    /// @param_pt index1 Onde o segundo elemento fica na declaração do evento.
+    /// @param_fr index1 La place du second élément dans la déclaration de l'événement.
+    /// @param_it index1 Dove si trova il secondo elemento nella dichiarazione dell'evento.
+    /// @param_de index1 Wo das zweite Element in der Deklaration des Ereignisses steht.
+    /// @param_ru index1 Где в объявлении события стоит второй элемент.
+    /// @param_zh index1 第二个元素在事件声明中的位置。
+    /// @param_ja index1 イベント宣言における 2 つめの要素の位置。
+    /// @param_ko index1 이벤트 선언에서 두 번째 요소의 위치.
+    ///
+    /// @param_en index2 Where the third element sits in the event's declaration.
+    /// @param_es index2 Dónde se sitúa el tercer elemento en la declaración del evento.
+    /// @param_pt index2 Onde o terceiro elemento fica na declaração do evento.
+    /// @param_fr index2 La place du troisième élément dans la déclaration de l'événement.
+    /// @param_it index2 Dove si trova il terzo elemento nella dichiarazione dell'evento.
+    /// @param_de index2 Wo das dritte Element in der Deklaration des Ereignisses steht.
+    /// @param_ru index2 Где в объявлении события стоит третий элемент.
+    /// @param_zh index2 第三个元素在事件声明中的位置。
+    /// @param_ja index2 イベント宣言における 3 つめの要素の位置。
+    /// @param_ko index2 이벤트 선언에서 세 번째 요소의 위치.
+    ///
+    /// @param_en channel Which payload channel to open. 0 unless the layer declares more than one.
+    /// @param_es channel Qué canal de carga se abre. 0 salvo que la capa declare más de uno.
+    /// @param_pt channel Qual canal de carga abrir. 0 a menos que a camada declare mais de um.
+    /// @param_fr channel Le canal de charge à ouvrir. 0 sauf si le calque en déclare plusieurs.
+    /// @param_it channel Quale canale di payload aprire. 0 a meno che il livello ne dichiari più d'uno.
+    /// @param_de channel Welcher Nutzlastkanal geöffnet wird. 0, sofern die Ebene nicht mehrere deklariert.
+    /// @param_ru channel Какой канал нагрузки открыть. 0, если слой не объявляет несколько.
+    /// @param_zh channel 要打开哪个负载通道。除非图层声明了多个，否则用 0。
+    /// @param_ja channel 開くペイロードチャンネル。レイヤーが複数宣言していなければ 0 です。
+    /// @param_ko channel 열 페이로드 채널. 레이어가 여러 개를 선언하지 않았다면 0입니다.
+    fn emit_3(
+        evt: particleEvent,
+        gen: i32x3,
+        elem0: i32,
+        elem1: i32,
+        elem2: i32,
+        index0: i32 = 0,
+        index1: i32 = 1,
+        index2: i32 = 2,
+        channel: i32 = 0,
+    ) {
+        let k0 : i32 = evt.initPayload(channel, gen);
+        let k1 : i32 = evt.appendPayload(k0, index0, elem0);
+        let k2 : i32 = evt.appendPayload(k1, index1, elem1);
+        let k3 : i32 = evt.appendPayload(k2, index2, elem2);
+        evt.kick(k3);
+    }
+}

@@ -1,0 +1,237 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler sd1 : Shape {
+    WorkspacePosition = (-1782, -352);
+    SampleDimensionality = 3;
+    Position = (0, 1, 0);
+    ShapeType = Cylinder;
+    Radius = 0.5;
+}
+
+sampler sd2 : Curve {
+    WorkspacePosition = (-1408, 858);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.19399568, 0.22740328, 0.22740328, 0)  in (0.20770489, 0.5588371, 2.312553, 0.57278585) out (0.15350907, 0.41302142, 1.7091454, 0.42333055)
+        0.739073 = (0.85018176, 0.91408366, 1, 1)  in (-0.17555985, 0.018828837, 0.0027036236, 0) out (-0.061980765, 0.0066474536, 0.0009545044, 0)
+        1 = (0.80945456, 0.9084151, 1, 1)  in (0, 0.006001627, -0.003827559, 0) out (0, 0.02300117, -0.01466908, 0)
+    }
+}
+
+sampler sd3 : Shape {
+    WorkspacePosition = (-1122, -572);
+    Position = (0, 1.5, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 2;
+}
+
+sampler sd4 : Curve {
+    WorkspacePosition = (-44, 1716);
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.5 = 0  in 0 out 0
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd5 : Curve {
+    WorkspacePosition = (-858, 1364);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (0.77291906, 0.77291906, 0.77291906, 3.6179163) out (0.12002745, 0.12002745, 0.12002745, 0.5618301)
+        0.15529108 = (0.74397105, 0.84137946, 0.92241687, 1.4463356)  in (-0.1222997, -0.17287311, 0, -0.04046248) out (-0.6652517, -0.9403467, 0, -0.22009645)
+        1 = (0.46420664, 0.55601513, 0.63764656, 0.00039123185)  in (-0.11626831, -0.48874128, -0.042542707, -0.14095104) out (-0.13764305, -0.57859135, -0.050363753, -0.16686344)
+    }
+}
+
+sampler sd6 : Shape {
+    WorkspacePosition = (-308, -22);
+    Position = (0, 3.5, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 0.5;
+}
+
+sampler sd7 : Curve {
+    WorkspacePosition = (-44, 1716);
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.5 = 0  in 0 out 0
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd8 : Curve {
+    WorkspacePosition = (-858, 1364);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (0.77291906, 0.77291906, 0.77291906, 3.6179163) out (0.12002745, 0.12002745, 0.12002745, 0.5618301)
+        0.15529108 = (0.49191013, 0.54697895, 0.59279263, 1.4463356)  in (-0.1222997, -0.17287311, 0, -0.04046248) out (-0.6652517, -0.9403467, 0, -0.22009645)
+        1 = (0.502912, 0.56091714, 0.61249244, 0.00039123185)  in (-0.11626831, -0.48874128, -0.042542707, -0.14095104) out (-0.13764305, -0.57859135, -0.050363753, -0.16686344)
+    }
+}
+
+sampler sd9 : Curve {
+    WorkspacePosition = (-814, 2090);
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.5 = 0  in 0 out 0
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd10 : Curve {
+    WorkspacePosition = (-1628, 1738);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (0.77291906, 0.77291906, 0.77291906, 3.6179163) out (0.36526543, 0.36526543, 0.36526543, 1.7097514)
+        0.47257906 = (0.87054545, 0.941211, 1, 1.4463356)  in (-0.37218028, -0.5260844, 0, -0.58456427) out (-0.41537106, -0.58713543, 0, -0.65240186)
+        1 = (0.48005953, 0.55279946, 0.61747605, 0.00039123185)  in (-0.07259583, -0.30516118, -0.026562896, -0.08800727) out (-0.13764305, -0.57859135, -0.050363753, -0.16686344)
+    }
+}
+
+sampler sd11 : Shape {
+    WorkspacePosition = (-308, -22);
+    Position = (0, 0.3, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 0.6;
+}
+
+sampler sd12 : Curve {
+    WorkspacePosition = (-814, 2090);
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.5 = 0  in 0 out 0
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd13 : Curve {
+    WorkspacePosition = (-1628, 1738);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (0.77291906, 0.77291906, 0.77291906, 3.6179163) out (0.36526543, 0.36526543, 0.36526543, 1.7097514)
+        0.47257906 = (0.7577019, 0.8373384, 0.9035907, 1.4463356)  in (-0.37218028, -0.5260844, 0, -0.58456427) out (-0.41537106, -0.58713543, 0, -0.65240186)
+        1 = (0.52320695, 0.59466255, 0.6581972, 0.00039123185)  in (-0.07259583, -0.30516118, -0.026562896, -0.08800727) out (-0.13764305, -0.57859135, -0.050363753, -0.16686344)
+    }
+}
+
+sampler sd14 : Shape {
+    WorkspacePosition = (-308, -22);
+    Position = (0, 0.3, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 0.6;
+}
+
+sampler sd15 : Curve {
+    WorkspacePosition = (-110, 1606);
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.5 = 0  in 0 out 0
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd16 : Curve {
+    WorkspacePosition = (-924, 1254);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (0.77291906, 0.77291906, 0.77291906, 3.6179163) out (0.36526543, 0.36526543, 0.36526543, 1.7097514)
+        0.47257906 = (0.7358537, 0.79404896, 0.8424636, 1.4463356)  in (-0.37218028, -0.5260844, 0, -0.58456427) out (-0.41537106, -0.58713543, 0, -0.65240186)
+        1 = (0.4223714, 0.4800556, 0.5313455, 0.00039123185)  in (-0.07259583, -0.30516118, -0.026562896, -0.08800727) out (-0.13764305, -0.57859135, -0.050363753, -0.16686344)
+    }
+}
+
+sampler sd17 : Shape {
+    WorkspacePosition = (-682, -66);
+    Position = (0, 1, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 1.5;
+}
+
+sampler sd18 : Curve {
+    WorkspacePosition = (-1848, 220);
+    keys 2 {  // 1 ch, hermite
+        0 = 0.3  in 0.21913955 out 0.21913955
+        1 = 1  in 1.2264677 out 1.2264677
+    }
+}
+
+sampler sd23 : Curve {
+    WorkspacePosition = (-660, 1276);
+    Quality = 2;
+    ValueType = 4;
+    keys 2 {  // 4 ch, hermite
+        0 = (0.6554289, 0.7204223, 0.75541884, 0.56078434)  in (-0.016789377, 0, 0, 0) out (-0.016789377, 0, 0, 0)
+        1 = (0.26119393, 0.31275636, 0.34106517, 0)  in (-0.022580894, 0, 0, 0) out (-0.022580894, 0, 0, 0)
+    }
+}
+
+sampler sd24 : Curve {
+    WorkspacePosition = (-2222, 88);
+    keys 3 {  // 1 ch, hermite
+        0 = 0.11402436  in 0.3363543 out 0.053593084
+        0.15933523 = 0.14698052  in -0.014200498 out -0.074922904
+        1 = 0.038453173  in -0.028614406 out -0.034037832
+    }
+}
+
+sampler sd25 : Curve {
+    WorkspacePosition = (-1408, 1078);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.1847964, 0.21370482, 0.21370482, 0)  in (0.20770489, 0.5588371, 2.312553, 0.57278585) out (0.10435705, 0.2807762, 1.1618947, 0.28778446)
+        0.5024294 = (0.8821347, 0.92959046, 0.9933949, 1)  in (-0.11934739, 0.012800038, 0.0018379511, 0) out (-0.11819322, 0.012676254, 0.001820177, 0)
+        1 = (0.8181819, 0.9126098, 1, 0)  in (0, 0.0114447065, -0.007298902, 0) out (0, 0.02300117, -0.01466908, 0)
+    }
+}
+
+sampler sd26 : Shape {
+    WorkspacePosition = (-1782, -352);
+    SampleDimensionality = 3;
+    Position = (0, 0.2, 0);
+    ShapeType = Cylinder;
+    Radius = 0.5;
+    InnerRadius = 0.2475;
+}
+
+sampler LeafSizeCurve : Curve {
+    CustomName = loc[6647399 => "*CURVE*"];
+    WorkspacePosition = (968, -704);
+    keys 2 {  // 1 ch, hermite
+        0 = 0.15740877  in -0.07187123 out -0.07187123
+        1 = 0  in -0.31168258 out -0.31168258
+    }
+}
+
+sampler LeafSpawnShape : Shape {
+    CustomName = loc[6647399 => "Shape"];
+    WorkspacePosition = (-1100, -1144);
+    SampleDimensionality = 3;
+    Position = (0, 0.3, -0);
+    ShapeType = Cylinder;
+    Radius = 0.75;
+    InnerRadius = 0.45;
+    Height = 0.6;
+}
+
+sampler LeafColorCurve : Curve {
+    CustomName = loc[6647399 => "ColorControl"];
+    WorkspacePosition = (242, 22);
+    ValueType = 4;
+    Interpolator = Linear;
+    keys 3 {  // 4 ch, linear
+        0 = (1, 1, 1, 0.65767336)
+        0.13049208 = (1, 1, 1, 1)
+        1 = (1, 1, 1, 1)
+    }
+}

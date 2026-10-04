@@ -1,0 +1,33 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+// Authoritative effect structure (Phase-4 B). Owned children nest under their container;
+// cross-references are `&handle`. Blob bytecode is recompiled from code.cfx (shells carry an
+// empty `Blob`). `build` desugars this to node-text, then parses it.
+
+attributes {
+    "Game.scale" : f32 {
+        default = (1, 0, 0, 0);
+    }
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &RootLayer;
+    &RootLayer emits "Signal" -> [&SnowflakesEmissionLayer, &SpinningBaseEmitterLayer, &FrostEmissionLayer];
+    &TerminationLayer emits "__e_Trigger";
+    &SnowflakesEmissionLayer emits "__e_Child" -> &SnowflakesParticlesLayer;
+    &SnowflakesEmissionLayer emits "__e_OnDeath";
+    &SpinningBaseEmitterLayer emits "__e_Child" -> &SpinningBaseParticlesLayer;
+    &SpinningBaseEmitterLayer emits "__e_OnDeath";
+    &FrostEmissionLayer emits "__e_Child" -> &FrostParticlesLayer;
+    &FrostEmissionLayer emits "__e_OnDeath";
+    entry;
+    entry "Root" fires &RootLayer."Signal";
+}
+

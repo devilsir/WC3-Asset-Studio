@@ -1,0 +1,8 @@
+// stdlib/prelude.cfx — the modules most bundles want. One import instead of four:
+//
+//     import "stdlib/prelude.cfx";
+
+import "math.cfx";
+import "vec.cfx";
+import "easing.cfx";
+import "life.cfx";

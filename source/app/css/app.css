@@ -1161,3 +1161,9 @@ body[data-module="casc"] #cascClearThumbnailCache{
   font-size:8.5px!important;
   line-height:17px!important;
 }
+
+
+/* v1.5 work-in-progress status; shown only in Effects Lab. */
+.work-in-progress-note{display:none;align-items:center;height:22px;max-width:260px;padding:0 8px;border:1px solid #695529;border-radius:999px;background:rgba(67,51,18,.62);color:#f0cb72;font:700 9px/1 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif;letter-spacing:.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
+body[data-module="effects"] .work-in-progress-note{display:inline-flex!important}
+@media(max-width:1180px){body[data-module="effects"] .work-in-progress-note{max-width:190px;font-size:8px}}

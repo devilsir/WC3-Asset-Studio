@@ -1,0 +1,7 @@
+// Library the reconstructed calls in code.cfx resolve against.
+import "stdlib/physics.cfx";
+import "stdlib/life.cfx";
+import "stdlib/space.cfx";
+import "stdlib/color.cfx";
+import "stdlib/payload.cfx";
+

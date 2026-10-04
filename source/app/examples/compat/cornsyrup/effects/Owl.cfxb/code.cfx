@@ -1,0 +1,103 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name;` (or `Name = flags;`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K;`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// A program's `needs { }` block declares the externals it touches. Most of them need NOT be
+// listed, because something else already fixes the type and `build` fills them in: the engine
+// constants (`scene.dt`, `scene.time`, `self.invLife`, `self.lifeRatio`); the attributes the
+// game itself drives, written as `Wc3.Attributes.…` constants (TeamColor, Scale,
+// ColorMultiplier, TargetPosition, SpeedMultiplier, LifespanMultiplier,
+// EmissionRateMultiplier, and Weather.TileCenter/Size/EmissionRate); any event this layer
+// declares above (`event Signal;` makes `Signal.kick(…)` legal on its own); every sampler it
+// declares in `properties` (its kind, and the keyframes in `samplers.cfx`, fix the type); and
+// the effect's own attributes (`effect.cfx` declares what each one is). What is left is the
+// STREAM FIELDS, and each keeps its `"Name" : type;` line: nothing else in the bundle
+// records a layer field's type, so that declaration is the only copy.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+layer L0 extends RootLayerTemplate {
+    using {
+        "_sd_eventStream" = sd0;
+    }
+}
+
+layer L1 extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 200.0;
+    }
+}
+
+layer L2 {
+    properties {
+        Events = [];
+        Renderers = [&rend0];
+        NeedsEvolveOnDeath;
+        sampler "__sampler_0" : Shape = &sd1 usage 9221;
+    }
+    root auto;
+    init {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "Color" : f32x4;
+            "Enabled" : bool;
+            "Velocity" : f32x3;
+        }
+        self.invLife = 1.0;
+        let randDir : f32x3 = vrand();
+        let shapeSample : f32x3 = __sampler_0.samplePosition();
+        Velocity = randDir;
+        // Round-trip the sample through the shape's parametric coords so the spawn point lands exactly on the surface.
+        let pcoords : i32x3 = __sampler_0.projectPCoords(shapeSample);
+        let surfacePos : f32x3 = __sampler_0.samplePosition(pcoords);
+        let worldPos = coord_space.local_to_world_position(surfacePos);
+        Position = worldPos;
+        Size = 0.1;
+        Rotation = 0.0;
+        Color = #f32x4(0.3, 0.3, 1.0, 1.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Velocity" : f32x3;
+        }
+        let l0 : f32x3 = Position;
+        let l1 : f32x3 = Velocity;
+        // Free drift (no accel), then snap back onto the shape — the particle crawls across the surface.
+        physics.integrate(
+            position = l0,
+            velocity = l1
+        );
+        physics.projection(
+        	position = l0,
+        	velocity = l1,
+        	shape = __sampler_0
+        );
+        Position = l0;
+        // Renormalize: the surface projection rescales velocity, so this holds the crawl at unit speed.
+        Velocity = l1 * fast.rsqrt(dot(l1, l1)).xxx;
+    }
+    bind rend0 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+

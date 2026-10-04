@@ -1,0 +1,27 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler SpawnShape : Shape {
+    SampleDimensionality = 3;
+    ShapeType = Cylinder;
+    Radius = 0.5;
+    Height = 0.01;
+}
+
+sampler SpreadSampler : Shape {
+    SampleDimensionality = 3;
+    ShapeType = Cylinder;
+    Radius = 0.78;
+    Height = 0.85;
+}
+
+sampler hueSampler : Curve {
+    keys 2 {  // 1 ch, hermite
+        0 = 0  in 0 out 0.0053571537
+        1 = 1  in 3.1474288 out 0
+    }
+}

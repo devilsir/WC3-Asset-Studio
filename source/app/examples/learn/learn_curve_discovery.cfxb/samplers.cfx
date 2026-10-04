@@ -1,0 +1,16 @@
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler LessonLife : Curve {
+    keys 2 {
+        0 = 0.2 in 0 out 0
+        1 = 1 in 0 out 0
+    }
+}
+
+sampler LessonShape : Shape {
+    SampleDimensionality = 3;
+    ShapeType = Sphere;
+    Radius = 1;
+}

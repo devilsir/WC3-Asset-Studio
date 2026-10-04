@@ -326,3 +326,39 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Effects Lab external PKB tools
+
+WC3 Asset Studio does not bundle the unverified development `effects-runtime.exe`, local `cfxlib`, or legacy `Effect Designer.exe` in release builds. They are not declared as MIT components of WC3 Asset Studio. See `EFFECTS_BACKEND_AND_LICENSE_AUDIT.md` for the engineering audit and external-backend policy.
+
+CornSyrup is supported as an external user-provided interoperability tool; it is not embedded or relicensed by WC3 Asset Studio.
+
+---
+
+## W3ModelViewer — Darithos
+
+WC3 Asset Studio's Native Popcorn Decoder adapts the PopcornFX bake-container, typed-record, semantic effect-definition, and compiled-script decoding logic from W3ModelViewer 1.11.0. The integration is JavaScript code maintained inside WC3 Asset Studio; the original W3ModelViewer project is licensed under MIT.
+
+Source project: https://github.com/Darithos/W3ModelViewer
+
+MIT License
+
+Copyright (c) 2026 Darithos
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,0 +1,44 @@
+// Readable renderer materials. Header: `renderer H : <Type>` where Type is the geometry
+// (Billboard/Ribbon/Light/Mesh). `material = "…"` overrides the default material; a Mesh's
+// model is `path = "…"`. Then one `Name = value;` per non-default property (sampler-style):
+// `= "path"` = texture, `= true` = enabled, `= 1.0` = float, `= AlphaBlend` = named enum.
+// Properties left at their default are OMITTED and reconstructed from the material template on
+// build. Renderer INPUT bindings live in `code.cfx` (`bind rend<N> { "field" -> Slot; }`).
+
+renderer MainParticle : Billboard {
+    DrawOrder = -3;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = Additive;
+    Diffuse.DiffuseMap = "_hd.w3mod/textures/fx/flare/flaresimple_bw.dds";
+    SoftParticles = true;
+    SoftParticles.SoftnessDistance = 0.15;
+}
+
+renderer ExplossionParticleRenderer : Billboard {
+    DrawOrder = -3;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = PremultipliedAlpha;
+    Diffuse.DiffuseMap = "_hd.w3mod/textures/fx/flare/flaresimple_bw.dds";
+    SoftParticles = true;
+    SoftParticles.SoftnessDistance = 0.05;
+}
+
+renderer TrailParticle : Billboard {
+    DrawOrder = 0;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = Additive;
+    Diffuse.DiffuseMap = "_hd.w3mod/textures/fx/flipbooks/fb_smokeblur_bw_8x8.dds";
+    Atlas = true;
+    Atlas.Source = 1;
+    Atlas.SubDiv = (8, 8);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}

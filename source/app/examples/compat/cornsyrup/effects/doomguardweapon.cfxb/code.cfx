@@ -1,0 +1,340 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name;` (or `Name = flags;`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K;`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+layer L0 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        sampler "EventStream" : EventStream = &sd0;
+    }
+    event Signal;
+    root;
+    init {
+        needs {
+            "self.invLife" : f32;
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        PrevAge = 0.0;
+        EventAccum = #i32x2(0, 0);
+    }
+    evolve {
+        needs {
+            "self.lifeRatio" : f32;
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+            "scene.dt" : f32;
+            "Signal" : particleEvent;
+            "EventStream" : samplerEventStreamC;
+        }
+        let lastAge : f32 = PrevAge;
+        let age : f32 = effect.age();
+        let accumState : i32x2 = EventAccum;
+        // Emit whatever the event stream schedules over the [lastAge, age] window; .xy is the carried accumulator.
+        let emitState : i32x3 = EventStream.generate(accumState, lastAge, age, 0.0, scene.dt);
+        PrevAge = age;
+        EventAccum = emitState.xy;
+        let payloadId : i32 = Signal.initPayload(0, emitState);
+        Signal.kick(payloadId);
+        let prevLifeRatio : f32 = self.lifeRatio;
+        let running : bool = effect.isRunning();
+        let streamDuration : f32 = EventStream.duration();
+        self.lifeRatio = select(running & age <= streamDuration, prevLifeRatio, 1.0);
+    }
+}
+
+layer L1 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "self.invLife" : f32;
+        }
+        self.invLife = 0.0;
+    }
+    evolve {
+        needs {
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+    }
+}
+
+layer L2 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "self.invLife" : f32;
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "__e_Child" : particleEvent;
+            "scene.dt" : f32;
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let accumState : i32x2 = spawnAccum;
+        // Spawn-rate accumulator: 50 particles/sec worth of fractional count carried in .xy.
+        let spawnState : i32x3 = generate(accumState, scene.dt * 50.0, 1.0, 0.0, 1.0);
+        let payloadId : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payloadId);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L3 {
+    properties {
+        Renderers = [&rend0];
+        sampler "__sampler_3" : Curve = &sd1;
+        sampler "__sampler_4" : Shape = &sd2 usage 1025;
+        sampler "__sampler_5" : Curve = &sd3;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "TextureID" : f32;
+            "sizeScale" : f32;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "accel" : f32x3;
+            "basePos" : f32x3;
+            "hueJitter" : f32x4;
+            "lastTime" : f32;
+            "rotSpeed" : f32;
+            "colorScale" : f32x4;
+        }
+        let worldBasePos = coord_space.world_base_position();
+        let lifeSpan : f32 = rand(0.6, 0.3);
+        let textureId : f32 = rand(1.0, 8.0);
+        let shapePos : f32x3 = __sampler_4.samplePosition();
+        let sizeMul : f32 = rand(0.7, 0.3);
+        self.invLife = rcp(lifeSpan);
+        sizeScale = sizeMul;
+        let accel0 : f32x3 = rand(#f32x3(0.0, 0.0, 1.0), #f32x3(0.0, 0.0, 3.0));
+        let worldDir = coord_space.local_to_world_direction(shapePos);
+        let rotRate : f32 = rand(-10.0, 10.0);
+        let startRotation : f32 = rand(0.0, 360.0);
+        velState = shapePos * #f32x3(6.0, 6.0, 1.0);
+        posState = worldDir;
+        accel = accel0;
+        basePos = worldBasePos;
+        let hueRand : f32x4 = rand(#f32x4(-1.0, -1.0, -1.0, -1.0), #f32x4(1.0, 1.0, 1.0, 1.0));
+        // Only the .y (hue) channel is jittered; the rest of the HSV offset is zeroed out.
+        hueJitter = hueRand * #f32x4(0.0225, 0.0, 0.0, 0.0);
+        lastTime = scene.time;
+        Rotation = startRotation;
+        rotSpeed = rotRate;
+        let colorMul : f32 = rand(1.0, 3.0);
+        colorScale = colorMul.xxxx;
+        Enabled = true;
+        TextureID = textureId;
+    }
+    evolve physics {
+        needs {
+            "self.lifeRatio" : f32;
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "Color" : f32x4;
+            "sizeScale" : f32;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "accel" : f32x3;
+            "basePos" : f32x3;
+            "hueJitter" : f32x4;
+            "lastTime" : f32;
+            "rotSpeed" : f32;
+            "colorScale" : f32x4;
+        }
+        let time : f32 = scene.time;
+        let lifeRatio : f32 = self.lifeRatio;
+        let sizeCurve : f32 = __sampler_3.sample(lifeRatio);
+        let l0 : f32x3 = posState;
+        let l1 : f32x3 = velState;
+        // In-place integrator (p += v·t + ½·a·t²) with exponential drag.
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = accel,
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 2.0
+        );
+        let colorCurve : f32x4 = __sampler_5.sample(lifeRatio);
+        let colorHsv : f32x4 = rgb2hsv(colorCurve);
+        // Constant +0.09 hue shift plus the per-particle hue jitter.
+        let shiftedColor : f32x4 = hsv2rgb(colorHsv + #f32x4(0.0, 0.09, 0.0, 0.0) + hueJitter);
+        let prevTime : f32 = lastTime;
+        let prevRotation : f32 = Rotation;
+        Position = basePos + l0;
+        Size = sizeCurve * sizeScale;
+        Color = shiftedColor * colorScale;
+        Rotation = prevRotation + rotSpeed * (time - prevTime);
+        velState = l1;
+        posState = l0;
+        lastTime = time;
+    }
+    bind rend0 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+
+layer L4 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "self.invLife" : f32;
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "__e_Child" : particleEvent;
+            "scene.dt" : f32;
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let accumState : i32x2 = spawnAccum;
+        // Spawn-rate accumulator: 60 particles/sec worth of fractional count carried in .xy.
+        let spawnState : i32x3 = generate(accumState, scene.dt * 60.0, 1.0, 0.0, 1.0);
+        let payloadId : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payloadId);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L5 {
+    properties {
+        Renderers = [&rend1];
+        sampler "__sampler_4" : Shape = &sd4 usage 1025;
+        sampler "__sampler_6" : Curve = &sd5;
+    }
+    root auto;
+    init {
+        needs {
+            "__sampler_4" : samplerShape_2C;
+            "self.invLife" : f32;
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "shapeOffset" : f32x3;
+            "colorScale" : f32x4;
+            "sizeScale" : f32;
+        }
+        velState = #f32x3(0.0, 0.0, 0.0);
+        posState = #f32x3(0.0, 0.0, 0.0);
+        let lifeSpan : f32 = rand(0.5, 0.9);
+        let shapePos : f32x3 = __sampler_4.samplePosition();
+        let startRotation : f32 = rand(0.0, 360.0);
+        self.invLife = rcp(lifeSpan);
+        Rotation = startRotation;
+        shapeOffset = shapePos;
+        let colorMul : f32 = rand(2.0, 1.5);
+        colorScale = colorMul.xxxx;
+        let sizeMul : f32 = rand(0.6, 1.5);
+        sizeScale = sizeMul;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "self.lifeRatio" : f32;
+            "__sampler_6" : samplerCurve4C;
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureID" : f32;
+            "scene.dt" : f32;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "shapeOffset" : f32x3;
+            "colorScale" : f32x4;
+            "sizeScale" : f32;
+        }
+        let worldBasePos = coord_space.world_base_position();
+        let lifeRatio : f32 = self.lifeRatio;
+        let textureId = life.select_texture_id_on_age(rend1);
+        let colorCurve : f32x4 = __sampler_6.sample(lifeRatio);
+        let prevOffset : f32x3 = shapeOffset;
+        // The spawn offset itself drifts +Z at 1 unit/sec, on top of the integrated motion below.
+        let nextOffset : f32x3 = prevOffset + f32x3(0, 0, scene.dt.x);
+        let worldOffset = coord_space.local_to_world_direction(nextOffset);
+        let l0 : f32x3 = posState;
+        let l1 : f32x3 = velState;
+        // In-place integrator (p += v·t + ½·a·t²), no drag term.
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, 0.0, 4.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0
+        );
+        Position = worldBasePos + (worldOffset + l0);
+        Size = (lifeRatio * 0.73769176 + 0.2623082) * sizeScale;
+        Color = colorScale * colorCurve;
+        TextureID = textureId;
+        shapeOffset = nextOffset;
+        velState = l1;
+        posState = l0;
+    }
+    bind rend1 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+

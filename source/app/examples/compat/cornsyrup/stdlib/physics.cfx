@@ -1,0 +1,479 @@
+// stdlib/physics.cfx — per-frame motion integration.
+//
+// ─── How to use ───────────────────────────────────────────────────────────────────────────
+//
+//     physics.step(Sim_Pos, Sim_Vel);                  // ballistic: gravity + integrate
+//     physics.step(Sim_Pos, Sim_Vel, gravity = 20.0);  // heavier-feeling arc
+//     physics.integrate(Sim_Pos, Sim_Vel, wind = #f32x3(3, 0, 0), drag = 2.0);
+//
+// State is taken by REFERENCE (`&f32x3`), so these write back into the caller's own fields. The
+// caller only needs to declare those fields in its own `needs`; `scene.dt` is pulled in by these
+// functions and merged automatically.
+//
+// Reading a reference always yields the latest value written to it, never a re-read of the field —
+// which matters, because the assembler loads each external ONCE per program, so a literal re-read
+// after a store would return the pre-store value. See CFX_GUIDE §13.4.
+//
+// ─── Conventions ──────────────────────────────────────────────────────────────────────────
+//
+//   * WC3 is **Z-up**, so gravity acts on `z` and "down" is `-z`.
+//   * All rates are per SECOND; every function multiplies by `scene.dt` itself. Never pre-scale.
+//   * `acceleration` is an acceleration, not a force — it is NOT divided by `mass`. `mass` only
+//     softens drag (see the full `integrate` below).
+//   * There is no branching in CFX: `select(cond, whenTrue, whenFalse)` evaluates BOTH arms and
+//     picks one. Nothing here is skipped at runtime, it is only discarded — including when the
+//     condition folds to a constant, so a `select` is never free (see `step`'s Cost note).
+//     (Note the CONDITION IS FIRST. PopcornFX's own scripting spells the same operation
+//     `select(whenFalse, whenTrue, cond)` — condition LAST — so code ported from a `.pkfx`
+//     must have its `select` arguments reordered or it silently computes the wrong branch.)
+//
+// Everything here is plain CFX and is inlined at build time: no runtime cost, no engine surface.
+
+import "math.cfx";
+import "space.cfx";
+
+namespace physics {
+
+    // ─── Primitives ───────────────────────────────────────────────────────────────────────
+    // One effect each, for when you want to compose the step yourself. the full `integrate` below
+    // does all of this at once and more accurately; reach for these only when you want just
+    // one piece, or want to control the order.
+
+    /// Advance `position` by `velocity` over one frame (explicit Euler).
+    ///
+    /// Call this BEFORE updating velocity for the frame and you get the symmetric,
+    /// timestep-stable form; call it after and a thrown particle undershoots.
+    /// @brief_en Advance `position` by `velocity` over one frame (explicit Euler). Call this BEFORE updating velocity and you get the symmetric, timestep-stable form; call it after and a thrown particle undershoots.
+    /// @brief_es Avanza `position` según `velocity` durante un fotograma (Euler explícito). Llámalo ANTES de actualizar la velocidad y obtienes la forma simétrica y estable frente al paso de tiempo; llámalo después y una partícula lanzada se queda corta.
+    /// @brief_pt Avança `position` conforme `velocity` durante um quadro (Euler explícito). Chame-o ANTES de atualizar a velocidade e você obtém a forma simétrica e estável quanto ao passo de tempo; chame depois e uma partícula lançada fica aquém.
+    /// @brief_fr Fait avancer `position` selon `velocity` sur une image (Euler explicite). Appelez-le AVANT de mettre à jour la vitesse et vous obtenez la forme symétrique, stable vis-à-vis du pas de temps ; appelez-le après et une particule lancée retombe trop court.
+    /// @brief_it Fa avanzare `position` secondo `velocity` per un fotogramma (Eulero esplicito). Chiamalo PRIMA di aggiornare la velocità e ottieni la forma simmetrica e stabile rispetto al passo temporale; chiamalo dopo e una particella lanciata resta corta.
+    /// @brief_de Rückt `position` um `velocity` über ein Bild vor (explizites Euler-Verfahren). Vor der Geschwindigkeitsaktualisierung aufgerufen ergibt es die symmetrische, zeitschrittstabile Form; danach aufgerufen bleibt ein geworfenes Partikel zu kurz.
+    /// @brief_ru Продвигает `position` на `velocity` за один кадр (явный метод Эйлера). Вызовите ДО обновления скорости — получите симметричную, устойчивую к шагу форму; вызовите после — брошенная частица недолетит.
+    /// @brief_zh 用 `velocity` 把 `position` 推进一帧（显式欧拉）。在更新速度之前调用可得到对称、对时间步长稳定的形式；在之后调用，抛出的粒子会落得偏近。
+    /// @brief_ja `velocity` によって `position` を 1 フレーム進めます（陽的オイラー法）。速度を更新する前に呼べば対称でタイムステップに強い形になり、後に呼ぶと投げたパーティクルが手前に落ちます。
+    /// @brief_ko `velocity`로 `position`을 한 프레임 진행시킵니다(명시적 오일러). 속도를 갱신하기 전에 호출하면 대칭적이고 타임스텝에 안정적인 형태가 되고, 뒤에 호출하면 던진 파티클이 덜 날아갑니다.
+    ///
+    /// @param_en position The particle's position, updated in place.
+    /// @param_es position La posición de la partícula, actualizada en el sitio.
+    /// @param_pt position A posição da partícula, atualizada no lugar.
+    /// @param_fr position La position de la particule, mise à jour sur place.
+    /// @param_it position La posizione della particella, aggiornata sul posto.
+    /// @param_de position Die Position des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru position Позиция частицы, обновляемая на месте.
+    /// @param_zh position 粒子的位置，就地更新。
+    /// @param_ja position パーティクルの位置。その場で更新されます。
+    /// @param_ko position 파티클의 위치. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en velocity The velocity to advance by, per second. Never pre-scale it by `scene.dt` — this multiplies by the frame time itself.
+    /// @param_es velocity La velocidad con la que avanzar, por segundo. Nunca la preescales por `scene.dt`: esta función multiplica ella misma por el tiempo de fotograma.
+    /// @param_pt velocity A velocidade com que avançar, por segundo. Nunca a pré-escale por `scene.dt` — esta função já multiplica pelo tempo do quadro.
+    /// @param_fr velocity La vitesse d'avance, par seconde. Ne la mettez jamais à l'échelle par `scene.dt` au préalable : la fonction multiplie elle-même par la durée de l'image.
+    /// @param_it velocity La velocità con cui avanzare, al secondo. Non pre-scalarla per `scene.dt`: è la funzione stessa a moltiplicare per il tempo del fotogramma.
+    /// @param_de velocity Die Geschwindigkeit zum Vorrücken, pro Sekunde. Skaliere sie nie vorab mit `scene.dt` — die Funktion multipliziert selbst mit der Bildzeit.
+    /// @param_ru velocity Скорость продвижения, в секунду. Никогда не домножайте её на `scene.dt` заранее — функция сама умножает на время кадра.
+    /// @param_zh velocity 用于推进的速度，按每秒计。不要事先乘以 `scene.dt` —— 这个函数自己会乘上帧时间。
+    /// @param_ja velocity 進めるための速度（毎秒）。あらかじめ `scene.dt` を掛けないでください。この関数自身がフレーム時間を掛けます。
+    /// @param_ko velocity 진행에 쓸 속도(초당). 미리 `scene.dt`를 곱하지 마세요. 이 함수가 직접 프레임 시간을 곱합니다.
+    fn integrate(position: &f32x3, velocity: f32x3) {
+        position = position + velocity * scene.dt;
+    }
+
+    /// Bounce off a horizontal plane at `height`, keeping `restitution` of the vertical speed.
+    ///
+    /// Snaps the particle to the plane rather than reflecting it through, so it cannot tunnel on
+    /// a slow frame. Only the `z` component is reflected; horizontal motion is untouched (add a
+    /// `drag` call if you want friction along the floor).
+    /// @brief_en Bounce off a horizontal plane at `height`, keeping `restitution` of the vertical speed. Snaps the particle to the plane rather than reflecting it through, so it cannot tunnel on a slow frame. Only `z` is reflected; horizontal motion is untouched.
+    /// @brief_es Rebota contra un plano horizontal a la altura `height`, conservando `restitution` de la velocidad vertical. Ajusta la partícula al plano en vez de reflejarla a través de él, así que no puede atravesarlo en un fotograma lento. Solo se refleja `z`; el movimiento horizontal no se toca.
+    /// @brief_pt Quica num plano horizontal na altura `height`, mantendo `restitution` da velocidade vertical. Encosta a partícula ao plano em vez de refletê-la através dele, então ela não pode atravessar num quadro lento. Só `z` é refletido; o movimento horizontal fica intacto.
+    /// @brief_fr Rebondit sur un plan horizontal à la hauteur `height`, en conservant `restitution` de la vitesse verticale. Colle la particule au plan plutôt que de la réfléchir au travers, donc elle ne peut pas le traverser lors d'une image lente. Seul `z` est réfléchi ; le mouvement horizontal reste intact.
+    /// @brief_it Rimbalza su un piano orizzontale all'altezza `height`, conservando `restitution` della velocità verticale. Aggancia la particella al piano invece di rifletterla attraverso, quindi non può attraversarlo in un fotogramma lento. Solo `z` viene riflesso; il moto orizzontale resta intatto.
+    /// @brief_de Prallt an einer waagerechten Ebene auf Höhe `height` ab und behält `restitution` der senkrechten Geschwindigkeit. Setzt das Partikel auf die Ebene, statt es hindurchzuspiegeln, sodass es bei einem langsamen Bild nicht durchtunneln kann. Nur `z` wird gespiegelt, die waagerechte Bewegung bleibt unberührt.
+    /// @brief_ru Отскакивает от горизонтальной плоскости на высоте `height`, сохраняя долю `restitution` вертикальной скорости. Частица притягивается к плоскости, а не отражается сквозь неё, поэтому не проваливается на медленном кадре. Отражается только `z`; горизонтальное движение не трогается.
+    /// @brief_zh 在高度 `height` 处从水平面弹起，保留竖直速度的 `restitution` 倍。它把粒子贴到平面上而不是穿过去反射，因此在慢帧时不会穿透。只反射 `z`，水平运动保持不变。
+    /// @brief_ja 高さ `height` の水平面で跳ね返り、鉛直速度の `restitution` 倍を保ちます。面を突き抜けて反射させるのではなく面に貼り付けるため、フレームが遅くてもすり抜けません。反射するのは `z` だけで、水平方向の運動はそのままです。
+    /// @brief_ko 높이 `height`의 수평면에서 튕기며 수직 속도의 `restitution`만큼을 남깁니다. 면을 통과시켜 반사하는 대신 면에 붙이므로 느린 프레임에서도 뚫고 지나가지 않습니다. `z`만 반사되고 수평 운동은 그대로입니다.
+    ///
+    /// @param_en position The particle's position, snapped onto the plane when it is below.
+    /// @param_es position La posición de la partícula, ajustada al plano cuando está por debajo.
+    /// @param_pt position A posição da partícula, encostada ao plano quando está abaixo.
+    /// @param_fr position La position de la particule, ramenée sur le plan quand elle est en dessous.
+    /// @param_it position La posizione della particella, agganciata al piano quando si trova sotto.
+    /// @param_de position Die Position des Partikels, auf die Ebene gesetzt, wenn es darunter liegt.
+    /// @param_ru position Позиция частицы, притягиваемая к плоскости, когда она ниже.
+    /// @param_zh position 粒子的位置；当它低于平面时会被贴到平面上。
+    /// @param_ja position パーティクルの位置。面より下にあるとき面上へ引き上げられます。
+    /// @param_ko position 파티클의 위치. 면보다 아래에 있으면 면 위로 붙습니다.
+    ///
+    /// @param_en velocity The particle's velocity; its vertical component is reflected and scaled.
+    /// @param_es velocity La velocidad de la partícula; su componente vertical se refleja y se escala.
+    /// @param_pt velocity A velocidade da partícula; sua componente vertical é refletida e escalada.
+    /// @param_fr velocity La vitesse de la particule ; sa composante verticale est réfléchie et mise à l'échelle.
+    /// @param_it velocity La velocità della particella; la sua componente verticale viene riflessa e scalata.
+    /// @param_de velocity Die Geschwindigkeit des Partikels; ihr senkrechter Anteil wird gespiegelt und skaliert.
+    /// @param_ru velocity Скорость частицы; её вертикальная составляющая отражается и масштабируется.
+    /// @param_zh velocity 粒子的速度；其竖直分量会被反射并缩放。
+    /// @param_ja velocity パーティクルの速度。鉛直成分が反射されスケールされます。
+    /// @param_ko velocity 파티클의 속도. 수직 성분이 반사되고 크기가 조정됩니다.
+    ///
+    /// @param_en height Where the floor is, on the z axis.
+    /// @param_es height Dónde está el suelo, en el eje z.
+    /// @param_pt height Onde o chão está, no eixo z.
+    /// @param_fr height Où se trouve le sol, sur l'axe z.
+    /// @param_it height Dove si trova il pavimento, sull'asse z.
+    /// @param_de height Wo der Boden liegt, auf der z-Achse.
+    /// @param_ru height Где находится пол по оси z.
+    /// @param_zh height 地面在 z 轴上的位置。
+    /// @param_ja height 床が z 軸上のどこにあるか。
+    /// @param_ko height 바닥이 z 축의 어디에 있는지.
+    ///
+    /// @param_en restitution The fraction of vertical speed kept on impact. 1 bounces for ever, 0 stops dead.
+    /// @param_es restitution La fracción de velocidad vertical que se conserva al impactar. 1 rebota para siempre, 0 lo detiene en seco.
+    /// @param_pt restitution A fração da velocidade vertical mantida no impacto. 1 quica para sempre, 0 para de vez.
+    /// @param_fr restitution La fraction de vitesse verticale conservée à l'impact. 1 rebondit indéfiniment, 0 arrête net.
+    /// @param_it restitution La frazione di velocità verticale conservata all'impatto. 1 rimbalza per sempre, 0 ferma di colpo.
+    /// @param_de restitution Der beim Aufprall behaltene Anteil der senkrechten Geschwindigkeit. 1 springt ewig, 0 hält sofort an.
+    /// @param_ru restitution Доля вертикальной скорости, сохраняемая при ударе. 1 — отскакивает вечно, 0 — останавливается насмерть.
+    /// @param_zh restitution 撞击时保留的竖直速度比例。1 会一直弹，0 则立即停住。
+    /// @param_ja restitution 衝突時に残す鉛直速度の割合。1 なら永遠に跳ね続け、0 ならその場で止まります。
+    /// @param_ko restitution 충돌 시 남기는 수직 속도의 비율. 1이면 영원히 튀고 0이면 즉시 멈춥니다.
+    fn bounce_floor(
+        position: &f32x3,
+        velocity: &f32x3,
+        height: f32 = 0.0,
+        restitution: f32 = 0.5,
+    ) {
+        let below : bool = position.z < height;
+        let bounced : f32x3 = #f32x3(velocity.x, velocity.y, abs(velocity.z) * restitution);
+        position = select(below, #f32x3(position.x, position.y, height), position);
+        velocity = select(below, bounced, velocity);
+    }
+
+    // ─── The full integrator ──────────────────────────────────────────────────────────────
+
+    /// One frame of motion under constant acceleration **and** linear drag toward a wind field —
+    /// solved in closed form rather than stepped, so it stays correct at any frame rate.
+    ///
+    /// # The model
+    ///
+    /// Velocity obeys `dv/dt = a + k·(wind − v)`, where `k = drag / mass` is the drag rate in
+    /// 1/s. That is a first-order linear ODE with the exact solution
+    ///
+    /// ```text
+    ///   v(t) = v₀·e^(−k·t) + wind·(1 − e^(−k·t)) + a·∫₀ᵗ e^(−k·s) ds
+    ///   p(t) = p₀ + v₀·∫₀ᵗ e^(−k·s) ds + wind·(t − ∫…) + a·∫₀ᵗ∫₀ˢ e^(−k·u) du ds
+    /// ```
+    ///
+    /// so the whole step reduces to three scalars, computed once and reused:
+    ///
+    /// | | | small-`k` meaning |
+    /// |---|---|---|
+    /// | `expkdt`     | `e^(−k·dt)` — the fraction of velocity surviving the frame | → 1 |
+    /// | `expfact_o1` | `∫₀^dt e^(−k·s) ds = (1 − e^(−k·dt))/k` — effective time for velocity | → dt |
+    /// | `expfact_o2` | the double integral `(dt − expfact_o1)/k` — effective time for acceleration | → dt²/2 |
+    ///
+    /// With no drag those collapse to `1`, `dt`, `dt²/2`, i.e. plain `p += v·dt + a·dt²/2` —
+    /// exactly velocity-Verlet. So the full `integrate` is a strict generalisation of the simple case,
+    /// not a different scheme.
+    ///
+    /// # Why the two branches
+    ///
+    /// The closed forms divide by `k`, so they lose all their significant digits as `k → 0`
+    /// (`(1 − e^(−k·dt))/k` is `0/0`). Below `k = 0.1` the code switches to the Taylor series of
+    /// the same expressions, which is well-conditioned there:
+    ///
+    /// ```text
+    ///   e^(−k·dt)   ≈ 1 + k·dt·(−1 + k·dt/2)
+    ///   expfact_o1  ≈ dt + k·dt/2·(−dt + dt·k·dt/3)   =  dt − k·dt²/2 + k²·dt³/6
+    ///   expfact_o2  ≈ −dt/2·(−dt + dt·k·dt/3)         =  dt²/2 − k·dt³/6
+    /// ```
+    ///
+    /// Both arms are always evaluated — `select` discards one, it does not skip it — so the
+    /// branch costs arithmetic, not divergence.
+    ///
+    /// # Order is load-bearing
+    ///
+    /// `position` is updated **before** `velocity`, so it integrates the velocity the particle
+    /// had entering the frame. Swapping the two lines applies this frame's acceleration to this
+    /// frame's displacement and makes the trajectory asymmetric — a launched particle no longer
+    /// lands where it was thrown from.
+    ///
+    /// # Parameters
+    ///
+    /// - `position`, `velocity` — the state, updated in place.
+    /// - `acceleration` — constant acceleration for the frame, in units/s². Gravity goes here as
+    ///   `#f32x3(0, 0, -g)`. NOT divided by `mass`.
+    /// - `wind` — the velocity the particle is dragged toward. Has no effect when `drag` is 0.
+    /// - `mass` — divides `drag` only; heavier particles are less affected by it. Must be > 0.
+    /// - `drag` — drag coefficient; `drag/mass` is the decay rate in 1/s. 0 = vacuum.
+    ///
+    /// (`drag` names both this parameter and the `physics.drag` function above. There is no
+    /// ambiguity — a bare name is the parameter, a call is the function — but note that the
+    /// parameter name is API, since it can be passed by keyword: `drag = 2.0`.)
+    ///
+    /// Based on the PopcornFX algorithm for matching inlined functions and reconstruct
+    /// @brief_en One frame of motion under constant acceleration AND linear drag toward a wind field, solved in closed form rather than stepped, so it stays correct at any frame rate. With no drag it collapses to plain velocity-Verlet, so it is a strict generalisation of the simple case.
+    /// @brief_es Un fotograma de movimiento bajo aceleración constante Y arrastre lineal hacia un campo de viento, resuelto en forma cerrada en vez de por pasos, así que sigue siendo correcto a cualquier tasa de fotogramas. Sin arrastre se reduce al Verlet de velocidades corriente, de modo que es una generalización estricta del caso simple.
+    /// @brief_pt Um quadro de movimento sob aceleração constante E arrasto linear em direção a um campo de vento, resolvido em forma fechada em vez de por passos, de modo que permanece correto a qualquer taxa de quadros. Sem arrasto ele se reduz ao Verlet de velocidades comum, sendo portanto uma generalização estrita do caso simples.
+    /// @brief_fr Une image de mouvement sous accélération constante ET traînée linéaire vers un champ de vent, résolue en forme close plutôt que pas à pas, ce qui la garde exacte à n'importe quelle fréquence d'images. Sans traînée, elle se ramène au Verlet des vitesses ordinaire : c'est donc une généralisation stricte du cas simple.
+    /// @brief_it Un fotogramma di moto sotto accelerazione costante E resistenza lineare verso un campo di vento, risolto in forma chiusa anziche a passi, quindi resta corretto a qualsiasi frequenza di fotogrammi. Senza resistenza si riduce al Verlet delle velocità ordinario, ed è dunque una generalizzazione stretta del caso semplice.
+    /// @brief_de Ein Bild Bewegung unter konstanter Beschleunigung UND linearem Widerstand hin zu einem Windfeld, geschlossen gelöst statt schrittweise, sodass es bei jeder Bildrate richtig bleibt. Ohne Widerstand fällt es auf gewöhnliches Geschwindigkeits-Verlet zusammen und ist damit eine strenge Verallgemeinerung des einfachen Falls.
+    /// @brief_ru Один кадр движения при постоянном ускорении И линейном сопротивлении к полю ветра, решённый в замкнутой форме, а не по шагам, поэтому остаётся верным при любой частоте кадров. Без сопротивления он сводится к обычному скоростному Верле, то есть является строгим обобщением простого случая.
+    /// @brief_zh 在恒定加速度与朝风场的线性阻尼共同作用下推进一帧，采用闭式解而非逐步积分，因此在任何帧率下都保持正确。无阻尼时它退化为普通的速度 Verlet，所以这是简单情形的严格推广。
+    /// @brief_ja 一定の加速度と、風の場へ向かう線形抗力の両方のもとで 1 フレーム分の運動を進めます。逐次積分ではなく閉じた形で解くため、どのフレームレートでも正しいままです。抗力がなければ通常の速度ベルレに帰着するため、単純な場合の厳密な一般化になっています。
+    /// @brief_ko 일정한 가속도와 바람장을 향한 선형 항력을 함께 받으며 한 프레임 움직입니다. 단계적으로 적분하지 않고 닫힌 형태로 풀기 때문에 어떤 프레임레이트에서도 정확합니다. 항력이 없으면 보통의 속도 베를레로 돌아가므로, 단순한 경우의 엄밀한 일반화입니다.
+    ///
+    /// @param_en position The particle's position, updated in place.
+    /// @param_es position La posición de la partícula, actualizada en el sitio.
+    /// @param_pt position A posição da partícula, atualizada no lugar.
+    /// @param_fr position La position de la particule, mise à jour sur place.
+    /// @param_it position La posizione della particella, aggiornata sul posto.
+    /// @param_de position Die Position des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru position Позиция частицы, обновляемая на месте.
+    /// @param_zh position 粒子的位置，就地更新。
+    /// @param_ja position パーティクルの位置。その場で更新されます。
+    /// @param_ko position 파티클의 위치. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en velocity The particle's velocity, updated in place.
+    /// @param_es velocity La velocidad de la partícula, actualizada en el sitio.
+    /// @param_pt velocity A velocidade da partícula, atualizada no lugar.
+    /// @param_fr velocity La vitesse de la particule, mise à jour sur place.
+    /// @param_it velocity La velocità della particella, aggiornata sul posto.
+    /// @param_de velocity Die Geschwindigkeit des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru velocity Скорость частицы, обновляемая на месте.
+    /// @param_zh velocity 粒子的速度，就地更新。
+    /// @param_ja velocity パーティクルの速度。その場で更新されます。
+    /// @param_ko velocity 파티클의 속도. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en acceleration Constant acceleration for the frame, in units/s². Gravity goes here as `#f32x3(0, 0, -g)`. NOT divided by `mass`.
+    /// @param_es acceleration Aceleración constante para el fotograma, en unidades/s². La gravedad va aquí como `#f32x3(0, 0, -g)`. NO se divide por `mass`.
+    /// @param_pt acceleration Aceleração constante para o quadro, em unidades/s². A gravidade entra aqui como `#f32x3(0, 0, -g)`. NÃO é dividida por `mass`.
+    /// @param_fr acceleration Accélération constante pour l'image, en unités/s². La gravité se met ici sous la forme `#f32x3(0, 0, -g)`. Elle n'est PAS divisée par `mass`.
+    /// @param_it acceleration Accelerazione costante per il fotogramma, in unità/s². La gravità va qui come `#f32x3(0, 0, -g)`. NON viene divisa per `mass`.
+    /// @param_de acceleration Konstante Beschleunigung für das Bild, in Einheiten/s². Die Schwerkraft kommt hier als `#f32x3(0, 0, -g)` hinein. Sie wird NICHT durch `mass` geteilt.
+    /// @param_ru acceleration Постоянное ускорение за кадр, в единицах/с². Гравитация задаётся здесь как `#f32x3(0, 0, -g)`. НЕ делится на `mass`.
+    /// @param_zh acceleration 本帧的恒定加速度，单位为 单位/秒²。重力写成 `#f32x3(0, 0, -g)` 放在这里。它不会除以 `mass`。
+    /// @param_ja acceleration そのフレームの一定加速度（単位/秒²）。重力は `#f32x3(0, 0, -g)` としてここに入れます。`mass` では割られません。
+    /// @param_ko acceleration 해당 프레임의 일정 가속도(단위/초²). 중력은 `#f32x3(0, 0, -g)` 형태로 여기에 넣습니다. `mass`로 나누지 않습니다.
+    ///
+    /// @param_en wind The velocity the particle is dragged toward. Has no effect when `drag` is 0.
+    /// @param_es wind La velocidad hacia la que se arrastra la partícula. No tiene efecto cuando `drag` es 0.
+    /// @param_pt wind A velocidade para a qual a partícula é arrastada. Não tem efeito quando `drag` é 0.
+    /// @param_fr wind La vitesse vers laquelle la particule est entraînée. Sans effet lorsque `drag` vaut 0.
+    /// @param_it wind La velocità verso cui la particella viene trascinata. Non ha effetto quando `drag` è 0.
+    /// @param_de wind Die Geschwindigkeit, zu der das Partikel hingezogen wird. Ohne Wirkung, wenn `drag` 0 ist.
+    /// @param_ru wind Скорость, к которой частицу тянет. Не действует, когда `drag` равен 0.
+    /// @param_zh wind 粒子被拖向的目标速度。当 `drag` 为 0 时不起作用。
+    /// @param_ja wind パーティクルが引き寄せられる速度。`drag` が 0 のときは効きません。
+    /// @param_ko wind 파티클이 끌려가는 목표 속도. `drag`이 0이면 아무 역할도 하지 않습니다.
+    ///
+    /// @param_en mass Divides `drag` only; heavier particles are less affected by it. Must be greater than 0.
+    /// @param_es mass Solo divide a `drag`; las partículas más pesadas se ven menos afectadas por él. Debe ser mayor que 0.
+    /// @param_pt mass Divide apenas `drag`; partículas mais pesadas são menos afetadas por ele. Precisa ser maior que 0.
+    /// @param_fr mass Ne divise que `drag` ; les particules plus lourdes en sont moins affectées. Doit être supérieure à 0.
+    /// @param_it mass Divide soltanto `drag`; le particelle più pesanti ne risentono meno. Deve essere maggiore di 0.
+    /// @param_de mass Teilt nur `drag`; schwerere Partikel werden weniger davon beeinflusst. Muss größer als 0 sein.
+    /// @param_ru mass Делит только `drag`; более тяжёлые частицы меньше ему подвержены. Должна быть больше 0.
+    /// @param_zh mass 只用来除 `drag`；质量越大的粒子受阻尼影响越小。必须大于 0。
+    /// @param_ja mass `drag` を割るためだけに使われます。重いパーティクルほど抗力の影響を受けません。0 より大きくなければなりません。
+    /// @param_ko mass `drag`을 나누는 데만 쓰입니다. 무거운 파티클일수록 항력의 영향을 덜 받습니다. 0보다 커야 합니다.
+    ///
+    /// @param_en drag The drag coefficient; `drag/mass` is the decay rate in 1/s. 0 is a vacuum.
+    /// @param_es drag El coeficiente de arrastre; `drag/mass` es la tasa de decaimiento en 1/s. 0 es el vacío.
+    /// @param_pt drag O coeficiente de arrasto; `drag/mass` é a taxa de decaimento em 1/s. 0 é vácuo.
+    /// @param_fr drag Le coefficient de traînée ; `drag/mass` est le taux de décroissance en 1/s. 0 correspond au vide.
+    /// @param_it drag Il coefficiente di resistenza; `drag/mass` è il tasso di decadimento in 1/s. 0 è il vuoto.
+    /// @param_de drag Der Widerstandsbeiwert; `drag/mass` ist die Abklingrate in 1/s. 0 ist Vakuum.
+    /// @param_ru drag Коэффициент сопротивления; `drag/mass` — скорость затухания в 1/с. 0 — это вакуум.
+    /// @param_zh drag 阻尼系数；`drag/mass` 就是以 1/秒 为单位的衰减率。0 表示真空。
+    /// @param_ja drag 抗力係数。`drag/mass` が 1/秒 単位の減衰率になります。0 は真空です。
+    /// @param_ko drag 항력 계수. `drag/mass`가 1/초 단위의 감쇠율입니다. 0은 진공입니다.
+    fn integrate(
+        position: &f32x3,
+        velocity: &f32x3,
+        acceleration: f32x3 = #f32x3(0.0, 0.0, 0.0),
+        wind: f32x3 = #f32x3(0.0, 0.0, 0.0),
+        mass: f32 = 1.0,
+        drag: f32 = 0.0
+    ) {
+        let dt : f32 = scene.dt;
+        let k  : f32 = drag / mass;          // drag rate, 1/s
+        // Above this threshold the closed forms are well-conditioned; below it they divide by a
+        // near-zero `k` and lose their significant digits, so the Taylor series takes over.
+        let selector : bool = k >= 0.1;
+        let kdt : f32 = k * dt;
+
+        let expkdt : f32 = select(selector,
+                                  exp(-kdt),
+                                  1.0 + kdt * (-1.0 + kdt / 2.0));
+
+        let expfact_o1 : f32 = select(selector,
+                                      (1.0 - expkdt) / k,
+                                      dt + kdt / 2.0 * (-dt + dt * kdt / 3.0));
+
+        let expfact_o2 : f32 = select(selector,
+                                      (-expfact_o1 + dt) / k,
+                                      -dt / 2.0 * (-dt + dt * kdt / 3.0));
+
+        // Position first — it must integrate the velocity the particle ENTERED the frame with.
+        position = position + velocity * expfact_o1
+                            + acceleration * expfact_o2
+                            + wind * expfact_o2 * k;
+        velocity = velocity * expkdt
+                            + acceleration * expfact_o1
+                            + wind * (1.0 - expkdt);
+    }
+
+    /// Ballistic motion: constant downward gravity, nothing else.
+    ///
+    /// The overwhelmingly common case of the full `integrate` above — acceleration is `gravity`
+    /// pulling along `-z` (WC3 is Z-up), with no wind, unit mass and no drag. Written as a
+    /// separate overload because a scalar `gravity` reads better than an acceleration vector at
+    /// the call site, and because "how heavy does this feel" is the one knob most effects want.
+    ///
+    /// Distinguished from the acceleration overload by the TYPE of the third argument — `9.81` is
+    /// a scalar, `#f32x3(0.0, 0.0, -9.81)` is not — so both spellings resolve positionally.
+    ///
+    /// Cost: nothing. Every argument it adds is a constant, so the general form specialises back
+    /// down to the same code an explicit `integrate(p, v, #f32x3(0.0, 0.0, -g))` produces.
+    /// @brief_en Ballistic motion: constant downward gravity, nothing else. The overwhelmingly common case of the full `integrate`, written separately because a scalar gravity reads better at the call site than an acceleration vector. Costs nothing extra — every argument it adds is a constant, so it specialises back down to the same code.
+    /// @brief_es Movimiento balístico: gravedad constante hacia abajo y nada más. El caso abrumadoramente común del `integrate` completo, escrito aparte porque una gravedad escalar se lee mejor en la llamada que un vector de aceleración. No cuesta nada de más: todo lo que añade es constante, así que se especializa hasta el mismo código.
+    /// @brief_pt Movimento balístico: gravidade constante para baixo e nada mais. O caso esmagadoramente comum do `integrate` completo, escrito à parte porque uma gravidade escalar se lê melhor na chamada que um vetor de aceleração. Não custa nada a mais — tudo que ele acrescenta é constante, então se especializa até o mesmo código.
+    /// @brief_fr Mouvement balistique : gravité constante vers le bas, rien d'autre. Le cas de très loin le plus courant du `integrate` complet, écrit à part parce qu'une gravité scalaire se lit mieux au site d'appel qu'un vecteur d'accélération. Ne coûte rien de plus : tout ce qu'il ajoute est constant, il se spécialise donc jusqu'au même code.
+    /// @brief_it Moto balistico: gravità costante verso il basso, nient'altro. Il caso di gran lunga più comune dell'`integrate` completo, scritto a parte perche una gravità scalare si legge meglio al sito di chiamata di un vettore di accelerazione. Non costa nulla in più: tutto ciò che aggiunge è costante, quindi si specializza fino allo stesso codice.
+    /// @brief_de Ballistische Bewegung: konstante Schwerkraft nach unten, sonst nichts. Der mit Abstand häufigste Fall des vollen `integrate`, getrennt geschrieben, weil sich eine skalare Schwerkraft an der Aufrufstelle besser liest als ein Beschleunigungsvektor. Kostet nichts zusätzlich — alles, was es hinzufügt, ist konstant, es spezialisiert sich also auf denselben Code herunter.
+    /// @brief_ru Баллистическое движение: постоянная гравитация вниз и больше ничего. Подавляюще частый случай полного `integrate`, вынесенный отдельно, потому что скалярная гравитация читается в вызове лучше вектора ускорения. Ничего не стоит сверх: всё добавленное — константы, поэтому он сворачивается в тот же код.
+    /// @brief_zh 弹道运动：只有恒定的向下重力，其余一概没有。这是完整 `integrate` 绝大多数时候的用法，单独写一份是因为在调用处标量重力比加速度向量更好读。不会多花任何代价 —— 它补上的参数全是常量，因此会特化回同一份代码。
+    /// @brief_ja 弾道運動です。一定の下向き重力だけで、他には何もありません。完全な `integrate` の圧倒的に多い使い方で、呼び出し側では加速度ベクトルよりスカラーの重力の方が読みやすいため別に書かれています。追加コストはありません。増える引数はすべて定数なので、同じコードに特殊化されます。
+    /// @brief_ko 탄도 운동입니다. 일정한 아래 방향 중력만 있고 다른 것은 없습니다. 전체 `integrate`의 압도적으로 흔한 경우로, 호출부에서는 가속도 벡터보다 스칼라 중력이 읽기 좋기에 따로 썼습니다. 추가 비용은 없습니다. 더하는 인자가 모두 상수라 같은 코드로 특수화됩니다.
+    ///
+    /// @param_en position The particle's position, updated in place.
+    /// @param_es position La posición de la partícula, actualizada en el sitio.
+    /// @param_pt position A posição da partícula, atualizada no lugar.
+    /// @param_fr position La position de la particule, mise à jour sur place.
+    /// @param_it position La posizione della particella, aggiornata sul posto.
+    /// @param_de position Die Position des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru position Позиция частицы, обновляемая на месте.
+    /// @param_zh position 粒子的位置，就地更新。
+    /// @param_ja position パーティクルの位置。その場で更新されます。
+    /// @param_ko position 파티클의 위치. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en velocity The particle's velocity, updated in place.
+    /// @param_es velocity La velocidad de la partícula, actualizada en el sitio.
+    /// @param_pt velocity A velocidade da partícula, atualizada no lugar.
+    /// @param_fr velocity La vitesse de la particule, mise à jour sur place.
+    /// @param_it velocity La velocità della particella, aggiornata sul posto.
+    /// @param_de velocity Die Geschwindigkeit des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru velocity Скорость частицы, обновляемая на месте.
+    /// @param_zh velocity 粒子的速度，就地更新。
+    /// @param_ja velocity パーティクルの速度。その場で更新されます。
+    /// @param_ko velocity 파티클의 속도. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en gravity How hard the pull downward is, along -z since WC3 is Z-up. Bigger feels heavier.
+    /// @param_es gravity Con cuánta fuerza tira hacia abajo, a lo largo de -z porque WC3 usa Z hacia arriba. Cuanto mayor, más pesado se siente.
+    /// @param_pt gravity Com que força puxa para baixo, ao longo de -z porque WC3 usa Z para cima. Quanto maior, mais pesado parece.
+    /// @param_fr gravity La force de l'attraction vers le bas, selon -z puisque WC3 est en Z-up. Plus c'est grand, plus cela paraît lourd.
+    /// @param_it gravity Con quanta forza tira verso il basso, lungo -z poiché WC3 è Z-up. Più è grande, più pesante appare.
+    /// @param_de gravity Wie stark es nach unten zieht, entlang -z, da WC3 Z-up ist. Größer wirkt schwerer.
+    /// @param_ru gravity Насколько сильно тянет вниз, вдоль -z, поскольку в WC3 вверх — это Z. Чем больше, тем тяжелее ощущается.
+    /// @param_zh gravity 向下拉扯的强度，沿 -z 方向，因为 WC3 以 Z 为上。值越大感觉越重。
+    /// @param_ja gravity 下向きに引く強さ。WC3 は Z-up なので -z 方向に作用します。大きいほど重く感じられます。
+    /// @param_ko gravity 아래로 당기는 세기. WC3는 Z가 위이므로 -z 방향입니다. 클수록 무겁게 느껴집니다.
+    fn integrate(position: &f32x3, velocity: &f32x3, gravity: f32 = 9.81) {
+        integrate(position, velocity, #f32x3(0.0, 0.0, -gravity));
+    }
+
+    // ─── Surface constraint ───────────────────────────────────────────────────────────────
+
+    /// Stick the particle to `shape`'s surface: snap `position` onto it and remove the part of
+    /// `velocity` pointing through it.
+    ///
+    /// The particle keeps sliding along the surface at whatever speed it had tangentially, and
+    /// loses whatever it had normally — so it neither sinks in nor bounces off. For a bounce, keep
+    /// the normal component and negate it instead (see `bounce_floor` for the planar case).
+    ///
+    /// # How
+    ///
+    /// The sampler works in the shape's LOCAL space, so both inputs are transformed in, the
+    /// surface is queried, and both results are transformed back out. `projectPCoords` returns the
+    /// shape's parametric coordinates of the nearest surface point — an opaque `i32x3` addressing
+    /// scheme, not a position — which `samplePosition` and `sampleNormal` then resolve. Sampling
+    /// both from the SAME coordinate is what keeps the point and its normal consistent.
+    ///
+    /// The tangential part is `v − n·(v·n)`, the standard projection onto the plane through the
+    /// surface point. It assumes `n` is unit length, which the sampler guarantees; a non-normalised
+    /// normal would scale the removed component and let the particle drift through.
+    ///
+    /// # Costs a full frame of lag
+    ///
+    /// The surface is queried at the particle's CURRENT position, so a particle moving fast enough
+    /// to cross the shape within one frame is snapped to where it entered, not to where it hit.
+    /// Call it after `integrate` and the error is one frame of motion.
+    ///
+    /// The mask on each transform selects which components of the matrix apply — position and
+    /// direction differ because a direction must not pick up the translation. They are not
+    /// interchangeable, and the world→local pair uses different masks from the local→world pair.
+    /// @brief_en Stick the particle to `shape`'s surface: snap `position` onto it and remove the part of `velocity` pointing through it. The particle keeps sliding along the surface and neither sinks in nor bounces off. The surface is queried at the particle's CURRENT position, so call it after `integrate` and the error is one frame of motion.
+    /// @brief_es Pega la partícula a la superficie de `shape`: ajusta `position` sobre ella y quita la parte de `velocity` que la atraviesa. La partícula sigue deslizando por la superficie y ni se hunde ni rebota. La superficie se consulta en la posición ACTUAL de la partícula, así que llámalo después de `integrate` y el error será de un fotograma de movimiento.
+    /// @brief_pt Cola a partícula à superfície de `shape`: encosta `position` nela e remove a parte de `velocity` que a atravessa. A partícula continua deslizando pela superfície e nem afunda nem quica. A superfície é consultada na posição ATUAL da partícula, então chame-o depois de `integrate` e o erro será de um quadro de movimento.
+    /// @brief_fr Colle la particule à la surface de `shape` : ramène `position` dessus et retire la part de `velocity` qui la traverse. La particule continue de glisser le long de la surface, sans s'y enfoncer ni rebondir. La surface est interrogée à la position ACTUELLE de la particule : appelez-le après `integrate` et l'erreur vaut une image de mouvement.
+    /// @brief_it Incolla la particella alla superficie di `shape`: aggancia `position` su di essa e rimuove la parte di `velocity` che la attraversa. La particella continua a scivolare lungo la superficie e non vi affonda né rimbalza. La superficie viene interrogata nella posizione ATTUALE della particella, quindi chiamalo dopo `integrate` e l'errore sarà di un fotogramma di moto.
+    /// @brief_de Heftet das Partikel an die Oberfläche von `shape`: setzt `position` darauf und entfernt den Anteil von `velocity`, der hindurchzeigt. Das Partikel gleitet weiter an der Oberfläche entlang und sinkt weder ein noch prallt es ab. Die Oberfläche wird an der AKTUELLEN Position des Partikels abgefragt — nach `integrate` aufgerufen beträgt der Fehler ein Bild Bewegung.
+    /// @brief_ru Приклеивает частицу к поверхности `shape`: притягивает к ней `position` и убирает ту часть `velocity`, что направлена сквозь. Частица продолжает скользить по поверхности и ни проваливается, ни отскакивает. Поверхность опрашивается в ТЕКУЩЕЙ позиции частицы, так что вызывайте его после `integrate` — тогда погрешность равна одному кадру движения.
+    /// @brief_zh 把粒子贴到 `shape` 的表面上：将 `position` 吸附到表面，并去掉 `velocity` 中穿过表面的那部分。粒子会继续沿表面滑行，既不陷进去也不弹开。表面是在粒子当前位置处查询的，因此请在 `integrate` 之后调用，这样误差只有一帧的运动量。
+    /// @brief_ja パーティクルを `shape` の表面に貼り付けます。`position` を表面へ引き寄せ、`velocity` のうち表面を販く成分を取り除きます。パーティクルは表面に沿って滑り続け、沈み込むことも跳ね返ることもありません。表面はパーティクルの現在位置で問い合わされるため、`integrate` の後に呼べば誤差は 1 フレーム分の移動量に収まります。
+    /// @brief_ko 파티클을 `shape`의 표면에 붙입니다. `position`을 표면으로 끌어당기고 `velocity` 중 표면을 뚫고 들어가는 성분을 제거합니다. 파티클은 표면을 따라 계속 미끄러지며 파고들지도 튀어 나가지도 않습니다. 표면은 파티클의 현재 위치에서 조회되므로 `integrate` 뒤에 호출하면 오차는 한 프레임의 움직임만큼입니다.
+    ///
+    /// @param_en position The particle's position, updated in place.
+    /// @param_es position La posición de la partícula, actualizada en el sitio.
+    /// @param_pt position A posição da partícula, atualizada no lugar.
+    /// @param_fr position La position de la particule, mise à jour sur place.
+    /// @param_it position La posizione della particella, aggiornata sul posto.
+    /// @param_de position Die Position des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru position Позиция частицы, обновляемая на месте.
+    /// @param_zh position 粒子的位置，就地更新。
+    /// @param_ja position パーティクルの位置。その場で更新されます。
+    /// @param_ko position 파티클의 위치. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en velocity The particle's velocity, updated in place.
+    /// @param_es velocity La velocidad de la partícula, actualizada en el sitio.
+    /// @param_pt velocity A velocidade da partícula, atualizada no lugar.
+    /// @param_fr velocity La vitesse de la particule, mise à jour sur place.
+    /// @param_it velocity La velocità della particella, aggiornata sul posto.
+    /// @param_de velocity Die Geschwindigkeit des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru velocity Скорость частицы, обновляемая на месте.
+    /// @param_zh velocity 粒子的速度，就地更新。
+    /// @param_ja velocity パーティクルの速度。その場で更新されます。
+    /// @param_ko velocity 파티클의 속도. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en shape The surface to stick to. Queried in its own LOCAL space, so both inputs are transformed in and both results back out.
+    /// @param_es shape La superficie a la que pegarse. Se consulta en su propio espacio LOCAL, así que ambas entradas se transforman hacia dentro y ambos resultados de vuelta hacia fuera.
+    /// @param_pt shape A superfície à qual colar. É consultada em seu próprio espaço LOCAL, então ambas as entradas são transformadas para dentro e ambos os resultados de volta para fora.
+    /// @param_fr shape La surface à laquelle coller. Elle est interrogée dans son propre espace LOCAL : les deux entrées y sont transformées et les deux résultats en ressortent.
+    /// @param_it shape La superficie a cui incollarsi. Viene interrogata nel suo spazio LOCALE, quindi entrambi gli ingressi vengono trasformati dentro ed entrambi i risultati di nuovo fuori.
+    /// @param_de shape Die Oberfläche, an die geheftet wird. Sie wird in ihrem eigenen LOKALEN Raum abgefragt, also werden beide Eingaben hinein und beide Ergebnisse wieder heraus transformiert.
+    /// @param_ru shape Поверхность, к которой приклеиваемся. Опрашивается в своём ЛОКАЛЬНОМ пространстве, поэтому оба входа переводятся внутрь, а оба результата — обратно наружу.
+    /// @param_zh shape 要贴附的表面。它在自己的局部空间中被查询，因此两个输入都要变换进去，两个结果再变换回来。
+    /// @param_ja shape 貼り付く先の表面。自身のローカル空間で問い合わされるため、入力は両方ともそこへ変換され、結果も両方元に戻されます。
+    /// @param_ko shape 달라붙을 표면. 자신의 로컬 공간에서 조회되므로 두 입력 모두 그쪽으로 변환되고 두 결과 모두 다시 밖으로 변환됩니다.
+    fn projection(position: &f32x3, velocity: &f32x3, shape : samplerShape_2C) {
+        let local_pos : f32x3 = coord_space.world_to_local_position(position);
+        let local_vel : f32x3 = coord_space.world_to_local_direction(velocity);
+        // Parametric coordinates of the nearest point on the surface — an address, not a position.
+        let surface_coord : i32x3 = shape.projectPCoords(local_pos);
+        let surface_pos : f32x3 = shape.samplePosition(surface_coord);
+        let surface_normal : f32x3 = shape.sampleNormal(surface_coord);
+        let world_pos : f32x3 = coord_space.local_to_world_position(surface_pos);
+        // Drop the velocity into the surface, keep what slides along it.
+        let tangential : f32x3 = local_vel - surface_normal * dot(local_vel, surface_normal).xxx;
+        let world_vel : f32x3 = coord_space.local_to_world_direction(tangential);
+        // Velocity FIRST. Both writes are independent, but `position` is a `&` parameter: once it
+        // is written, everything derived from it is re-derived, and the velocity expression reads
+        // `position` (through `local_pos`). Writing position first therefore makes the velocity
+        // store recompute the whole surface query against the ALREADY-SNAPPED position — correct
+        // arithmetic, but a shape twice the size that matches no baked effect.
+        velocity = world_vel;
+        position = world_pos;
+    }
+}

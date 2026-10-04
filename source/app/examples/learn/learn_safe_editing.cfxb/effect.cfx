@@ -1,0 +1,26 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+attributes {
+    "Game.SpeedMultiplier" : f32 { default = (1, 0, 0, 0); }
+    "Game.ColorMultiplier" : f32x4 { Semantic = 2; default = (1, 1, 1, 1); }
+    "Game.TeamColor" : f32x4 { Semantic = 2; default = (1, 1, 1, 1); }
+    "Game.TargetPosition" : f32x3 { Semantic = 1; }
+    "Game.EmissionRateMultiplier" : f32 { default = (1, 0, 0, 0); }
+    "Game.LifespanMultiplier" : f32 { default = (1, 0, 0, 0); }
+    "Game.Scale" : f32 { Semantic = 1; default = (1, 0, 0, 0); }
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &RootLayer;
+    &EmissionLayer emits "__e_Child" -> &LessonParticle;
+    &RootLayer emits "Signal" -> &EmissionLayer;
+    entry;
+    entry "Root" fires &RootLayer."Signal";
+}

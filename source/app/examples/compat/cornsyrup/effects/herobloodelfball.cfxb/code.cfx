@@ -1,0 +1,853 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name;` (or `Name = flags;`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K;`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// A program's `needs { }` block declares the externals it touches. Most of them need NOT be
+// listed, because something else already fixes the type and `build` fills them in: the engine
+// constants (`scene.dt`, `scene.time`, `self.invLife`, `self.lifeRatio`); the attributes the
+// game itself drives, written as `Wc3.Attributes.…` constants (TeamColor, Scale,
+// ColorMultiplier, TargetPosition, SpeedMultiplier, LifespanMultiplier,
+// EmissionRateMultiplier, and Weather.TileCenter/Size/EmissionRate); any event this layer
+// declares above (`event Signal;` makes `Signal.kick(…)` legal on its own); every sampler it
+// declares in `properties` (its kind, and the keyframes in `samplers.cfx`, fix the type); and
+// the effect's own attributes (`effect.cfx` declares what each one is). What is left is the
+// STREAM FIELDS, and each keeps its `"Name" : type;` line: nothing else in the bundle
+// records a layer field's type, so that declaration is the only copy.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+layer L0 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        sampler "EventStream" : EventStream = &sd0;
+    }
+    event Signal;
+    root;
+    init {
+        needs {
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        PrevAge = 0.0;
+        EventAccum = #i32x2(0, 0);
+    }
+    evolve {
+        needs {
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+        }
+        let v1 : f32 = PrevAge;
+        let v2 : f32 = effect.age();
+        let v3 : i32x2 = EventAccum;
+        let v4 : i32x3 = EventStream.generate(v3, v1, v2, 0.0, scene.dt);
+        PrevAge = v2;
+        EventAccum = v4.xy;
+        let v5 : i32 = Signal.initPayload(0, v4);
+        Signal.kick(v5);
+        let v6 : f32 = self.lifeRatio;
+        let v7 : bool = effect.isRunning();
+        let v8 : f32 = EventStream.duration();
+        self.lifeRatio = select(v7 & v2 <= v8, v6, 1.0);
+    }
+}
+
+layer L1 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    event __e_Trigger;
+    root;
+    init {
+        needs {
+            "internal_48f679a8" : f32;
+            "internal_78fff8d1" : bool;
+        }
+        internal_48f679a8 = 0.0;
+        self.invLife = 0.0;
+        internal_78fff8d1 = false;
+    }
+    evolve {
+        needs {
+            "internal_48f679a8" : f32;
+            "internal_78fff8d1" : bool;
+        }
+        let v1 : f32 = internal_48f679a8;
+        let v2 : bool = effect.isRunning();
+        let v3 : bool = lnot(v2);
+        let v4 : f32 = saturate(v1 + select(v3, scene.dt, 0.0));
+        self.kill(v4 == 1.0);
+        let v5 : bool = internal_78fff8d1;
+        let v6 : i32x3 = trigger(lnot(v5) & v3, 0.0);
+        let v7 : i32 = __e_Trigger.initPayload(0, v6);
+        __e_Trigger.kick(v7);
+        internal_78fff8d1 = v5 | v3;
+        internal_48f679a8 = v4;
+    }
+}
+
+layer L2 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale" : f32 default (1, 0, 0, 0) semantic 1;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        self.invLife = 0.0;
+        internal_285275af = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_285275af;
+        let v3 : i32x3 = generate(v2, scene.dt * (Wc3.Attributes.EmissionRateMultiplier * 30.0), 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        __e_Child.kick(v4);
+        internal_285275af = v3.xy;
+    }
+}
+
+layer L3 {
+    properties {
+        Renderers = [&rend0];
+        sampler "__sampler_4" : Curve = &sd1;
+        attrib "__a_Game.TeamColor";
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation_7c64b6b0" : f32;
+            "n26__Enabled" : bool;
+            "internal_599db9cc" : f32x3;
+            "internal_2702a1ca" : f32x3;
+            "internal_76fd6e17" : f32;
+            "internal_1b6da707" : f32;
+            "internal_514a7edf" : f32;
+        }
+        let v1 = coord_space.world_base_position();
+        self.invLife = 5.0;
+        internal_599db9cc = #f32x3(0.0, 0.0, 0.0);
+        internal_2702a1ca = v1;
+        let v2 : f32 = rand(1.5, 1.0);
+        let v3 : f32 = rand(0.0, 360.0);
+        let v4 : f32 = rand(-1.0, 1.0);
+        internal_76fd6e17 = scene.time;
+        Rotation_7c64b6b0 = v3;
+        internal_1b6da707 = v4;
+        internal_514a7edf = v2;
+        n26__Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "n26__Position" : f32x3;
+            "n26__Size" : f32;
+            "Rotation_7c64b6b0" : f32;
+            "n26__Color" : f32x4;
+            "n26__TextureID" : f32;
+            "internal_599db9cc" : f32x3;
+            "internal_2702a1ca" : f32x3;
+            "internal_76fd6e17" : f32;
+            "internal_1b6da707" : f32;
+            "internal_514a7edf" : f32;
+        }
+        let v1 : f32 = scene.time;
+        let v2 : f32x3 = internal_599db9cc;
+        let v3 : f32x3 = v2 + f32x3(0, 0, scene.dt.x);
+        let v4 : f32 = self.lifeRatio;
+        let v5 = life.select_texture_id_on_age(rend0);
+        let v6 : f32x4 = __sampler_4.sample(v4) * Wc3.Attributes.TeamColor;
+        let v7 : f32 = internal_76fd6e17;
+        let v8 : f32 = Rotation_7c64b6b0;
+        n26__Position = internal_2702a1ca + v3;
+        n26__Size = (v4 * -0.087716274 + 0.15) * internal_514a7edf;
+        n26__Color = v6 * #f32x4(1.5, 1.5, 1.5, 1.5);
+        n26__TextureID = v5;
+        Rotation_7c64b6b0 = v8 + internal_1b6da707 * (v1 - v7);
+        internal_599db9cc = v3;
+        internal_76fd6e17 = v1;
+    }
+    bind rend0 {
+        "n26__Position" -> Position;
+        "n26__Size" -> SizeScale;
+        "n26__Enabled" -> Enabled;
+        "Rotation_7c64b6b0" -> Rotation;
+        "n26__Color" -> Color;
+        "n26__TextureID" -> TextureID;
+    }
+}
+
+layer L4 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale" : f32 default (1, 0, 0, 0) semantic 1;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        self.invLife = 0.0;
+        internal_285275af = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_285275af;
+        let v3 : i32x3 = generate(v2, scene.dt * (Wc3.Attributes.EmissionRateMultiplier * 10.0), 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        __e_Child.kick(v4);
+        internal_285275af = v3.xy;
+    }
+}
+
+layer L5 {
+    properties {
+        Renderers = [&rend1];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.TeamColor";
+    }
+    root auto;
+    init {
+        needs {
+            "n12__Size" : f32;
+            "Rotation_107aaae5" : f32;
+            "n12__Color" : f32x4;
+            "n12__Enabled" : bool;
+            "internal_7b40b443" : f32;
+        }
+        self.invLife = 10.0;
+        internal_7b40b443 = 0.0;
+        Rotation_107aaae5 = 0.0;
+        n12__Size = 0.07;
+        n12__Color = #f32x4(1.4720001, 1.4720001, 1.4720001, 0.8) * Wc3.Attributes.TeamColor;
+        n12__Enabled = true;
+    }
+    evolve {
+        needs {
+            "n12__Position" : f32x3;
+            "Rotation_107aaae5" : f32;
+            "internal_7b40b443" : f32;
+        }
+        let v1 = coord_space.world_base_position();
+        let v2 : f32 = internal_7b40b443;
+        let v3 : bool = effect.isRunning();
+        let v4 : f32 = scene.dt;
+        let v5 : f32 = min(v2 + select(lnot(v3), v4, 0.0), 1.0);
+        self.kill(v5 == 1.0);
+        let v6 : f32 = Rotation_107aaae5;
+        n12__Position = v1;
+        Rotation_107aaae5 = v6 + v4 * 10.0;
+        internal_7b40b443 = v5;
+    }
+    bind rend1 {
+        "n12__Position" -> Position;
+        "n12__Size" -> SizeScale;
+        "n12__Enabled" -> Enabled;
+        "Rotation_107aaae5" -> Rotation;
+        "n12__Color" -> Color;
+    }
+}
+
+layer L6 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.Global.Spawning";
+    }
+    event __e_Child {
+        Position = 8;
+    }
+    event __e_OnDeath;
+    root {
+        Position = 8;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+    }
+    init {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        self.invLife = inf;
+        internal_09e45c63 = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_09e45c63;
+        let v3 : i32x3 = generate(v2, 40.0, 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        let flags01 : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic);
+        let v5 : i32 = buildPayloadElement(v3, #f32x3(0.0, 0.0, 0.0), #f32x3(0.0, 0.0, 0.0), flags01);
+        let v6 : i32 = __e_Child.appendPayload(v4, 0, v5);
+        __e_Child.kick(v6);
+        internal_09e45c63 = v3.xy;
+    }
+}
+
+layer L7 {
+    properties {
+        Renderers = [&rend2];
+        sampler "__sampler_0" : Curve = &sd2;
+        sampler "__sampler_1" : Shape = &sd3 usage 1025;
+        sampler "__sampler_2" : Curve = &sd4;
+        sampler "__sampler_3" : Shape = &sd5 usage 1025;
+        attrib "__a_Game.TeamColor";
+    }
+    root {
+        Position = 9;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+        EmittedCount;
+        SpawnCount;
+    }
+    init {
+        needs {
+            "Rotation_172e44da" : f32;
+            "n37__Enabled" : bool;
+            "n37__TextureID" : f32;
+            "internal_16e26d70" : f32;
+            "internal_2c663bfd_1" : f32x4;
+            "internal_546fedc5" : f32x3;
+            "internal_041ecc6d" : f32x3;
+            "internal_6ea754e4" : f32x3;
+            "internal_1db79c7d" : f32;
+            "internal_7027556d" : f32;
+            "internal_3b6c2330" : f32x4;
+        }
+        let v1 = coord_space.world_base_position();
+        let v2 : f32 = rand(0.2, 0.6);
+        let v3 : f32 = rand(1.0, 8.0);
+        let v4 : f32x3 = __sampler_1.samplePosition();
+        let v5 : f32 = rand(0.2, 0.5);
+        self.invLife = rcp(v2);
+        internal_16e26d70 = v5;
+        let v6 : f32x3 = __sampler_3.samplePosition();
+        let v7 : f32 = rand(0.0, 360.0);
+        let v8 : f32x4 = rand(#f32x4(-1.0, -1.0, -1.0, -1.0), #f32x4(1.0, 1.0, 1.0, 1.0));
+        internal_2c663bfd_1 = v8 * #f32x4(0.0225, 0.0, 0.0, 0.0);
+        internal_546fedc5 = v6 + v4;
+        internal_041ecc6d = v6;
+        let v9 : f32 = rand(-4.0, 4.0);
+        let v10 : f32 = rand(1.0, 6.0);
+        internal_6ea754e4 = v1;
+        internal_1db79c7d = scene.time;
+        Rotation_172e44da = v7;
+        internal_7027556d = v9;
+        internal_3b6c2330 = v10.xxxx;
+        n37__Enabled = true;
+        n37__TextureID = v3;
+    }
+    evolve physics {
+        needs {
+            "n37__Position" : f32x3;
+            "n37__Size" : f32;
+            "Rotation_172e44da" : f32;
+            "n37__Color" : f32x4;
+            "internal_16e26d70" : f32;
+            "internal_2c663bfd_1" : f32x4;
+            "internal_546fedc5" : f32x3;
+            "internal_041ecc6d" : f32x3;
+            "internal_6ea754e4" : f32x3;
+            "internal_1db79c7d" : f32;
+            "internal_7027556d" : f32;
+            "internal_3b6c2330" : f32x4;
+        }
+        let v1 : f32 = self.lifeRatio;
+        let v2 : f32 = scene.time;
+        let v3 : f32 = __sampler_0.sample(v1);
+        let v4 : f32x4 = __sampler_2.sample(v1);
+        let v5 : f32x4 = rgb2hsv(v4);
+        let v6 : f32x4 = hsv2rgb(v5 + internal_2c663bfd_1);
+        let l0 : f32x3 = internal_041ecc6d;
+        let l1 : f32x3 = internal_546fedc5;
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 1.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 3.0
+        );
+        let v7 : f32 = internal_1db79c7d;
+        let v8 : f32 = Rotation_172e44da;
+        n37__Position = internal_6ea754e4 + l0;
+        n37__Size = v3 * internal_16e26d70;
+        n37__Color = v6 * internal_3b6c2330 * Wc3.Attributes.TeamColor;
+        Rotation_172e44da = v8 + internal_7027556d * (v2 - v7);
+        internal_546fedc5 = l1;
+        internal_041ecc6d = l0;
+        internal_1db79c7d = v2;
+    }
+    bind rend2 {
+        "n37__Position" -> Position;
+        "n37__Size" -> SizeScale;
+        "n37__Enabled" -> Enabled;
+        "Rotation_172e44da" -> Rotation;
+        "n37__Color" -> Color;
+        "n37__TextureID" -> TextureID;
+    }
+}
+
+layer L8 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.Global.Spawning";
+    }
+    event __e_Child {
+        Position = 8;
+    }
+    event __e_OnDeath;
+    root {
+        Position = 8;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+    }
+    init {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        self.invLife = inf;
+        internal_09e45c63 = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_09e45c63;
+        let v3 : i32x3 = generate(v2, 1.0, 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        let flags01 : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic);
+        let v5 : i32 = buildPayloadElement(v3, #f32x3(0.0, 0.0, 0.0), #f32x3(0.0, 0.0, 0.0), flags01);
+        let v6 : i32 = __e_Child.appendPayload(v4, 0, v5);
+        __e_Child.kick(v6);
+        internal_09e45c63 = v3.xy;
+    }
+}
+
+layer L9 {
+    properties {
+        Renderers = [&rend3];
+        sampler "__sampler_0" : Curve = &sd6;
+        sampler "__sampler_1" : Curve = &sd7;
+        attrib "__a_Game.TeamColor";
+    }
+    root {
+        Position = 9;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+        EmittedCount;
+        SpawnCount;
+    }
+    init {
+        needs {
+            "Rotation_3af54064" : f32;
+            "n25__Enabled" : bool;
+            "internal_11fa475e" : f32x3;
+        }
+        let v1 = coord_space.world_base_position();
+        self.invLife = 2.857143;
+        let v2 : f32 = rand(0.0, 360.0);
+        Rotation_3af54064 = v2;
+        internal_11fa475e = v1;
+        n25__Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "n25__Position" : f32x3;
+            "n25__Size" : f32;
+            "n25__Color" : f32x4;
+            "internal_11fa475e" : f32x3;
+        }
+        let v1 : f32 = self.lifeRatio;
+        let v2 : f32x4 = __sampler_0.sample(v1);
+        let v3 : f32 = __sampler_1.sample(v1);
+        n25__Position = internal_11fa475e;
+        n25__Size = v3 * 0.9;
+        n25__Color = v2 * #f32x4(2.0, 2.0, 2.0, 2.0) * Wc3.Attributes.TeamColor;
+    }
+    bind rend3 {
+        "n25__Position" -> Position;
+        "n25__Size" -> SizeScale;
+        "n25__Enabled" -> Enabled;
+        "Rotation_3af54064" -> Rotation;
+        "n25__Color" -> Color;
+    }
+}
+
+layer L10 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.Global.Spawning";
+    }
+    event __e_Child {
+        Position = 8;
+    }
+    event __e_OnDeath;
+    root {
+        Position = 8;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+    }
+    init {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        self.invLife = inf;
+        internal_09e45c63 = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_09e45c63" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_09e45c63;
+        let v3 : i32x3 = generate(v2, 2.0, 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        let flags01 : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic);
+        let v5 : i32 = buildPayloadElement(v3, #f32x3(0.0, 0.0, 0.0), #f32x3(0.0, 0.0, 0.0), flags01);
+        let v6 : i32 = __e_Child.appendPayload(v4, 0, v5);
+        __e_Child.kick(v6);
+        internal_09e45c63 = v3.xy;
+    }
+}
+
+layer L11 {
+    properties {
+        Renderers = [&rend4];
+        sampler "__sampler_1" : Shape = &sd8 usage 1025;
+        sampler "__sampler_6" : Curve = &sd9;
+        attrib "__a_Game.TeamColor";
+    }
+    root {
+        Position = 9;
+        Velocity = 8;
+        Orientation = 8;
+        Size = 8;
+        Color = 8;
+        EmittedCount;
+        SpawnCount;
+    }
+    init {
+        needs {
+            "Size_1538f3bd" : f32;
+            "n32__Rotation" : f32;
+            "n32__Enabled" : bool;
+            "internal_4ef4d32c" : f32x3;
+            "internal_1e85f284" : f32x3;
+            "internal_6950c00f" : f32x3;
+        }
+        let v1 = coord_space.world_base_position();
+        let v2 : f32 = rand(0.4, 0.6);
+        let v3 : f32 = rand(0.3, 0.4);
+        let v4 : f32 = rand(0.0, 360.0);
+        let v5 : f32x3 = __sampler_1.samplePosition();
+        self.invLife = rcp(v2);
+        internal_4ef4d32c = v5 * #f32x3(1.5, 1.5, 1.5);
+        internal_1e85f284 = #f32x3(0.0, 0.0, 0.0);
+        internal_6950c00f = v1;
+        Size_1538f3bd = v3;
+        n32__Rotation = v4;
+        n32__Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "n32__Position" : f32x3;
+            "n32__Color" : f32x4;
+            "n32__TextureID" : f32;
+            "internal_4ef4d32c" : f32x3;
+            "internal_1e85f284" : f32x3;
+            "internal_6950c00f" : f32x3;
+        }
+        let v1 : f32 = self.lifeRatio;
+        let v2 : f32x4 = __sampler_6.sample(v1);
+        let l0 : f32x3 = internal_1e85f284;
+        let l1 : f32x3 = internal_4ef4d32c;
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, 0.0, 0.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 1.0
+        );
+        n32__Position = l0 + internal_6950c00f;
+        n32__Color = v2 * #f32x4(3.0, 3.0, 3.0, 3.0) * Wc3.Attributes.TeamColor;
+        n32__TextureID = v1 * 64.0;
+        internal_1e85f284 = l0;
+        internal_4ef4d32c = l1;
+    }
+    bind rend4 {
+        "n32__Position" -> Position;
+        "Size_1538f3bd" -> SizeScale;
+        "n32__Enabled" -> Enabled;
+        "n32__Rotation" -> Rotation;
+        "n32__Color" -> Color;
+        "n32__TextureID" -> TextureID;
+    }
+}
+
+layer L12 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale" : f32 default (1, 0, 0, 0) semantic 1;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        self.invLife = 0.0;
+        internal_285275af = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_285275af;
+        let v3 : i32x3 = generate(v2, scene.dt * (Wc3.Attributes.EmissionRateMultiplier * 6.0), 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        __e_Child.kick(v4);
+        internal_285275af = v3.xy;
+    }
+}
+
+layer L13 {
+    properties {
+        Renderers = [&rend5];
+        sampler "__sampler_0" : Curve = &sd10;
+        attrib "__a_Game.TeamColor";
+    }
+    root auto;
+    init {
+        needs {
+            "n23__Rotation" : f32;
+            "n23__Enabled" : bool;
+            "internal_072f1213" : f32;
+        }
+        self.invLife = 4.0;
+        let v1 : f32 = rand(0.0, 360.0);
+        let v2 : f32 = rand(0.13, 0.07);
+        internal_072f1213 = v2;
+        n23__Rotation = v1;
+        n23__Enabled = true;
+    }
+    evolve {
+        needs {
+            "n23__Position" : f32x3;
+            "n23__Size" : f32;
+            "n23__Color" : f32x4;
+            "internal_072f1213" : f32;
+        }
+        let v1 = coord_space.world_base_position();
+        let v2 : f32 = self.lifeRatio;
+        let v3 : f32x4 = __sampler_0.sample(v2);
+        n23__Position = v1;
+        n23__Size = (v2 * 1.9335401 + 1.0664599) * internal_072f1213;
+        n23__Color = v3 * #f32x4(2.0, 2.0, 2.0, 2.0) * Wc3.Attributes.TeamColor;
+    }
+    bind rend5 {
+        "n23__Position" -> Position;
+        "n23__Size" -> SizeScale;
+        "n23__Enabled" -> Enabled;
+        "n23__Rotation" -> Rotation;
+        "n23__Color" -> Color;
+    }
+}
+
+layer L14 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale" : f32 default (1, 0, 0, 0) semantic 1;
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        self.invLife = 0.0;
+        internal_285275af = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "internal_285275af" : i32x2;
+        }
+        let v1 : bool = effect.isRunning();
+        self.kill(lnot(v1));
+        let v2 : i32x2 = internal_285275af;
+        let v3 : i32x3 = generate(v2, scene.dt * (Wc3.Attributes.EmissionRateMultiplier * 20.0), 1.0, 0.0, 1.0);
+        let v4 : i32 = __e_Child.initPayload(0, v3);
+        __e_Child.kick(v4);
+        internal_285275af = v3.xy;
+    }
+}
+
+layer L15 {
+    properties {
+        Renderers = [&rend6];
+        sampler "__sampler_1" : Curve = &sd11;
+        sampler "__sampler_2" : Shape = &sd12 usage 1025;
+        sampler "__sampler_3" : Curve = &sd13;
+        attrib "__a_RadialAccel";
+        attrib "__a_Size_Multiplier";
+        attrib "__a_Game.TeamColor";
+    }
+    root auto;
+    init {
+        needs {
+            "n30__Rotation" : f32;
+            "n30__Enabled" : bool;
+            "n30__TextureID" : f32;
+            "internal_4fe277d3" : f32x3;
+            "internal_1f93567b" : f32x3;
+            "internal_1eae7b83" : f32;
+            "internal_2e1dd81e" : f32x3;
+            "internal_11bf440e" : f32;
+        }
+        let v1 = coord_space.world_base_position();
+        let v2 : f32 = rand(0.5, 0.25);
+        let v3 : f32 = rand(0.0, 360.0);
+        let v4 : f32 = rand(0.0, 7.0);
+        self.invLife = rcp(v2);
+        let v5 : f32x3 = __sampler_2.samplePosition();
+        internal_4fe277d3 = v5 * #f32x3(2.0, 2.0, 2.0);
+        internal_1f93567b = v5;
+        internal_1eae7b83 = __a_Size_Multiplier;
+        internal_2e1dd81e = v1;
+        let v6 : f32 = rand(0.2, 0.6);
+        internal_11bf440e = v6;
+        n30__Rotation = v3;
+        n30__Enabled = true;
+        n30__TextureID = v4;
+    }
+    evolve physics {
+        needs {
+            "n30__Position" : f32x3;
+            "n30__Size" : f32;
+            "n30__Color" : f32x4;
+            "internal_4fe277d3" : f32x3;
+            "internal_1f93567b" : f32x3;
+            "internal_1eae7b83" : f32;
+            "internal_2e1dd81e" : f32x3;
+            "internal_11bf440e" : f32;
+        }
+        let v1 : f32 = self.lifeRatio;
+        let v2 : f32 = __sampler_1.sample(v1);
+        let v3 : f32x4 = __sampler_3.sample(v1);
+        let v4 = color.grading(
+            rgba = v3,
+            hsv_offset = #f32x4(0.0, 0.0, 1.46, 0.0)
+        );
+        let l0 : f32x3 = internal_1f93567b;
+        let l1 : f32x3 = internal_4fe277d3;
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 1.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 2.0
+        );
+        n30__Position = internal_2e1dd81e + l0;
+        n30__Size = v2 * internal_1eae7b83 * internal_11bf440e;
+        n30__Color = v4 * Wc3.Attributes.TeamColor;
+        internal_1f93567b = l0;
+        internal_4fe277d3 = l1;
+    }
+    bind rend6 {
+        "n30__Position" -> Position;
+        "n30__Size" -> SizeScale;
+        "n30__Enabled" -> Enabled;
+        "n30__Rotation" -> Rotation;
+        "n30__Color" -> Color;
+        "n30__TextureID" -> TextureID;
+    }
+}
+

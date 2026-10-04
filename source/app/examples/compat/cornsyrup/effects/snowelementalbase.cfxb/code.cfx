@@ -1,0 +1,286 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name` (or `Name = flags`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+// Layer 0: drives the effect and fans the authored event stream out to the emitter layers below.
+layer RootLayer extends RootLayerTemplate {
+    using {
+        "_sd_eventStream" = RootEventsSampler;
+    }
+}
+
+// Keeps the effect resident while it is running, then shuts it down one second after it stops.
+layer TerminationLayer extends TerminationTemplate {
+}
+
+// Spawns 20 snowflakes per second for as long as it is kicked by the root layer.
+layer SnowflakesEmissionLayer extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 20.0;
+    }
+}
+
+// Snowflakes: seeded on a spawn shape, drifting outward and falling under light gravity.
+layer SnowflakesParticlesLayer {
+    properties {
+        Renderers = [&SnowflakesRenderer];
+        sampler "sizeCurveSampler" : Curve = &SnowflakesSizeCurveSampler;
+        sampler "colorCurve" : Curve = &SnowflakesColorSampler;
+        sampler "spawnShape" : Shape = &SnowflakesSpawnSampler usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "spawnShape" : samplerShape_2C;
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "worldOrigin" : f32x3;
+            "sizeScale" : f32;
+        }
+        let baseOrigin = coord_space.world_base_position();
+        // Per-particle lifetime of 1.0-1.4s; the engine ages the particle by lifeRatio += invLife * dt.
+        let lifeSpan : f32 = rand(1.0, 1.4);
+        self.invLife = rcp(lifeSpan);
+        let spawnPos : f32x3 = spawnShape.samplePosition();
+        let randDir : f32x3 = vrand();
+        // Random horizontal drift with a fixed upward component, all scaled to half speed.
+        velState = ctor<f32x3>(randDir.x, randDir.y, 1.0) * swz<f32x3|f32>(0.5: 0 0 0);
+        posState = spawnPos;
+        let size : f32 = rand(0.05, 0.1);
+        let rotationDeg : f32 = rand(0.0, 360.0);
+        Rotation = rotationDeg;
+        // posState stays emitter-local; worldOrigin is the frozen spawn anchor it is added back to.
+        worldOrigin = coord_space.world_base_position();
+        sizeScale = size;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "sizeCurveSampler" : samplerCurve1C;
+            "colorCurve" : samplerCurve4C;
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureID" : f32;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "worldOrigin" : f32x3;
+            "sizeScale" : f32;
+        }
+        // Both curves are keyed on normalized age, so they drive the whole birth-to-death look.
+        let lifeRatio : f32 = self.lifeRatio;
+        let baseColor : f32x4 = colorCurve.sample(lifeRatio);
+        let sizeCurve : f32 = sizeCurveSampler.sample(lifeRatio);
+        let l0 : f32x3 = posState;
+        let l1 : f32x3 = velState;
+        // In-place integrator: p += v*dt + 0.5*a*dt^2, v += a*dt, then v is damped by drag.
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, -0.5),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 1.0
+        );
+        Position = worldOrigin + l0;
+        Size = sizeCurve * sizeScale;
+        // HSV shift on the sampled color: no hue change, slight saturation and strong value lift.
+        Color = color.grading(
+            rgba = baseColor,
+            hsv_offset = #f32x4(0.0, 0.09800005, 0.52000046, 0.0),
+            exp_exposure = #f32x4(1.5, 1.5, 1.5, 1.5)
+        );
+        // Flipbook frame picked from the particle's age.
+        TextureID = life.select_texture_id_on_age(rend0);
+        // Write the integrated state back so the next timestep resumes from it.
+        velState = l1;
+        posState = l0;
+    }
+    bind SnowflakesRenderer {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+
+// Spawns 8 base discs per second.
+layer SpinningBaseEmitterLayer extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 8.0;
+    }
+}
+
+// Spinning base: oriented quads that rise straight up from the emitter and shrink as they age.
+layer SpinningBaseParticlesLayer {
+    properties {
+        Renderers = [&SpinnigBaseRenderer];
+        sampler "colorCurve" : Curve = &SpinningBaseColorSampler;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "NormalAxis" : f32x3;
+            "Enabled" : bool;
+            "posState" : f32x3;
+            "colorScale" : f32x4;
+        }
+        // Fixed 0.8s lifetime (invLife 1.25); every disc starts exactly at the emitter.
+        posState = #f32x3(0.0, 0.0, 0.0);
+        self.invLife = 1.25;
+        let exposure : f32 = rand(3.0, 4.0);
+        let rotationDeg : f32 = rand(0.0, 360.0);
+        Rotation = rotationDeg;
+        colorScale = exposure.xxxx;
+        // Quad lies in the XY plane with its normal up, spun about that normal by rotationDeg.
+        Axis = #f32x3(1.0, 0.0, 0.0);
+        NormalAxis = #f32x3(0.0, 0.0, 1.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "colorCurve" : samplerCurve4C;
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "posState" : f32x3;
+            "colorScale" : f32x4;
+        }
+        let worldOrigin = coord_space.world_base_position();
+        let lifeRatio : f32 = self.lifeRatio;
+        let baseColor : f32x4 = colorCurve.sample(lifeRatio);
+        let l0 : f32x3 = posState;
+        // No acceleration or drag here: constant 0.5 units/s straight up.
+        physics.integrate(
+            position = l0,
+            velocity = #f32x3(0.0, 0.0, 0.5)
+        );
+        // Unlike the snowflakes, this tracks the emitter live rather than a frozen spawn anchor.
+        Position = worldOrigin + l0;
+        // Shrinks linearly over the particle's life, 0.75 -> 0.225.
+        Size = lifeRatio * -0.525 + 0.75;
+        // HSV shift plus a per-particle random exposure boost from init.
+        Color = color.grading(
+            rgba = baseColor,
+            hsv_offset = #f32x4(-0.027999997, 0.16999996, 9.199999, 0.0),
+            exp_exposure = colorScale
+        );
+        posState = l0;
+    }
+    bind SpinnigBaseRenderer {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+// The densest of the three emitters: 45 frost motes per second.
+layer FrostEmissionLayer extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 45.0;
+    }
+}
+
+// Frost motes: flung outward from the emitter and pulled back down harder than the snowflakes.
+layer FrostParticlesLayer {
+    properties {
+        Renderers = [&FrostRenderer];
+        sampler "colorCurve" : Curve = &FrostColorSampler;
+        sampler "velocityShape" : Shape = &FrostVelocityShapeSampler usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "velocityShape" : samplerShape_2C;
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "sizeScale" : f32;
+        }
+        let lifeSpan : f32 = rand(1.2, 1.6);
+        self.invLife = rcp(lifeSpan);
+        let spawnPos : f32x3 = velocityShape.samplePosition();
+        // The spawn offset doubles as the launch direction: 5x outward, unscaled vertically.
+        velState = spawnPos * #f32x3(5.0, 5.0, 1.0);
+        posState = spawnPos;
+        let rotationDeg : f32 = rand(0.0, 360.0);
+        Rotation = rotationDeg;
+        // Bounds are authored reversed (max, min) — kept verbatim.
+        let size : f32 = rand(0.6, 0.3);
+        sizeScale = size;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "colorCurve" : samplerCurve4C;
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureID" : f32;
+            "scene.dt" : f32;
+            "velState" : f32x3;
+            "posState" : f32x3;
+            "sizeScale" : f32;
+        }
+        let worldOrigin = coord_space.world_base_position();
+        let lifeRatio : f32 = self.lifeRatio;
+        let baseColor : f32x4 = colorCurve.sample(lifeRatio);
+        let l0 : f32x3 = posState;
+        let l1 : f32x3 = velState;
+        // In-place integrator: p += v*dt + 0.5*a*dt^2, v += a*dt, then v is damped by drag.
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, -0.75),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 2.0
+        );
+        Position = worldOrigin + l0;
+        // Grows from nothing to sizeScale over the particle's life.
+        Size = lifeRatio * sizeScale;
+        // HSV shift on the sampled color: no hue change, slight saturation and strong value lift.
+        Color = color.grading(
+            rgba = baseColor,
+            hsv_offset = #f32x4(0.0, 0.09800005, 0.5, 0.0),
+            exp_exposure = #f32x4(2.0, 2.0, 2.0, 2.0)
+        );
+        TextureID = life.select_texture_id_on_age(rend2);
+        velState = l1;
+        posState = l0;
+    }
+    bind FrostRenderer {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+

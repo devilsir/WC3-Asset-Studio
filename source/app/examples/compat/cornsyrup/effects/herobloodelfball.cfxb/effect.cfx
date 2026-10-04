@@ -1,0 +1,90 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+// Authoritative effect structure (Phase-4 B). Owned children nest under their container;
+// cross-references are `&handle`. Blob bytecode is recompiled from code.cfx (shells carry an
+// empty `Blob`). `build` desugars this to node-text, then parses it.
+
+attributes {
+    "Game.Global.Spawning" : f32 {
+        HasMin = true;
+        HasMax = true;
+        default = (1, 0, 0, 0);
+        max = (1, 0, 0, 0);
+    }
+    "RadialAccel" : f32 {
+        CategoryName = loc[6647399 => "Accel"];
+        default = (1, 0, 0, 0);
+        min = (-5, 0, 0, 0);
+        max = (80, 0, 0, 0);
+    }
+    "Size_Multiplier" : f32 {
+        HasMin = true;
+        default = (3, 0, 0, 0);
+        max = (10, 0, 0, 0);
+    }
+    "Game.EmissionRateMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.SpeedMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.LifespanMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.ColorMultiplier" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TeamColor" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TargetPosition" : f32x3 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 1;
+    }
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &L0;
+    &L0 emits "Signal" -> [&L1, &L2, &L4, &L12, &L14];
+    &L1 emits "__e_Trigger" -> [&L6, &L8, &L10];
+    &L2 emits "__e_Child" -> &L3;
+    &L2 emits "__e_OnDeath";
+    &L4 emits "__e_Child" -> &L5;
+    &L4 emits "__e_OnDeath";
+    &L6 emits "__e_Child" -> &L7;
+    &L6 emits "__e_OnDeath";
+    &L8 emits "__e_Child" -> &L9;
+    &L8 emits "__e_OnDeath";
+    &L10 emits "__e_Child" -> &L11;
+    &L10 emits "__e_OnDeath";
+    &L12 emits "__e_Child" -> &L13;
+    &L12 emits "__e_OnDeath";
+    &L14 emits "__e_Child" -> &L15;
+    &L14 emits "__e_OnDeath";
+    entry;
+    entry "Root" fires &L0."Signal";
+}
+

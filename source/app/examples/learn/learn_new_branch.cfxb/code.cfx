@@ -1,0 +1,60 @@
+layer EmissionLayer extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 64.0;
+    }
+}
+
+layer RootLayer extends RootLayerTemplate {
+    using {
+        "_sd_eventStream" = sd0;
+    }
+}
+
+layer LessonParticle {
+    properties {
+        Renderers = [&LessonRenderer];
+        sampler "SpawnShape" : Shape = &LessonShape;
+        sampler "LifeCurve" : Curve = &LessonLife;
+        metaData;
+    }
+    root auto;
+    init {
+        needs {
+            "Position" : f32x3;
+            "PositionState" : f32x3;
+            "Velocity" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "Enabled" : bool;
+            "SpawnShape" : samplerShape_2C;
+            "self.invLife" : f32;
+        }
+        self.invLife = rcp(0.8);
+        let spawnPos : f32x3 = SpawnShape.samplePosition();
+        PositionState = spawnPos;
+        Position = coord_space.world_base_position() + PositionState;
+        Velocity = #f32x3(0.0, 0.0, 0.75);
+        Size = 0.72;
+        Color = #f32x4(1.0, 1.0, 1.0, 1.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "PositionState" : f32x3;
+            "Velocity" : f32x3;
+            "Size" : f32;
+            "self.lifeRatio" : f32;
+            "LifeCurve" : samplerCurve1C;
+        }
+        physics.integrate(position = PositionState, velocity = Velocity, acceleration = #f32x3(0.0, 0.0, 0.0));
+        Size = LifeCurve.sample(self.lifeRatio) * 0.72;
+        Position = coord_space.world_base_position() + PositionState;
+    }
+    bind LessonRenderer {
+        "Position" -> Position;
+        "Enabled" -> Enabled;
+        "Size" -> SizeScale;
+        "Color" -> Color;
+    }
+}

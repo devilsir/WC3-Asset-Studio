@@ -1,0 +1,135 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler sd1 : Curve {
+    WorkspacePosition = (-1408, 1078);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0, 0, 0, 0)  in (0.44654343, 0.9944978, 0.50612986, 0.44654343) out (0.06625333, 0.14755291, 0.07509412, 0.06625333)
+        0.14836927 = (1, 1, 1, 2)  in (-0.0077568083, -0.007102505, 0.007986746, 0) out (-0.04452362, -0.040767953, 0.045843437, 0)
+        1 = (0.973733, 0.973733, 0.973733, 2)  in (-0.15185167, -0.0006350757, -0.0665107, 0.008638352) out (-0.17830695, -0.0007457172, -0.07809805, 0.010143307)
+    }
+}
+
+sampler sd2 : Curve {
+    CustomName = loc[6647399 => "*CURVE*"];
+    WorkspacePosition = (968, -704);
+    keys 3 {  // 1 ch, hermite
+        0 = 0.076204725  in 0.56731737 out 0.10023459
+        0.17668168 = 0.13666782  in 0.008590052 out 0.04002875
+        1 = 0  in -0.3681675 out -0.44717515
+    }
+}
+
+sampler sd3 : Shape {
+    CustomName = loc[6647399 => "Shape"];
+    WorkspacePosition = (352, -1122);
+    SampleDimensionality = 3;
+    Position = (0, 0.2, 0);
+    ShapeType = Sphere;
+    Radius = 2;
+    InnerRadius = 0.362;
+    Height = 1;
+}
+
+sampler sd4 : Curve {
+    CustomName = loc[6647399 => "ColorControl"];
+    WorkspacePosition = (242, 22);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0, 0, 0, 0.65767336)  in (0.20337191, 0.97486717, 0.20337191, 0.97486717) out (0.026266795, 0.12591039, 0.026266795, 0.12591039)
+        0.12915646 = (1, 1, 1, 1)  in (0, -0.097213395, -0.0011940383, 0) out (0, -0.65546596, -0.00805086, 0)
+        1 = (0.47378343, 0.47378343, 0.47378343, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+
+sampler sd5 : Shape {
+    CustomName = loc[6647399 => "Shape"];
+    WorkspacePosition = (484, -1320);
+    SampleDimensionality = 3;
+    ShapeType = Sphere;
+    Radius = 0.1;
+    InnerRadius = 0.036;
+    Height = 0.5;
+}
+
+sampler sd6 : Curve {
+    WorkspacePosition = (-308, 1166);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.5267803, 0.5267803, 0.5267803, 0)  in (0.049636185, 0.42335412, 0.049636185, 0.58835137) out (0.009958333, 0.084936045, 0.009958333, 0.11803887)
+        0.20062649 = (0.86054, 0.86054, 0.86054, 1.0049636)  in (0, -0.0795164, -0.000666464, -0.0034247052) out (0, -0.31682402, -0.0026554503, -0.01364535)
+        1 = (0.60803795, 0.6080898, 0.61249244, 0.00039123185)  in (-0.12073329, 0.006190592, -0.07610583, -0.6676603) out (-0.15103489, 0.0077443044, -0.095206864, -0.83522946)
+    }
+}
+
+sampler sd7 : Curve {
+    WorkspacePosition = (-770, 198);
+    keys 2 {  // 1 ch, hermite
+        0 = 0.056065477  in 2.109065 out 2.109065
+        1 = 1  in 0.45909634 out 0.45909634
+    }
+}
+
+sampler sd8 : Shape {
+    WorkspacePosition = (-1276, -968);
+    Position = (0, 0.3, 0);
+    ShapeType = Sphere;
+    Radius = 0.3;
+    InnerRadius = 0.003;
+}
+
+sampler sd9 : Curve {
+    WorkspacePosition = (-440, 0);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (1, 1, 1, 0)  in (0, 0, -0.02489007, 0) out (0, 0, -0.010582503, 0)
+        0.42516968 = (0.86053944, 0.86053944, 0.86053944, 1)  in (-0.14480759, 0, -0.056332882, 0) out (-0.19578016, 0, -0.076162174, 0)
+        1 = (1, 1, 1, 0)  in (-0.3683601, 0, 0, 0) out (-0.6408154, 0, 0, 0)
+    }
+}
+
+sampler sd10 : Curve {
+    WorkspacePosition = (-220, 880);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.002335996, 0.002335996, 0.002335996, 0.0062255245)  in (2.5292068, 2.5292068, 2.5292068, 2.4630172) out (0.24346292, 0.24346292, 0.24346292, 0.23709151)
+        0.0962606 = (1, 1, 1, 0.9679986)  in (-0.048154727, -0.059314672, -0.12575708, 0) out (-0.452099, -0.5568738, -1.1806661, 0)
+        1 = (0.5686946, 0.5686946, 0.5686946, 0.00039123185)  in (-0.13649619, -0.13649619, -0.11952018, -0.7548296) out (-0.15103489, -0.15103489, -0.1322507, -0.83522946)
+    }
+}
+
+sampler sd11 : Curve {
+    CustomName = loc[6647399 => "*CURVE*"];
+    WorkspacePosition = (-110, 550);
+    keys 4 {  // 1 ch, hermite
+        0 = 0  in 0 out 0
+        0.13418499 = 0.029681811  in 0 out 0
+        0.8844409 = 0.0012947356  in -0.016047705 out -0.0024717676
+        1 = 0  in 0 out 0
+    }
+}
+
+sampler sd12 : Shape {
+    CustomName = loc[6647399 => "Shape"];
+    WorkspacePosition = (-2552, 44);
+    SampleDimensionality = 3;
+    ShapeType = Sphere;
+    Radius = 0.05;
+}
+
+sampler sd13 : Curve {
+    CustomName = loc[6647399 => "ColorControl"];
+    WorkspacePosition = (924, 1122);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0, 0, 0, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.20180538 = (0.9478729, 0.9478729, 0.9478729, 1.076995)  in (-0.03332236, -0.011523541, -0.02446409, 0) out (-0.13179891, -0.045578707, -0.09676206, 0)
+        1 = (0.6478744, 0.6478744, 0.6478744, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+

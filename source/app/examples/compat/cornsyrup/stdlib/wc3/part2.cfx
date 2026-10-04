@@ -1,0 +1,234 @@
+// stdlib/wc3/part2.cfx — helpers lifted from the Warcraft III emitters themselves.
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+import "../math.cfx";
+
+namespace wc3 {
+
+    /// @brief_en A random velocity inside a cone of half-angle `angle/2` around +Z, with magnitude `speed` — the classic WC3 emitter spread.
+    /// @brief_es Una velocidad aleatoria dentro de un cono de semiángulo `angle/2` alrededor de +Z, con magnitud `speed`: la dispersión clásica de los emisores de WC3.
+    /// @brief_pt Uma velocidade aleatória dentro de um cone de semiângulo `angle/2` em torno de +Z, com magnitude `speed` — a dispersão clássica dos emissores de WC3.
+    /// @brief_fr Une vitesse aléatoire dans un cône de demi-angle `angle/2` autour de +Z, de norme `speed` — la dispersion classique des émetteurs de WC3.
+    /// @brief_it Una velocità casuale dentro un cono di semiangolo `angle/2` attorno a +Z, con modulo `speed`: la dispersione classica degli emettitori di WC3.
+    /// @brief_de Eine zufällige Geschwindigkeit in einem Kegel mit halbem Öffnungswinkel `angle/2` um +Z, mit dem Betrag `speed` — die klassische Streuung der WC3-Emitter.
+    /// @brief_ru Случайная скорость внутри конуса с полууглом `angle/2` вокруг +Z и модулем `speed` — классический разброс эмиттеров WC3.
+    /// @brief_zh 在绕 +Z、半角为 `angle/2` 的圆锥内取一个大小为 `speed` 的随机速度 —— 这是 WC3 发射器经典的扩散方式。
+    /// @brief_ja +Z を軸とする半角 `angle/2` の円錐内で、大きさ `speed` のランダムな速度を返します。WC3 のエミッタでおなじみの広がり方です。
+    /// @brief_ko +Z를 축으로 하는 반각 `angle/2` 원뿔 안에서 크기가 `speed`인 임의의 속도를 만듭니다. WC3 이미터의 전형적인 퍼짐입니다.
+    ///
+    /// @param_en angle The cone's FULL opening angle, in degrees. 0 fires straight along +Z, 360 fills the sphere.
+    /// @param_es angle El ángulo de apertura COMPLETO del cono, en grados. 0 dispara recto por +Z y 360 llena la esfera.
+    /// @param_pt angle O ângulo de abertura COMPLETO do cone, em graus. 0 dispara reto por +Z e 360 preenche a esfera.
+    /// @param_fr angle L'angle d'ouverture TOTAL du cône, en degrés. 0 tire droit selon +Z, 360 remplit la sphère.
+    /// @param_it angle L'angolo di apertura COMPLETO del cono, in gradi. 0 spara dritto lungo +Z e 360 riempie la sfera.
+    /// @param_de angle Der VOLLE Öffnungswinkel des Kegels in Grad. 0 schießt gerade entlang +Z, 360 füllt die Kugel.
+    /// @param_ru angle ПОЛНЫЙ угол раскрытия конуса в градусах. 0 стреляет строго вдоль +Z, 360 заполняет сферу.
+    /// @param_zh angle 圆锥的完整开口角度，单位为度。0 表示沿 +Z 直射，360 表示填满整个球面。
+    /// @param_ja angle 円錐の開き角の全体値（度）。0 なら +Z へまっすぐ、360 なら全球に広がります。
+    /// @param_ko angle 원뿔의 전체 열림 각도(도). 0이면 +Z로 직진하고 360이면 구 전체를 채웁니다.
+    ///
+    /// @param_en speed The magnitude of the velocity, the same for every direction in the cone.
+    /// @param_es speed La magnitud de la velocidad, igual para cualquier dirección del cono.
+    /// @param_pt speed A magnitude da velocidade, igual para qualquer direção do cone.
+    /// @param_fr speed La norme de la vitesse, identique pour toutes les directions du cône.
+    /// @param_it speed Il modulo della velocità, uguale per ogni direzione del cono.
+    /// @param_de speed Der Betrag der Geschwindigkeit, für jede Richtung im Kegel gleich.
+    /// @param_ru speed Модуль скорости, одинаковый для всех направлений конуса.
+    /// @param_zh speed 速度的大小，圆锥内所有方向都相同。
+    /// @param_ja speed 速度の大きさ。円錐内のどの方向でも同じです。
+    /// @param_ko speed 속도의 크기. 원뿔 안의 모든 방향에서 같습니다.
+    ///
+    /// @result_en A velocity vector of length `speed`.
+    /// @result_es Un vector de velocidad de longitud `speed`.
+    /// @result_pt Um vetor de velocidade de comprimento `speed`.
+    /// @result_fr Un vecteur vitesse de norme `speed`.
+    /// @result_it Un vettore velocità di lunghezza `speed`.
+    /// @result_de Ein Geschwindigkeitsvektor der Länge `speed`.
+    /// @result_ru Вектор скорости длиной `speed`.
+    /// @result_zh 一个长度为 `speed` 的速度向量。
+    /// @result_ja 長さ `speed` の速度ベクトル。
+    /// @result_ko 길이가 `speed`인 속도 벡터.
+    fn coneAngleVelocity(angle: f32, speed: f32) -> f32x3 {
+        let rotLat : f32 = math.deg_to_rad(angle) * rand(-0.5, 0.5);
+        let rotLon : f32 = math.PI * rand(-1.0, 1.0);
+        let velX : f32 = speed * radians.sin(rotLat) * radians.cos(rotLon);
+        let velY : f32 = speed * radians.sin(rotLat) * radians.sin(rotLon);
+        let velZ : f32 = speed * radians.cos(rotLat);
+
+        // No trailing `;` — that would make this a statement and the function would return nothing.
+        #f32x3(velX, velY, velZ)
+    }
+
+    /// @brief_en One frame of gravity and motion, the way the WC3 emitters themselves do it. Not `physics.integrate` — this is the game's own arithmetic, kept so a decompiled effect rebuilds to the same bytecode.
+    /// @brief_es Un fotograma de gravedad y movimiento, tal como lo hacen los propios emisores de WC3. No es `physics.integrate`: es la aritmética del juego, conservada para que un efecto decompilado se reconstruya al mismo bytecode.
+    /// @brief_pt Um quadro de gravidade e movimento, do jeito que os próprios emissores de WC3 fazem. Não é `physics.integrate` — é a aritmética do jogo, mantida para que um efeito decompilado reconstrua o mesmo bytecode.
+    /// @brief_fr Une image de gravité et de mouvement, à la manière des émetteurs de WC3 eux-mêmes. Ce n'est pas `physics.integrate` — c'est l'arithmétique du jeu, conservée pour qu'un effet décompilé se reconstruise en un bytecode identique.
+    /// @brief_it Un fotogramma di gravità e moto, come lo fanno gli emettitori di WC3 stessi. Non è `physics.integrate`: è l'aritmetica del gioco, conservata perché un effetto decompilato si ricostruisca nello stesso bytecode.
+    /// @brief_de Ein Bild Schwerkraft und Bewegung, so wie es die WC3-Emitter selbst tun. Nicht `physics.integrate` — das ist die Arithmetik des Spiels, beibehalten, damit ein dekompilierter Effekt zum selben Bytecode zurückbaut.
+    /// @brief_ru Один кадр гравитации и движения — ровно так, как это делают сами эмиттеры WC3. Это не `physics.integrate`, а собственная арифметика игры, сохранённая, чтобы декомпилированный эффект собирался в тот же байт-код.
+    /// @brief_zh 一帧的重力与运动，按 WC3 发射器自身的算法来做。这不是 `physics.integrate` —— 这是游戏自己的算术，保留下来是为了让反编译的特效能重建出相同的字节码。
+    /// @brief_ja 重力と運動を 1 フレーム分進めます。WC3 のエミッタ自身のやり方です。`physics.integrate` ではなくゲーム独自の計算で、逆コンパイルしたエフェクトが同じバイトコードに戻るよう残されています。
+    /// @brief_ko 중력과 운동을 한 프레임 진행합니다. WC3 이미터 자체의 방식입니다. `physics.integrate`가 아니라 게임 고유의 산술로, 디컴파일한 이펙트가 같은 바이트코드로 되돌아가도록 보존한 것입니다.
+    ///
+    /// @param_en position The particle's position, updated in place.
+    /// @param_es position La posición de la partícula, actualizada en el sitio.
+    /// @param_pt position A posição da partícula, atualizada no lugar.
+    /// @param_fr position La position de la particule, mise à jour sur place.
+    /// @param_it position La posizione della particella, aggiornata sul posto.
+    /// @param_de position Die Position des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru position Позиция частицы, обновляемая на месте.
+    /// @param_zh position 粒子的位置，就地更新。
+    /// @param_ja position パーティクルの位置。その場で更新されます。
+    /// @param_ko position 파티클의 위치. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en velocity The particle's velocity, updated in place.
+    /// @param_es velocity La velocidad de la partícula, actualizada en el sitio.
+    /// @param_pt velocity A velocidade da partícula, atualizada no lugar.
+    /// @param_fr velocity La vitesse de la particule, mise à jour sur place.
+    /// @param_it velocity La velocità della particella, aggiornata sul posto.
+    /// @param_de velocity Die Geschwindigkeit des Partikels, an Ort und Stelle aktualisiert.
+    /// @param_ru velocity Скорость частицы, обновляемая на месте.
+    /// @param_zh velocity 粒子的速度，就地更新。
+    /// @param_ja velocity パーティクルの速度。その場で更新されます。
+    /// @param_ko velocity 파티클의 속도. 제자리에서 갱신됩니다.
+    ///
+    /// @param_en gravity The vertical acceleration, applied along +Z. Pass a negative value to pull downward.
+    /// @param_es gravity La aceleración vertical, aplicada a lo largo de +Z. Pasa un valor negativo para tirar hacia abajo.
+    /// @param_pt gravity A aceleração vertical, aplicada ao longo de +Z. Passe um valor negativo para puxar para baixo.
+    /// @param_fr gravity L'accélération verticale, appliquée selon +Z. Passez une valeur négative pour tirer vers le bas.
+    /// @param_it gravity L'accelerazione verticale, applicata lungo +Z. Passa un valore negativo per tirare verso il basso.
+    /// @param_de gravity Die senkrechte Beschleunigung, entlang +Z angewandt. Ein negativer Wert zieht nach unten.
+    /// @param_ru gravity Вертикальное ускорение вдоль +Z. Отрицательное значение тянет вниз.
+    /// @param_zh gravity 竖直方向的加速度，沿 +Z 施加。传负值表示向下拉。
+    /// @param_ja gravity +Z 方向に加わる鉛直加速度。下向きに引くには負の値を渡します。
+    /// @param_ko gravity +Z 방향으로 가해지는 수직 가속도. 아래로 당기려면 음수를 넘기세요.
+    fn physics(position: &f32x3, velocity: &f32x3, gravity: f32) {
+        needs {
+            "scene.dt" : f32;
+        }
+
+        velocity = velocity + #f32x3(0.0, 0.0, gravity * scene.dt * scene.dt * 0.5);
+        position = position + velocity * scene.dt;
+    }
+
+    /// @brief_en Emit one burst on the frame the emission rate first turns on, and nothing afterwards — the "squirt" emitter's one-shot test.
+    /// @brief_es Emite una sola ráfaga en el fotograma en que la tasa de emisión se enciende por primera vez, y nada después: la prueba de disparo único del emisor «squirt».
+    /// @brief_pt Emite uma única rajada no quadro em que a taxa de emissão liga pela primeira vez, e nada depois — o teste de tiro único do emissor «squirt».
+    /// @brief_fr Émet une seule salve à l'image où le taux d'émission s'allume pour la première fois, et rien ensuite — le test à coup unique de l'émetteur « squirt ».
+    /// @brief_it Emette una sola raffica nel fotogramma in cui il tasso di emissione si accende per la prima volta, e nulla dopo: il test a colpo singolo dell'emettitore «squirt».
+    /// @brief_de Gibt genau einen Stoß in dem Bild aus, in dem die Emissionsrate erstmals einsetzt, und danach nichts mehr — der Einmal-Test des «Squirt»-Emitters.
+    /// @brief_ru Выпускает один залп в том кадре, когда скорость эмиссии впервые включается, и больше ничего — одноразовая проверка эмиттера «squirt».
+    /// @brief_zh 在发射速率首次开启的那一帧发出一次爆发，之后什么都不发 —— 这是 “squirt” 发射器的单发判定。
+    /// @brief_ja 放出レートが初めて立ち上がったフレームだけ一度バーストし、その後は何も出しません。「squirt」エミッタの単発判定です。
+    /// @brief_ko 방출률이 처음 켜지는 프레임에만 한 번 터뜨리고 그 뒤로는 아무것도 내보내지 않습니다. "squirt" 이미터의 단발 판정입니다.
+    ///
+    /// @param_en emissionRate This frame's emission rate.
+    /// @param_es emissionRate La tasa de emisión de este fotograma.
+    /// @param_pt emissionRate A taxa de emissão deste quadro.
+    /// @param_fr emissionRate Le taux d'émission de cette image.
+    /// @param_it emissionRate Il tasso di emissione di questo fotogramma.
+    /// @param_de emissionRate Die Emissionsrate dieses Bildes.
+    /// @param_ru emissionRate Скорость эмиссии в этом кадре.
+    /// @param_zh emissionRate 本帧的发射速率。
+    /// @param_ja emissionRate 今フレームの放出レート。
+    /// @param_ko emissionRate 이번 프레임의 방출률.
+    ///
+    /// @param_en previousEmissionRate Last frame's rate. The burst only fires while this is still essentially zero, which is what makes it happen once.
+    /// @param_es previousEmissionRate La tasa del fotograma anterior. La ráfaga solo se dispara mientras esta sigue siendo prácticamente cero, y eso es lo que hace que ocurra una sola vez.
+    /// @param_pt previousEmissionRate A taxa do quadro anterior. A rajada só dispara enquanto ela ainda é praticamente zero, e é isso que faz acontecer uma única vez.
+    /// @param_fr previousEmissionRate Le taux de l'image précédente. La salve ne part que tant qu'il est encore quasi nul, ce qui est précisément ce qui la rend unique.
+    /// @param_it previousEmissionRate Il tasso del fotogramma precedente. La raffica parte solo finché questo è ancora praticamente zero, ed è ciò che la rende unica.
+    /// @param_de previousEmissionRate Die Rate des vorigen Bildes. Der Stoß löst nur aus, solange sie noch nahezu null ist — genau das macht ihn einmalig.
+    /// @param_ru previousEmissionRate Скорость предыдущего кадра. Залп срабатывает, только пока она практически нулевая, — именно это и делает его единственным.
+    /// @param_zh previousEmissionRate 上一帧的速率。只有当它仍然基本为零时才会发出爆发，这正是它只发生一次的原因。
+    /// @param_ja previousEmissionRate 前フレームのレート。これがまだほぼゼロのあいだだけバーストするため、一度きりになります。
+    /// @param_ko previousEmissionRate 이전 프레임의 방출률. 이 값이 아직 거의 0일 때만 터지므로 한 번만 일어납니다.
+    ///
+    /// @result_en The number of particles to emit this frame — `emissionRate` on the one frame it fires, 0 otherwise.
+    /// @result_es El número de partículas a emitir este fotograma: `emissionRate` en el único fotograma en que dispara, y 0 en el resto.
+    /// @result_pt O número de partículas a emitir neste quadro: `emissionRate` no único quadro em que dispara, e 0 nos demais.
+    /// @result_fr Le nombre de particules à émettre cette image : `emissionRate` à l'unique image où elle part, 0 sinon.
+    /// @result_it Il numero di particelle da emettere in questo fotogramma: `emissionRate` nell'unico fotogramma in cui parte, 0 negli altri.
+    /// @result_de Die Zahl der in diesem Bild auszustoßenden Partikel — `emissionRate` in dem einen auslösenden Bild, sonst 0.
+    /// @result_ru Число частиц для выпуска в этом кадре: `emissionRate` в единственном срабатывающем кадре и 0 во всех прочих.
+    /// @result_zh 本帧应发射的粒子数量 —— 在触发的那一帧为 `emissionRate`，其余帧为 0。
+    /// @result_ja 今フレームに放出する粒子数。発火するその 1 フレームだけ `emissionRate`、それ以外は 0 です。
+    /// @result_ko 이번 프레임에 방출할 파티클 수. 발동하는 그 한 프레임에만 `emissionRate`이고 나머지는 0입니다.
+    fn squirt(emissionRate : f32, previousEmissionRate : f32) -> f32 {
+        let diff : f32 = abs(emissionRate - previousEmissionRate);
+        let first : f32 = select(diff > 0.1, emissionRate, 0.0);
+        let result : f32 = select(previousEmissionRate < 0.0001, first, 0.0);
+		result
+    }
+
+    /// @brief_en A layer that emits one burst the moment its emission-rate attribute turns on, then stays alive doing nothing until the effect stops.
+    /// @brief_es Una capa que emite una sola ráfaga en cuanto su atributo de tasa de emisión se enciende, y luego sigue viva sin hacer nada hasta que el efecto se detiene.
+    /// @brief_pt Uma camada que emite uma única rajada assim que seu atributo de taxa de emissão liga, e depois fica viva sem fazer nada até o efeito parar.
+    /// @brief_fr Un calque qui émet une seule salve dès que son attribut de taux d'émission s'allume, puis reste en vie sans rien faire jusqu'à l'arrêt de l'effet.
+    /// @brief_it Un livello che emette una sola raffica non appena il suo attributo di tasso di emissione si accende, poi resta vivo senza fare nulla finché l'effetto non si ferma.
+    /// @brief_de Eine Ebene, die einen einzigen Stoß ausgibt, sobald ihr Emissionsraten-Attribut einsetzt, und danach untätig am Leben bleibt, bis der Effekt endet.
+    /// @brief_ru Слой, который выпускает один залп, как только включается его атрибут скорости эмиссии, а затем просто остаётся живым до остановки эффекта.
+    /// @brief_zh 一个图层：当它的发射速率属性开启的瞬间发出一次爆发，之后一直存活但什么也不做，直到特效停止。
+    /// @brief_ja 放出レート属性が立ち上がった瞬間に一度だけバーストし、その後はエフェクトが止まるまで何もせず生き続けるレイヤーです。
+    /// @brief_ko 방출률 속성이 켜지는 순간 한 번 터뜨리고, 그 뒤로는 이펙트가 멈출 때까지 아무것도 하지 않고 살아 있는 레이어입니다.
+    ///
+    /// @param_en _t_Event The event this layer kicks when the burst fires.
+    /// @param_es _t_Event El evento que esta capa dispara cuando sale la ráfaga.
+    /// @param_pt _t_Event O evento que esta camada dispara quando a rajada sai.
+    /// @param_fr _t_Event L'événement que ce calque déclenche au départ de la salve.
+    /// @param_it _t_Event L'evento che questo livello attiva quando parte la raffica.
+    /// @param_de _t_Event Das Ereignis, das diese Ebene auslöst, wenn der Stoß erfolgt.
+    /// @param_ru _t_Event Событие, которое слой запускает при залпе.
+    /// @param_zh _t_Event 爆发发生时本图层触发的事件。
+    /// @param_ja _t_Event バーストが起きたときにこのレイヤーが発火させるイベント。
+    /// @param_ko _t_Event 폭발이 일어날 때 이 레이어가 발생시키는 이벤트.
+    ///
+    /// @param_en _a_emissionRate The effect attribute the burst watches. It fires on the frame this stops being zero.
+    /// @param_es _a_emissionRate El atributo del efecto que vigila la ráfaga. Dispara en el fotograma en que este deja de ser cero.
+    /// @param_pt _a_emissionRate O atributo do efeito que a rajada observa. Ela dispara no quadro em que ele deixa de ser zero.
+    /// @param_fr _a_emissionRate L'attribut d'effet que la salve surveille. Elle part à l'image où il cesse d'être nul.
+    /// @param_it _a_emissionRate L'attributo dell'effetto che la raffica sorveglia. Parte nel fotogramma in cui smette di essere zero.
+    /// @param_de _a_emissionRate Das Effekt-Attribut, das der Stoß beobachtet. Er löst in dem Bild aus, in dem es aufhört, null zu sein.
+    /// @param_ru _a_emissionRate Атрибут эффекта, за которым следит залп. Он срабатывает в кадре, когда атрибут перестаёт быть нулём.
+    /// @param_zh _a_emissionRate 爆发所监视的特效属性。它在该属性不再为零的那一帧触发。
+    /// @param_ja _a_emissionRate バーストが監視するエフェクト属性。これがゼロでなくなったフレームで発火します。
+    /// @param_ko _a_emissionRate 폭발이 지켜보는 이펙트 속성. 이 값이 0이 아니게 되는 프레임에 발동합니다.
+    template layer SquirtEmitter {
+        takes {
+            "_t_Event" : particleEvent;
+            "_a_emissionRate" : f32;
+        }
+        properties {
+            Events = [];
+            NeedsEvolveOnDeath;
+            metaData;
+        }
+        init {
+            needs {
+                "self.invLife" : f32;
+                "EventAccum" : i32x2;
+                "previousEmissionRate" : f32;
+            }
+            self.invLife = 0.0;
+            EventAccum = #i32x2(1065353048, 0);
+            previousEmissionRate = 0.0;
+        }
+        evolve {
+            needs {
+                "_t_Event" : particleEvent;
+                "EventAccum" : i32x2;
+            }
+            let running : bool = effect.isRunning();
+            self.kill(lnot(running));
+            let prevAccum : i32x2 = EventAccum;
+            let particlesToEmit : f32 = squirt(_a_emissionRate, previousEmissionRate);
+            previousEmissionRate = _a_emissionRate;
+            let spawnEvents : i32x3 = generate(prevAccum,  particlesToEmit, 1.0, 0.0, 1.0);
+            let payload : i32 = _t_Event.initPayload(0, spawnEvents);
+            _t_Event.kick(payload);
+            EventAccum = spawnEvents.xy;
+        }
+    }
+}

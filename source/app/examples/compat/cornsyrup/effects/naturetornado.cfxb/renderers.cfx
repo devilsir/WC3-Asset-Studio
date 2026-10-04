@@ -1,0 +1,99 @@
+// Readable renderer materials. Header: `renderer H : <Type>` where Type is the geometry
+// (Billboard/Ribbon/Light/Mesh). `material = "…"` overrides the default material; a Mesh's
+// model is `path = "…"`. Then one `Name = value;` per non-default property (sampler-style):
+// `= "path"` = texture, `= true` = enabled, `= 1.0` = float, `= AlphaBlend` = named enum.
+// Properties left at their default are OMITTED and reconstructed from the material template on
+// build. Renderer INPUT bindings live in `code.cfx` (`bind rend<N> { "field" -> Slot; }`).
+
+renderer rend0 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flipbooks/FB_SmokeBlur_BW_8x8.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+    Atlas.Source = 1;
+    Atlas.SubDiv = (8, 8);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer rend1 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = PlaneAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveWarp01_Blur_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer rend2 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = PlaneAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveSoft05_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer rend3 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = PlaneAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveWarp01_Blur_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer rend4 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = PlaneAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveSoft05_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer rend5 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = PlaneAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveWarp01_Blur_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer rend6 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flipbooks/FB_SmokeBlur_softgray_8x8.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+    Atlas.Source = 1;
+    Atlas.SubDiv = (8, 8);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer LeafRenderer : Billboard {
+    DrawOrder = 3;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Misc/Leaves_2.2.tga";
+    Atlas.Source = 1;
+    Atlas.SubDiv = (2, 2);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}

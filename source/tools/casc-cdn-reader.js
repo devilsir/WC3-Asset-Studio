@@ -22,7 +22,7 @@ const PATCH = Object.freeze({
 const PRODUCT = 'w3';
 const MAX_HTTP_BYTES = 96 * 1024 * 1024;
 const MAX_DECODE_BYTES = 256 * 1024 * 1024;
-const USER_AGENT = 'WC3-Asset-Studio/1.4 CASC-TACT';
+const USER_AGENT = 'WC3-Asset-Studio/1.5 CASC-TACT';
 
 function trace(message) {
   try { process.stderr.write(`CASC_CDN_STAGE ${message}\n`); } catch (_) {}

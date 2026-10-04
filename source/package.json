@@ -1,7 +1,7 @@
 {
   "name": "wc3-asset-studio",
-  "version": "1.4.0",
-  "description": "WC3 Asset Studio v1.4 - Warcraft III model, animation, rig, material and texture editor",
+  "version": "1.5.0",
+  "description": "WC3 Asset Studio v1.5 - Warcraft III model, animation, rig, material and texture editor",
   "author": "DarkSir#1620",
   "main": "main.js",
   "private": true,
@@ -19,7 +19,7 @@
     "appId": "com.darksir.wc3assetstudio",
     "productName": "WC3 Asset Studio",
     "executableName": "WC3 Asset Studio",
-    "artifactName": "WC3 Asset Studio v1.4 Portable.${ext}",
+    "artifactName": "WC3 Asset Studio v1.5 Portable.${ext}",
     "asar": true,
     "compression": "maximum",
     "directories": {
@@ -62,18 +62,6 @@
       {
         "from": "assets/file-texture.ico",
         "to": "file-icons/texture.ico"
-      },
-      {
-        "from": "tools/effects-lab/effects-runtime.exe",
-        "to": "tools/effects-lab/effects-runtime.exe"
-      },
-      {
-        "from": "tools/effects-lab/cfxlib",
-        "to": "tools/effects-lab/cfxlib"
-      },
-      {
-        "from": "tools/effects-lab/effect-designer",
-        "to": "tools/effects-lab/effect-designer"
       }
     ]
   }

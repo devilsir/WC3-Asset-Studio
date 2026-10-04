@@ -1,0 +1,999 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name;` (or `Name = flags;`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K;`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+layer RootLayer extends RootLayerTemplate {
+    using {
+        "_sd_eventStream" = sd0;
+    }
+}
+
+layer TerminationLayer extends TerminationTemplate {
+    using {
+        "_ev_Trigger" = __e_Trigger;
+    }
+    properties {
+        metaData;
+    }
+}
+
+layer L2 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 40 particles/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * (__a_Game.EmissionRateMultiplier * 40.0), 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L3 {
+    properties {
+        Renderers = [&rend0];
+        sampler "__sampler_2" : Shape = &sd1 usage 1025;
+        sampler "__sampler_4" : Curve = &sd2;
+        sampler "__sampler_5" : Shape = &sd3 usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+            "colorScale" : f32x4;
+        }
+        self.invLife = 1.6666666;
+        let shapeDir : f32x3 = __sampler_2.samplePosition();
+        let sizeRand : f32 = rand(0.7, 0.3);
+        let rotRand : f32 = rand(0.0, 360.0);
+        sizeScale = sizeRand;
+        Rotation = rotRand;
+        let startPos : f32x3 = __sampler_5.samplePosition();
+        let colorRand : f32 = rand(1.0, 0.5);
+        velocity = shapeDir * #f32x3(2.0, 2.0, 2.0);
+        position = startPos;
+        colorScale = colorRand.xxxx;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureID" : f32;
+            "scene.dt" : f32;
+            "sizeScale" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+            "colorScale" : f32x4;
+        }
+        let basePos = coord_space.world_base_position();
+        let age : f32 = self.lifeRatio;
+        let texId = life.select_texture_id_on_age(rend0);
+        let curveColor : f32x4 = __sampler_4.sample(age);
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t², with exponential drag applied to v (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 3.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = (age * 2.986547 + 0.5558989) * sizeScale;
+        Color = curveColor * colorScale;
+        TextureID = texId;
+        position = l0;
+        velocity = l1;
+    }
+    bind rend0 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+
+layer L4 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 40 particles/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * (__a_Game.EmissionRateMultiplier * 40.0), 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L5 {
+    properties {
+        Renderers = [&rend1];
+        NeedsEvolveOnDeath;
+        metaData;
+        sampler "__sampler_1" : Curve = &sd4;
+        sampler "__sampler_2" : Curve = &sd5;
+        sampler "__sampler_3" : Shape = &sd6 usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        self.invLife = 1.4285715;
+        let rotRand : f32 = rand(-45.0, 45.0);
+        let sizeRand : f32 = rand(5.0, 3.0);
+        let spinRand : f32 = rand(10.0, 5.0);
+        sizeScale = sizeRand;
+        fadeTime = 0.0;
+        let startPos : f32x3 = __sampler_3.samplePosition();
+        Rotation = rotRand;
+        spinRate = spinRand;
+        velocity = #f32x3(0.0, 0.0, 0.0);
+        position = startPos;
+        Axis = #f32x3(0.0, 0.0, 0.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "NormalAxis" : f32x3;
+            "Color" : f32x4;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let basePos = coord_space.world_base_position();
+        let worldNormal : f32x3 = xform_l2w_d_masked(#f32x3(0.0, 0.0, 1.0), 18);
+        let age : f32 = self.lifeRatio;
+        let curveColor : f32x4 = __sampler_2.sample(age);
+        // Saturation/value push in HSV, then exposure gain.
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.13, 10.0, 0.0),
+            exp_exposure = #f32x4(0.4, 0.4, 0.4, 0.4)
+        );
+        let prevFade : f32 = fadeTime;
+        let running : bool = effect.isRunning();
+        // Fade-out clock: only advances once the effect has stopped; particle dies at 1.
+        let fadeElapsed : f32 = prevFade + select(lnot(running), scene.dt, 0.0);
+        let fadeClamped : f32 = min(fadeElapsed, 1.0);
+        self.kill(fadeClamped == 1.0);
+        let fadeAlpha : f32 = __sampler_1.sample(fadeElapsed);
+        let prevRot : f32 = Rotation;
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t² (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 6.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = (age * 0.42454833 + 0.07545167) * sizeScale;
+        NormalAxis = worldNormal;
+        Color = gradedColor * fadeAlpha.xxxx;
+        position = l0;
+        fadeTime = fadeClamped;
+        Rotation = prevRot + spinRate * scene.dt;
+        velocity = l1;
+    }
+    bind rend1 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+layer L6 {
+    properties {
+        Renderers = [&rend2];
+        NeedsEvolveOnDeath;
+        metaData;
+        sampler "__sampler_1" : Curve = &sd7;
+        sampler "__sampler_2" : Curve = &sd8;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        self.invLife = 1.4285715;
+        let rotRand : f32 = rand(-45.0, 45.0);
+        let sizeRand : f32 = rand(5.0, 8.0);
+        let spinRand : f32 = rand(10.0, 5.0);
+        sizeScale = sizeRand;
+        fadeTime = 0.0;
+        Rotation = rotRand;
+        spinRate = spinRand;
+        velocity = #f32x3(0.0, -0.0, 2.0);
+        position = #f32x3(0.0, 0.0, 2.5);
+        Axis = #f32x3(0.0, 0.0, 0.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "NormalAxis" : f32x3;
+            "Color" : f32x4;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let basePos = coord_space.world_base_position();
+        let worldNormal : f32x3 = xform_l2w_d_masked(#f32x3(0.0, 0.0, 1.0), 18);
+        let age : f32 = self.lifeRatio;
+        let curveColor : f32x4 = __sampler_2.sample(age);
+        // Saturation/value push in HSV, then exposure gain.
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.3, 10.0, 0.0),
+            exp_exposure = #f32x4(0.4, 0.4, 0.4, 0.4)
+        );
+        let prevFade : f32 = fadeTime;
+        let running : bool = effect.isRunning();
+        // Fade-out clock: only advances once the effect has stopped; particle dies at 1.
+        let fadeElapsed : f32 = prevFade + select(lnot(running), scene.dt, 0.0);
+        let fadeClamped : f32 = min(fadeElapsed, 1.0);
+        self.kill(fadeClamped == 1.0);
+        let fadeAlpha : f32 = __sampler_1.sample(fadeElapsed);
+        let prevRot : f32 = Rotation;
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t² (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 6.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = (age * 0.32325792 + 0.17674209) * sizeScale;
+        NormalAxis = worldNormal;
+        Color = gradedColor * fadeAlpha.xxxx;
+        position = l0;
+        fadeTime = fadeClamped;
+        Rotation = prevRot + spinRate * scene.dt;
+        velocity = l1;
+    }
+    bind rend2 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+layer L7 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 20 particles/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * (__a_Game.EmissionRateMultiplier * 20.0), 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L8 {
+    properties {
+        Renderers = [&rend3];
+        NeedsEvolveOnDeath;
+        metaData;
+        sampler "__sampler_1" : Curve = &sd9;
+        sampler "__sampler_2" : Curve = &sd10;
+        sampler "__sampler_3" : Shape = &sd11 usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        self.invLife = 1.4285715;
+        let rotRand : f32 = rand(-45.0, 45.0);
+        let sizeRand : f32 = rand(3.0, 2.0);
+        let spinRand : f32 = rand(10.0, 15.0);
+        sizeScale = sizeRand;
+        fadeTime = 0.0;
+        let startPos : f32x3 = __sampler_3.samplePosition();
+        Rotation = rotRand;
+        spinRate = spinRand;
+        velocity = #f32x3(0.0, 0.0, 0.0);
+        position = startPos;
+        Axis = #f32x3(0.0, 0.0, 0.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "NormalAxis" : f32x3;
+            "Color" : f32x4;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let basePos = coord_space.world_base_position();
+        let worldNormal : f32x3 = xform_l2w_d_masked(#f32x3(0.0, 0.0, 1.0), 18);
+        let age : f32 = self.lifeRatio;
+        let curveColor : f32x4 = __sampler_2.sample(age);
+        // Saturation/value push in HSV, then exposure gain.
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.3, 10.0, 0.0),
+            exp_exposure = #f32x4(0.4, 0.4, 0.4, 0.4)
+        );
+        let prevFade : f32 = fadeTime;
+        let running : bool = effect.isRunning();
+        // Fade-out clock: only advances once the effect has stopped; particle dies at 1.
+        let fadeElapsed : f32 = prevFade + select(lnot(running), scene.dt, 0.0);
+        let fadeClamped : f32 = min(fadeElapsed, 1.0);
+        self.kill(fadeClamped == 1.0);
+        let fadeAlpha : f32 = __sampler_1.sample(fadeElapsed);
+        let prevRot : f32 = Rotation;
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t² (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 2.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = (age * -0.49902824 + 0.49902824) * sizeScale;
+        NormalAxis = worldNormal;
+        Color = gradedColor * fadeAlpha.xxxx;
+        position = l0;
+        fadeTime = fadeClamped;
+        Rotation = prevRot + spinRate * scene.dt;
+        velocity = l1;
+    }
+    bind rend3 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+layer L9 {
+    properties {
+        Renderers = [&rend4];
+        NeedsEvolveOnDeath;
+        metaData;
+        sampler "__sampler_1" : Curve = &sd12;
+        sampler "__sampler_2" : Curve = &sd13;
+        sampler "__sampler_3" : Shape = &sd14 usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        self.invLife = 1.4285715;
+        let rotRand : f32 = rand(-45.0, 45.0);
+        let sizeRand : f32 = rand(3.0, 5.0);
+        let spinRand : f32 = rand(2.0, 5.0);
+        sizeScale = sizeRand;
+        fadeTime = 0.0;
+        let startPos : f32x3 = __sampler_3.samplePosition();
+        Rotation = rotRand;
+        spinRate = spinRand;
+        velocity = #f32x3(0.0, -0.0, 1.0);
+        position = startPos;
+        Axis = #f32x3(0.0, 0.0, 0.0);
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "NormalAxis" : f32x3;
+            "Color" : f32x4;
+            "sizeScale" : f32;
+            "fadeTime" : f32;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let basePos = coord_space.world_base_position();
+        let worldNormal : f32x3 = xform_l2w_d_masked(#f32x3(0.0, 0.0, 1.0), 18);
+        let age : f32 = self.lifeRatio;
+        let curveColor : f32x4 = __sampler_2.sample(age);
+        // Saturation/value push in HSV (no exposure term on this layer).
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.3, 10.0, 0.0)
+        );
+        let prevFade : f32 = fadeTime;
+        let running : bool = effect.isRunning();
+        // Fade-out clock: only advances once the effect has stopped; particle dies at 1.
+        let fadeElapsed : f32 = prevFade + select(lnot(running), scene.dt, 0.0);
+        let fadeClamped : f32 = min(fadeElapsed, 1.0);
+        self.kill(fadeClamped == 1.0);
+        let fadeAlpha : f32 = __sampler_1.sample(fadeElapsed);
+        let prevRot : f32 = Rotation;
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t² (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 4.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = (age * -0.49902824 + 0.49902824) * sizeScale;
+        NormalAxis = worldNormal;
+        Color = gradedColor * fadeAlpha.xxxx;
+        position = l0;
+        fadeTime = fadeClamped;
+        Rotation = prevRot + spinRate * scene.dt;
+        velocity = l1;
+    }
+    bind rend4 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+layer L10 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 60 particles/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * (__a_Game.EmissionRateMultiplier * 60.0), 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L11 {
+    properties {
+        Renderers = [&rend5];
+        NeedsEvolveOnDeath;
+        metaData;
+        sampler "__sampler_1" : Curve = &sd15;
+        sampler "__sampler_2" : Curve = &sd16;
+        sampler "__sampler_3" : Shape = &sd17 usage 1025;
+        sampler "__sampler_5" : Curve = &sd18;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Axis" : f32x3;
+            "Enabled" : bool;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+            "acceleration" : f32x3;
+            "fadeTime" : f32;
+            "sizeScale" : f32;
+        }
+        self.invLife = 1.4285715;
+        let rotRand : f32 = rand(-45.0, 45.0);
+        let spinRand : f32 = rand(10.0, 5.0);
+        let startPos : f32x3 = __sampler_3.samplePosition();
+        let riseRand : f32x3 = rand(#f32x3(0.0, 0.0, 1.0), #f32x3(0.0, 0.0, 6.0));
+        Rotation = rotRand;
+        spinRate = spinRand;
+        // Same random upward vector seeds both the initial velocity and the constant accel.
+        velocity = riseRand;
+        position = startPos;
+        acceleration = riseRand;
+        fadeTime = 0.0;
+        let sizeRand : f32 = rand(2.0, 3.0);
+        sizeScale = sizeRand;
+        Axis = #f32x3(0.0, 0.0, 0.0);
+        Enabled = true;
+    }
+    evolve {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "NormalAxis" : f32x3;
+            "Color" : f32x4;
+            "spinRate" : f32;
+            "velocity" : f32x3;
+            "position" : f32x3;
+            "acceleration" : f32x3;
+            "fadeTime" : f32;
+            "sizeScale" : f32;
+        }
+        let basePos = coord_space.world_base_position();
+        let worldNormal : f32x3 = xform_l2w_d_masked(#f32x3(0.0, 0.0, 1.0), 18);
+        let age : f32 = self.lifeRatio;
+        let curveColor : f32x4 = __sampler_2.sample(age);
+        let prevRot : f32 = Rotation;
+        let sizeCurve : f32 = __sampler_5.sample(age);
+        // Saturation/value push in HSV, then exposure gain.
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.13, 10.0, 0.0),
+            exp_exposure = #f32x4(0.6, 0.6, 0.6, 0.6)
+        );
+        let prevFade : f32 = fadeTime;
+        let running : bool = effect.isRunning();
+        // Fade-out clock: only advances once the effect has stopped; particle dies at 1.
+        let fadeElapsed : f32 = prevFade + select(lnot(running), scene.dt, 0.0);
+        let fadeClamped : f32 = min(fadeElapsed, 1.0);
+        self.kill(fadeClamped == 1.0);
+        let fadeAlpha : f32 = __sampler_1.sample(fadeElapsed);
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t², with exponential drag applied to v (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = acceleration,
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 1.5
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        Position = basePos + worldOffset;
+        Size = sizeCurve * 0.5 * sizeScale;
+        NormalAxis = worldNormal;
+        Color = gradedColor * fadeAlpha.xxxx;
+        fadeTime = fadeClamped;
+        Rotation = prevRot + spinRate * scene.dt;
+        velocity = l1;
+        position = l0;
+    }
+    bind rend5 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Axis" -> Axis0;
+        "NormalAxis" -> Axis1;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+    }
+}
+
+layer L12 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 1 particle/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * Wc3.Attributes.EmissionRateMultiplier * 20.0, 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L15 {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+        attrib "__a_Game.EmissionRateMultiplier";
+        attrib "__a_Game.SpeedMultiplier";
+        attrib "__a_Game.LifespanMultiplier";
+        attrib "__a_Game.ColorMultiplier";
+        attrib "__a_Game.TeamColor";
+        attrib "__a_Game.TargetPosition";
+        attrib "__a_Game.Scale";
+    }
+    event __e_Child;
+    event __e_OnDeath;
+    root;
+    init {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        spawnAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "spawnAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = spawnAccum;
+        // Fractional spawn-rate accumulator: 1 particle/sec, carried across frames.
+        let spawnState : i32x3 = generate(prevAccum, scene.dt * (Wc3.Attributes.EmissionRateMultiplier * 1.0), 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnState);
+        __e_Child.kick(payload);
+        spawnAccum = spawnState.xy;
+    }
+}
+
+layer L16 {
+    properties {
+        Renderers = [&rend6];
+        sampler "__sampler_4" : Curve = &sd25;
+        sampler "__sampler_5" : Shape = &sd26 usage 1025;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "sizeScale" : f32;
+            "exposure" : f32x4;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let lifeRand : f32 = rand(0.5, 0.8);
+        let sizeRand : f32 = rand(0.5, 2.0);
+        self.invLife = rcp(lifeRand);
+        let exposureRand : f32 = rand(1.0, 0.5);
+        sizeScale = sizeRand;
+        let rotRand : f32 = rand(0.0, 360.0);
+        exposure = exposureRand.xxxx;
+        let shapeDir : f32x3 = __sampler_5.samplePosition();
+        velocity = shapeDir * #f32x3(3.0, 3.0, 8.0);
+        position = #f32x3(0.0, 0.0, 0.0);
+        Rotation = rotRand;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureID" : f32;
+            "scene.dt" : f32;
+            "sizeScale" : f32;
+            "exposure" : f32x4;
+            "velocity" : f32x3;
+            "position" : f32x3;
+        }
+        let basePos = coord_space.world_base_position();
+        let age : f32 = self.lifeRatio;
+        let texId = life.select_texture_id_on_age(rend6);
+        let curveColor : f32x4 = __sampler_4.sample(age);
+        let l0 : f32x3 = position;
+        let l1 : f32x3 = velocity;
+        // p += v·t + ½·a·t², with exponential drag applied to v (l0/l1 updated in place).
+        physics.integrate(
+            position = l0,
+            velocity = l1,
+            acceleration = #f32x3(0.0, -0.0, 6.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 1.0
+        );
+        let worldOffset : f32x3 = xform_l2w_d_masked(l0, 18);
+        // Value-only darkening in HSV, with the per-particle random exposure.
+        let gradedColor = color.grading(
+            rgba = curveColor,
+            hsv_offset = #f32x4(0.0, 0.0, -0.5199995, 0.0),
+            exp_exposure = exposure
+        );
+        Position = basePos + worldOffset;
+        Size = age * sizeScale;
+        Color = gradedColor;
+        TextureID = texId;
+        velocity = l1;
+        position = l0;
+    }
+    bind rend6 {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+
+layer LeafLayer {
+    properties {
+        Renderers = [&LeafRenderer];
+        sampler "__sampler_1" : Curve = &LeafSizeCurve;
+        sampler "__sampler_2" : Shape = &LeafSpawnShape usage 1025;
+        sampler "__sampler_3" : Curve = &LeafColorCurve;
+    }
+    root auto;
+    init {
+        needs {
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "TextureID" : f32;
+            "hsvJitter" : f32x4;
+            "spinRate" : f32;
+            "orbitSpeed" : f32;
+            "position" : f32x3;
+            "velocity" : f32x3;
+            "acceleration" : f32x3;
+            "sizeScale" : f32;
+        }
+        let lifeRand : f32 = rand(3.0, 1.75);
+        let texRand : f32 = rand(1.0, 8.0);
+        self.invLife = rcp(lifeRand);
+        let riseRand : f32x3 = rand(#f32x3(0.0, 0.0, 7.0), #f32x3(0.0, 0.0, 4.0));
+        let shapePos : f32x3 = __sampler_2.samplePosition();
+        let sizeRand : f32 = rand(0.7, 0.2);
+        let rotRand : f32 = rand(0.0, 360.0);
+        let spinRand : f32 = rand(0.0, 20.0);
+        let hsvRand : f32x4 = rand(#f32x4(-1.0, -1.0, -1.0, -1.0), #f32x4(1.0, 1.0, 1.0, 1.0));
+        // Per-particle jitter on the hue and value channels only.
+        hsvJitter = hsvRand * #f32x4(0.0225, 0.0, 1.245, 0.0);
+        Rotation = rotRand;
+        spinRate = spinRand;
+        let orbitRand : f32 = rand(0.0, 1.0);
+        // Orbit rate in radians/sec, remapped to roughly 0.4π…1.0π.
+        orbitSpeed = orbitRand * 1.8849558 + 1.2566371;
+        position = shapePos;
+        velocity = shapePos * #f32x3(2.0, 2.0, 2.0);
+        acceleration = riseRand;
+        sizeScale = sizeRand;
+        Enabled = true;
+        TextureID = texRand;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "Color" : f32x4;
+            "hsvJitter" : f32x4;
+            "spinRate" : f32;
+            "orbitSpeed" : f32;
+            "position" : f32x3;
+            "velocity" : f32x3;
+            "acceleration" : f32x3;
+            "sizeScale" : f32;
+        }
+        let basePos = coord_space.world_base_position();
+        let age : f32 = self.lifeRatio;
+        let sizeCurve : f32 = __sampler_1.sample(age);
+        let curveColor : f32x4 = __sampler_3.sample(age);
+        let colorHsv : f32x4 = rgb2hsv(curveColor);
+        // Constant saturation/value shift in HSV, plus the per-particle jitter.
+        let shiftedColor : f32x4 = hsv2rgb(colorHsv + #f32x4(0.0, -0.834, 1.0599995, 0.0) + hsvJitter);
+        let dt : f32 = scene.dt;
+        let prevRot : f32 = Rotation;
+        let prevPos : f32x3 = position;
+        // Swirl: spin the whole offset around +Z before integrating this frame's motion.
+        let orbitedPos : f32x3 = radians.rotate(prevPos, #f32x3(0.0, 0.0, 1.0), dt * 0.99999994 * orbitSpeed);
+        let prevVel : f32x3 = velocity;
+        // Hand-rolled exponential-drag integrator, k = 3: dragDecay = e^-kt, velCoeff = (1-e^-kt)/k.
+        let dragDecay : f32 = exp(neg(dt * 3.0));
+        let decayOverK : f32 = dragDecay * 0.33333334;
+        let velCoeff : f32x3 = (0.33333334 - decayOverK).xxx;
+        let accelVec : f32x3 = acceleration;
+        let newPos : f32x3 = orbitedPos + prevVel * velCoeff + accelVec * ((decayOverK - 0.33333334 + dt) * 0.33333334).xxx;
+        Position = basePos + newPos;
+        Size = sizeCurve * sizeScale;
+        Color = shiftedColor;
+        position = newPos;
+        Rotation = prevRot + spinRate * dt;
+        velocity = prevVel * dragDecay.xxx + accelVec * velCoeff;
+    }
+    bind LeafRenderer {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureID" -> TextureID;
+    }
+}
+

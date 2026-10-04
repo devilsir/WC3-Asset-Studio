@@ -1,0 +1,180 @@
+// stdlib/life.cfx — particle lifetime control.
+//
+// The engine advances `lifeRatio += dt * invLife` and kills anything at lifeRatio >= 1.0 BEFORE
+// the next script run, so a particle lives for exactly `1 / invLife` seconds. See CFX_GUIDE §9.1.
+//
+// ---------------------------------------------------------------------------------------------
+// DOC COMMENTS ARE ANNOTATED, AND THIS IS THE MODULE THE CONVENTION IS WRITTEN OUT ON.
+//
+// A `///` block may carry Doxygen-shaped tags with an interface-language code on the end:
+//
+//     @brief_<lang>   one paragraph saying what the function does
+//     @param_<lang>   <name> what that parameter means
+//     @result_<lang>  what the call evaluates to
+//
+// The code is the one Mill stores in its settings file — en, es, pt, fr, it, de, ru, zh, ja, ko —
+// so the set of languages the library can be written in is the set the interface has, with no
+// second list to keep in step.
+//
+// Mill's Library workspace reads these and shows the reader's own language, falling back to `en`
+// **per section**, so a half-translated module is useful rather than blank. A module with no tags
+// at all is unaffected: its prose is read as the brief, which is what every other file in `cfxlib`
+// still relies on.
+//
+// Tags are comments. `trivia::blank` erases every comment before the loader scans a module, so
+// none of this reaches the compiler, the bytecode or the `.pkb`.
+// ---------------------------------------------------------------------------------------------
+
+namespace life {
+
+    /// @brief_en Set this particle's lifetime, in seconds.
+    /// @brief_es Fija la vida de esta partícula, en segundos.
+    /// @brief_pt Define o tempo de vida desta partícula, em segundos.
+    /// @brief_fr Fixe la durée de vie de cette particule, en secondes.
+    /// @brief_it Imposta la durata di vita di questa particella, in secondi.
+    /// @brief_de Legt die Lebensdauer dieses Partikels in Sekunden fest.
+    /// @brief_ru Задаёт время жизни этой частицы в секундах.
+    /// @brief_zh 设置该粒子的生命时长，以秒为单位。
+    /// @brief_ja このパーティクルの寿命を秒単位で設定します。
+    /// @brief_ko 이 파티클의 수명을 초 단위로 설정합니다.
+    ///
+    /// @param_en seconds How long the particle lives. Zero gives an infinite lifetime, because the engine stores the reciprocal.
+    /// @param_es seconds Cuánto vive la partícula. Cero da vida infinita, porque el motor guarda el recíproco.
+    /// @param_pt seconds Quanto tempo a partícula vive. Zero dá vida infinita, porque o motor guarda o recíproco.
+    /// @param_fr seconds Combien de temps la particule vit. Zéro donne une vie infinie, car le moteur stocke l'inverse.
+    /// @param_it seconds Quanto vive la particella. Zero dà vita infinita, perché il motore memorizza il reciproco.
+    /// @param_de seconds Wie lange das Partikel lebt. Null ergibt eine unendliche Lebensdauer, denn die Engine speichert den Kehrwert.
+    /// @param_ru seconds Сколько живёт частица. Ноль даёт бесконечную жизнь, поскольку движок хранит обратную величину.
+    /// @param_zh seconds 粒子存活多久。传 0 表示无限寿命，因为引擎存储的是倒数。
+    /// @param_ja seconds パーティクルが生きる長さ。エンジンは逆数を保持するため、0 は無限の寿命になります。
+    /// @param_ko seconds 파티클이 사는 시간. 엔진이 역수를 저장하므로 0은 무한 수명이 됩니다.
+    fn set_lifetime(seconds: f32) {
+        self.invLife = rcp(seconds);
+    }
+
+    /// @brief_en Die when `cond` is true, keeping the current lifetime otherwise.
+    /// @brief_es Muere cuando `cond` es cierto; en caso contrario conserva la vida actual.
+    /// @brief_pt Morre quando `cond` é verdadeiro; caso contrário mantém o tempo de vida atual.
+    /// @brief_fr Meurt quand `cond` est vrai, et conserve la durée de vie actuelle sinon.
+    /// @brief_it Muore quando `cond` è vero, altrimenti mantiene la durata di vita attuale.
+    /// @brief_de Stirbt, wenn `cond` wahr ist, und behält andernfalls die aktuelle Lebensdauer.
+    /// @brief_ru Умирает, когда `cond` истинно, иначе сохраняет текущее время жизни.
+    /// @brief_zh 当 `cond` 为真时死亡，否则保持当前寿命。
+    /// @brief_ja `cond` が真のとき死にます。そうでなければ現在の寿命を保ちます。
+    /// @brief_ko `cond`가 참이면 죽고, 그렇지 않으면 현재 수명을 유지합니다.
+    ///
+    /// @param_en cond Killed this tick when true. Evaluated lane-wise, so each particle answers for itself.
+    /// @param_es cond Muere en este tick cuando es cierto. Se evalúa por carril, así que cada partícula responde por sí misma.
+    /// @param_pt cond Morre neste tick quando verdadeiro. Avaliado por faixa, então cada partícula responde por si.
+    /// @param_fr cond Tuée à ce tick quand vrai. Évalué voie par voie, donc chaque particule répond pour elle-même.
+    /// @param_it cond Uccisa in questo tick quando è vero. Valutato per corsia, quindi ogni particella risponde per sé.
+    /// @param_de cond Wird in diesem Tick getötet, wenn wahr. Spurweise ausgewertet, also antwortet jedes Partikel für sich.
+    /// @param_ru cond Убивает на этом тике, когда истинно. Вычисляется по дорожкам, поэтому каждая частица отвечает за себя.
+    /// @param_zh cond 为真时在本 tick 死亡。按通道逐个求值，因此每个粒子各自判定。
+    /// @param_ja cond 真ならこのティックで死にます。レーンごとに評価されるため、パーティクルごとに判定されます。
+    /// @param_ko cond 참이면 이번 틱에 죽습니다. 레인 단위로 평가되므로 파티클마다 각자 판정됩니다.
+    fn kill_when(cond: bool) {
+        self.kill(cond);
+    }
+
+    /// @brief_en This particle's normalized age.
+    /// @brief_es La edad normalizada de esta partícula.
+    /// @brief_pt A idade normalizada desta partícula.
+    /// @brief_fr L'âge normalisé de cette particule.
+    /// @brief_it L'età normalizzata di questa particella.
+    /// @brief_de Das normierte Alter dieses Partikels.
+    /// @brief_ru Нормированный возраст этой частицы.
+    /// @brief_zh 该粒子的归一化年龄。
+    /// @brief_ja このパーティクルの正規化された経過時間。
+    /// @brief_ko 이 파티클의 정규화된 나이.
+    ///
+    /// @result_en 0 at birth and 1 at death — the value every fade, size ramp and colour curve is driven by.
+    /// @result_es 0 al nacer y 1 al morir: el valor que gobierna cada desvanecido, rampa de tamaño y curva de color.
+    /// @result_pt 0 ao nascer e 1 ao morrer — o valor que comanda cada esmaecimento, rampa de tamanho e curva de cor.
+    /// @result_fr 0 à la naissance et 1 à la mort — la valeur qui pilote chaque fondu, rampe de taille et courbe de couleur.
+    /// @result_it 0 alla nascita e 1 alla morte: il valore che guida ogni dissolvenza, rampa di dimensione e curva di colore.
+    /// @result_de 0 bei der Geburt und 1 beim Tod — der Wert, der jede Ausblendung, Größenrampe und Farbkurve treibt.
+    /// @result_ru 0 при рождении и 1 при смерти — величина, которой управляется каждое затухание, изменение размера и цветовая кривая.
+    /// @result_zh 出生时为 0，死亡时为 1 —— 所有淡出、尺寸渐变和颜色曲线都由它驱动。
+    /// @result_ja 誕生時が 0、死亡時が 1。すべてのフェード、サイズ変化、カラーカーブを駆動する値です。
+    /// @result_ko 태어날 때 0, 죽을 때 1 — 모든 페이드, 크기 변화, 색 커브를 구동하는 값입니다.
+    fn age_ratio() -> f32 {
+        self.lifeRatio
+    }
+
+    /// @brief_en Walk a renderer's atlas forward over the particle's life, from the first frame to the last.
+    /// @brief_es Recorre el atlas de un renderizador a lo largo de la vida de la partícula, del primer fotograma al último.
+    /// @brief_pt Percorre o atlas de um renderizador ao longo da vida da partícula, do primeiro quadro ao último.
+    /// @brief_fr Parcourt l'atlas d'un renderer sur la durée de vie de la particule, de la première image à la dernière.
+    /// @brief_it Percorre l'atlante di un renderer lungo la vita della particella, dal primo fotogramma all'ultimo.
+    /// @brief_de Läuft über die Lebensdauer des Partikels durch den Atlas eines Renderers, vom ersten Bild zum letzten.
+    /// @brief_ru Проходит атлас рендерера за время жизни частицы, от первого кадра к последнему.
+    /// @brief_zh 在粒子的生命期内正向遍历渲染器的图集，从第一帧走到最后一帧。
+    /// @brief_ja パーティクルの寿命に沿って、レンダラーのアトラスを最初のフレームから最後のフレームへ進めます。
+    /// @brief_ko 파티클의 수명 동안 렌더러의 아틀라스를 첫 프레임부터 마지막 프레임까지 훑습니다.
+    ///
+    /// @param_en local_rend The renderer whose `Atlas.SubDiv` gives the grid. A handle, so the frame count is read from whatever the call site named.
+    /// @param_es local_rend El renderizador cuyo `Atlas.SubDiv` da la rejilla. Es un manejador, así que el número de fotogramas se lee de lo que nombró la llamada.
+    /// @param_pt local_rend O renderizador cujo `Atlas.SubDiv` dá a grade. É um identificador, então a contagem de quadros vem do que a chamada nomeou.
+    /// @param_fr local_rend Le renderer dont `Atlas.SubDiv` donne la grille. C'est une poignée : le nombre d'images est lu sur ce que le site d'appel a nommé.
+    /// @param_it local_rend Il renderer il cui `Atlas.SubDiv` fornisce la griglia. È un handle, quindi il numero di fotogrammi viene letto da ciò che la chiamata ha nominato.
+    /// @param_de local_rend Der Renderer, dessen `Atlas.SubDiv` das Raster liefert. Ein Handle, also wird die Bildanzahl von dem gelesen, was die Aufrufstelle benannt hat.
+    /// @param_ru local_rend Рендерер, чей `Atlas.SubDiv` задаёт сетку. Это дескриптор, поэтому число кадров читается у того, что назвала точка вызова.
+    /// @param_zh local_rend 提供网格的渲染器，取其 `Atlas.SubDiv`。这是一个句柄，因此帧数来自调用处所指定的渲染器。
+    /// @param_ja local_rend グリッドを与える `Atlas.SubDiv` を持つレンダラー。ハンドルなので、フレーム数は呼び出し側が指定したものから読まれます。
+    /// @param_ko local_rend `Atlas.SubDiv`로 격자를 주는 렌더러. 핸들이므로 프레임 수는 호출부가 지정한 대상에서 읽습니다.
+    ///
+    /// @result_en The 1-based atlas frame for this particle's age. Assign it to the layer's `TextureID` field.
+    /// @result_es El fotograma del atlas (base 1) para la edad de esta partícula. Asígnalo al campo `TextureID` de la capa.
+    /// @result_pt O quadro do atlas (base 1) para a idade desta partícula. Atribua-o ao campo `TextureID` da camada.
+    /// @result_fr L'image d'atlas (base 1) pour l'âge de cette particule. À affecter au champ `TextureID` du calque.
+    /// @result_it Il fotogramma dell'atlante (base 1) per l'età di questa particella. Assegnalo al campo `TextureID` del livello.
+    /// @result_de Das atlasbild (1-basiert) für das Alter dieses Partikels. Dem Feld `TextureID` der Ebene zuweisen.
+    /// @result_ru Кадр атласа (с единицы) для возраста этой частицы. Присвойте его полю `TextureID` слоя.
+    /// @result_zh 对应该粒子年龄的图集帧号（从 1 开始）。将它赋给图层的 `TextureID` 字段。
+    /// @result_ja このパーティクルの経過時間に対応するアトラスのフレーム番号（1 始まり）。レイヤーの `TextureID` フィールドに代入してください。
+    /// @result_ko 이 파티클의 나이에 해당하는 아틀라스 프레임 번호(1부터). 레이어의 `TextureID` 필드에 대입하세요.
+    fn select_texture_id_on_age(local_rend : const &Renderer) {
+        let age : f32 = self.lifeRatio;
+        let factor : f32 = (local_rend.Atlas.SubDiv.x * local_rend.Atlas.SubDiv.y - 1) as f32;
+        factor * age + 1.0
+    }
+
+    /// @brief_en Walk a renderer's atlas backward over the particle's life, from the last frame to the first.
+    /// @brief_es Recorre el atlas de un renderizador al revés a lo largo de la vida de la partícula, del último fotograma al primero.
+    /// @brief_pt Percorre o atlas de um renderizador de trás para frente ao longo da vida da partícula, do último quadro ao primeiro.
+    /// @brief_fr Parcourt l'atlas d'un renderer à rebours sur la durée de vie de la particule, de la dernière image à la première.
+    /// @brief_it Percorre l'atlante di un renderer a ritroso lungo la vita della particella, dall'ultimo fotogramma al primo.
+    /// @brief_de Läuft über die Lebensdauer des Partikels rückwärts durch den Atlas eines Renderers, vom letzten Bild zum ersten.
+    /// @brief_ru Проходит атлас рендерера в обратном порядке за время жизни частицы, от последнего кадра к первому.
+    /// @brief_zh 在粒子的生命期内反向遍历渲染器的图集，从最后一帧走回第一帧。
+    /// @brief_ja パーティクルの寿命に沿って、レンダラーのアトラスを最後のフレームから最初のフレームへ逆向きに進めます。
+    /// @brief_ko 파티클의 수명 동안 렌더러의 아틀라스를 마지막 프레임부터 첫 프레임까지 거꾸로 훑습니다.
+    ///
+    /// @param_en local_rend The renderer whose `Atlas.SubDiv` gives the grid. A handle, so the frame count is read from whatever the call site named.
+    /// @param_es local_rend El renderizador cuyo `Atlas.SubDiv` da la rejilla. Es un manejador, así que el número de fotogramas se lee de lo que nombró la llamada.
+    /// @param_pt local_rend O renderizador cujo `Atlas.SubDiv` dá a grade. É um identificador, então a contagem de quadros vem do que a chamada nomeou.
+    /// @param_fr local_rend Le renderer dont `Atlas.SubDiv` donne la grille. C'est une poignée : le nombre d'images est lu sur ce que le site d'appel a nommé.
+    /// @param_it local_rend Il renderer il cui `Atlas.SubDiv` fornisce la griglia. È un handle, quindi il numero di fotogrammi viene letto da ciò che la chiamata ha nominato.
+    /// @param_de local_rend Der Renderer, dessen `Atlas.SubDiv` das Raster liefert. Ein Handle, also wird die Bildanzahl von dem gelesen, was die Aufrufstelle benannt hat.
+    /// @param_ru local_rend Рендерер, чей `Atlas.SubDiv` задаёт сетку. Это дескриптор, поэтому число кадров читается у того, что назвала точка вызова.
+    /// @param_zh local_rend 提供网格的渲染器，取其 `Atlas.SubDiv`。这是一个句柄，因此帧数来自调用处所指定的渲染器。
+    /// @param_ja local_rend グリッドを与える `Atlas.SubDiv` を持つレンダラー。ハンドルなので、フレーム数は呼び出し側が指定したものから読まれます。
+    /// @param_ko local_rend `Atlas.SubDiv`로 격자를 주는 렌더러. 핸들이므로 프레임 수는 호출부가 지정한 대상에서 읽습니다.
+    ///
+    /// @result_en The 1-based atlas frame for this particle's remaining life. Assign it to the layer's `TextureID` field.
+    /// @result_es El fotograma del atlas (base 1) para la vida restante de esta partícula. Asígnalo al campo `TextureID` de la capa.
+    /// @result_pt O quadro do atlas (base 1) para a vida restante desta partícula. Atribua-o ao campo `TextureID` da camada.
+    /// @result_fr L'image d'atlas (base 1) pour la vie restante de cette particule. À affecter au champ `TextureID` du calque.
+    /// @result_it Il fotogramma dell'atlante (base 1) per la vita rimanente di questa particella. Assegnalo al campo `TextureID` del livello.
+    /// @result_de Das Atlasbild (1-basiert) für die verbleibende Lebensdauer dieses Partikels. Dem Feld `TextureID` der Ebene zuweisen.
+    /// @result_ru Кадр атласа (с единицы) для оставшейся жизни этой частицы. Присвойте его полю `TextureID` слоя.
+    /// @result_zh 对应该粒子剩余寿命的图集帧号（从 1 开始）。将它赋给图层的 `TextureID` 字段。
+    /// @result_ja このパーティクルの残り寿命に対応するアトラスのフレーム番号（1 始まり）。レイヤーの `TextureID` フィールドに代入してください。
+    /// @result_ko 이 파티클의 남은 수명에 해당하는 아틀라스 프레임 번호(1부터). 레이어의 `TextureID` 필드에 대입하세요.
+    fn select_texture_id_on_inv_age(local_rend : const &Renderer) {
+        let age : f32 = self.lifeRatio;
+        let factor : f32 = (local_rend.Atlas.SubDiv.x * local_rend.Atlas.SubDiv.y - 1) as f32;
+        factor * (1.0 - age) + 1.0
+    }
+}

@@ -1,0 +1,85 @@
+// Readable renderer materials. Header: `renderer H : <Type>` where Type is the geometry
+// (Billboard/Ribbon/Light/Mesh). `material = "…"` overrides the default material; a Mesh's
+// model is `path = "…"`. Then one `Name = value;` per non-default property (sampler-style):
+// `= "path"` = texture, `= true` = enabled, `= 1.0` = float, `= AlphaBlend` = named enum.
+// Properties left at their default are OMITTED and reconstructed from the material template on
+// build. Renderer INPUT bindings live in `code.cfx` (`bind rend<N> { "field" -> Slot; }`).
+
+renderer rend0 : Billboard {
+    DrawOrder = 2;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flipbooks/FB_Whisp_BW_8x8.tif";
+    Atlas.Source = 1;
+    Atlas.SubDiv = (8, 8);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer rend1 : Billboard {
+    DrawOrder = 4;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Misc/MeteorRock_Color.tif";
+}
+
+renderer rend2 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flare/FlareAmber_BW_4x2.tif";
+    Atlas.Source = 1;
+    Atlas.SubDiv = (4, 2);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer rend3 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveSoft04_BW.tif";
+}
+
+renderer rend4 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flipbooks/FB_Whisp_BW_8x8.tif";
+    Atlas.Source = 1;
+    Atlas.SubDiv = (8, 8);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer rend5 : Billboard {
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flare/FlareSimple_BW.tif";
+}
+
+renderer rend6 : Billboard {
+    DrawOrder = 3;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = (0, 3, 3, 3);
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Flare/FlareAmber_BW_4x2.tif";
+    Atlas.Source = 1;
+    Atlas.SubDiv = (4, 2);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+

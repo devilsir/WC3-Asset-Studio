@@ -6,10 +6,12 @@ const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { createEffectsBackendManager } = require('./app/node/effects-pkb-backends');
+const effectsWarcraftRuntimeTest = require('./app/node/effects-warcraft-runtime-test');
 
 const APP_SCHEME = 'wc3asset';
 const APP_HOST = 'app';
-const PRODUCT = 'WC3 Asset Studio v1.4';
+const PRODUCT = 'WC3 Asset Studio v1.5';
 const windowIcon = path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png');
 const ASSOCIATED_EXTENSIONS = new Set(['.blp','.tga','.mdl','.mdx']);
 const REGISTERED_APP_NAME = 'WC3 Asset Studio';
@@ -78,6 +80,15 @@ function readRuntimeLog(){
 }
 function clearRuntimeLog(){try{fs.writeFileSync(runtimeLogPath,'','utf8');return true;}catch(_){return false;}}
 function mainLog(level,source,message,detail=''){return appendRuntimeLog(level,source,message,detail,true);}
+
+const effectsBackendSettingsPath = path.join(portableData, 'Effects', 'backend.json');
+const effectsRuntimeTestSettingsPath = path.join(portableData, 'Effects', 'runtime-test.json');
+const effectsBackendManager = createEffectsBackendManager({
+  settingsPath: effectsBackendSettingsPath,
+  devRuntimePath: path.join(__dirname, 'tools', 'effects-lab', 'effects-runtime.exe'),
+  isPackaged: app.isPackaged,
+  logger: (level,message,detail) => mainLog(level,'Effects PKB Backend',message,detail)
+});
 
 app.setName(PRODUCT);
 app.setPath('userData', portableData);
@@ -333,7 +344,7 @@ function gitBlobSha1(buffer) {
 function downloadBuffer(url, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > 5) return reject(new Error('Too many redirects while downloading CASC support.'));
-    const req = https.get(url, { headers: { 'User-Agent': 'WC3-Asset-Studio/1.4' } }, res => {
+    const req = https.get(url, { headers: { 'User-Agent': 'WC3-Asset-Studio/1.5' } }, res => {
       const status = res.statusCode || 0;
       if (status >= 300 && status < 400 && res.headers.location) {
         res.resume();
@@ -1281,16 +1292,32 @@ function registerIpc() {
   ipcMain.handle('wc3-casc:export-assets', async (_event, payload) => exportCascAssets(payload||{}));
   ipcMain.handle('wc3-effects:status', () => effectsStatus());
   ipcMain.handle('wc3-effects:self-test', async () => effectsSelfTest());
+  ipcMain.handle('wc3-effects:runtime-test-status', () => effectsWarcraftRuntimeTestStatus());
+  ipcMain.handle('wc3-effects:choose-runtime-test-map', async () => effectsChooseRuntimeTestMap());
+  ipcMain.handle('wc3-effects:clear-runtime-test-map', () => effectsClearRuntimeTestMap());
+  ipcMain.handle('wc3-effects:open-runtime-test-folder', async () => effectsOpenRuntimeTestFolder());
+  ipcMain.handle('wc3-effects:test-in-warcraft', async (_event,payload) => effectsTestInWarcraft(payload||{}));
+  ipcMain.handle('wc3-effects:choose-backend', async () => effectsChooseBackend());
+  ipcMain.handle('wc3-effects:clear-backend', async () => effectsClearBackend());
+  ipcMain.handle('wc3-effects:choose-cfx-library', async () => effectsChooseCfxLibrary());
   ipcMain.handle('wc3-effects:launch-designer', async (_event,payload) => effectsLaunchDesigner(payload||{}));
   ipcMain.handle('wc3-effects:choose-epf', async () => effectsChooseEpf());
   ipcMain.handle('wc3-effects:save-epf', async (_event,payload) => effectsSaveEpf(payload||{}));
   ipcMain.handle('wc3-effects:choose-pkb', async () => effectsChoosePkb());
+  ipcMain.handle('wc3-effects:choose-pkb-pair', async () => effectsChoosePkbPair());
+  ipcMain.handle('wc3-effects:choose-pkb-corpus', async () => effectsChoosePkbCorpus());
+  ipcMain.handle('wc3-effects:read-pkb-path', async (_event,filePath) => effectsReadPkbPath(filePath));
+  ipcMain.handle('wc3-effects:choose-native-project', async () => effectsChooseNativeProject());
+  ipcMain.handle('wc3-effects:save-native-project', async (_event,payload) => effectsSaveNativeProject(payload||{}));
   ipcMain.handle('wc3-effects:choose-bundle', async () => effectsChooseBundle());
   ipcMain.handle('wc3-effects:read-bundle', async (_event,bundlePath) => effectsReadBundle(bundlePath));
   ipcMain.handle('wc3-effects:save-bundle', async (_event,payload) => effectsSaveBundle(payload||{}));
   ipcMain.handle('wc3-effects:decompile', async (_event,payload) => effectsDecompile(payload||{}));
   ipcMain.handle('wc3-effects:build', async (_event,payload) => effectsBuild(payload||{}));
+  ipcMain.handle('wc3-effects:oracle-bake', async (_event,payload) => effectsOracleBake(payload||{}));
   ipcMain.handle('wc3-effects:save-code', async (_event,payload) => effectsSaveCode(payload||{}));
+  ipcMain.handle('wc3-effects:choose-texture', async () => effectsChooseTexture());
+  ipcMain.handle('wc3-effects:read-texture', async (_event,texturePath) => effectsReadTexture(texturePath));
   ipcMain.handle('wc3-log:append', (_event, entry) => {
     if(!entry || typeof entry!=='object') return false;
     appendRuntimeLog(entry.level||'info',entry.source||'Renderer',entry.message||'',entry.detail||'',false);
@@ -1334,19 +1361,25 @@ function registerIpc() {
 const EFFECTS_CORE_BUNDLE_FILES = Object.freeze(['effect.cfx','code.cfx','samplers.cfx','renderers.cfx','events.cfx']);
 const EFFECTS_OPTIONAL_BUNDLE_FILES = Object.freeze(['functions.cfx']);
 const EFFECTS_BUNDLE_FILES = Object.freeze([...EFFECTS_CORE_BUNDLE_FILES,...EFFECTS_OPTIONAL_BUNDLE_FILES]);
-function effectsToolRoot(){
-  return app.isPackaged ? path.join(process.resourcesPath,'tools','effects-lab') : path.join(__dirname,'tools','effects-lab');
-}
-const EFFECTS_RUNTIME_EXECUTABLE = 'effects-runtime.exe';
-function effectsRuntimePath(){return path.join(effectsToolRoot(),EFFECTS_RUNTIME_EXECUTABLE);}
-function effectsDesignerPath(){return path.join(effectsToolRoot(),'effect-designer','Effect Designer.exe');}
+function effectsToolRoot(){return path.join(__dirname,'tools','effects-lab');}
 function effectsStatus(){
-  const runtimePath=effectsRuntimePath(),libraryPath=path.join(effectsToolRoot(),'cfxlib'),designer=effectsDesignerPath();
-  return {ready:fs.existsSync(runtimePath)&&fs.existsSync(libraryPath),runtimePath,libraryPath,legacyDesigner:designer,legacyDesignerReady:fs.existsSync(designer),toolRoot:effectsToolRoot(),platform:process.platform};
+  const backend=effectsBackendManager.status(),legacy=String(backend.settings?.legacyDesigner||'');
+  return {...backend,runtimePath:backend.selected?.executable||'',libraryPath:backend.selected?.libraryPath||'',legacyDesigner:legacy,legacyDesignerReady:!!legacy&&fs.existsSync(legacy),toolRoot:effectsToolRoot(),platform:process.platform};
+}
+async function effectsChooseBackend(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose external CFX / PKB CLI',properties:['openFile'],filters:[{name:'CFX / PKB CLI',extensions:['exe']},{name:'All files',extensions:['*']}]});
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true,...effectsStatus()};
+  const result=effectsBackendManager.configureExternal(pick.filePaths[0]);mainLog('info','Effects Lab','External PKB backend configured',{path:pick.filePaths[0],backend:result.selected?.id});return{canceled:false,...effectsStatus()};
+}
+function effectsClearBackend(){const result=effectsBackendManager.clearExternal();mainLog('info','Effects Lab','External PKB backend cleared',{backend:result.selected?.id});return effectsStatus();}
+async function effectsChooseCfxLibrary(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose optional CFX library folder',properties:['openDirectory']});
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true,...effectsStatus()};
+  effectsBackendManager.configureLibrary(pick.filePaths[0]);return{canceled:false,...effectsStatus()};
 }
 function effectsLaunchDesigner(payload={}){
-  const exe=effectsDesignerPath();if(!fs.existsSync(exe))throw new Error('Effect Designer backend is not packaged.');
-  const projectPath=String(payload.path||'').trim();const args=projectPath&&fs.existsSync(projectPath)?[projectPath]:[];const child=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:false,detached:true,stdio:'ignore'});child.unref();mainLog('info','Effects Lab','Original Effect Designer launched',{projectPath:args[0]||''});return{ok:true,path:exe,projectPath:args[0]||''};
+  const st=effectsBackendManager.status(),exe=String(st.settings?.legacyDesigner||'');if(!exe||!fs.existsSync(exe))throw new Error('Legacy Effect Designer is not bundled. Configure an external copy first if you need compatibility testing.');
+  const projectPath=String(payload.path||'').trim(),args=projectPath&&fs.existsSync(projectPath)?[projectPath]:[];const child=spawn(exe,args,{cwd:path.dirname(exe),windowsHide:false,detached:true,stdio:'ignore'});child.unref();mainLog('info','Effects Lab','External legacy Effect Designer launched',{projectPath:args[0]||'',exe});return{ok:true,path:exe,projectPath:args[0]||''};
 }
 
 function effectsReadBundle(bundlePath){
@@ -1355,33 +1388,49 @@ function effectsReadBundle(bundlePath){
   const files={};
   for(const name of EFFECTS_CORE_BUNDLE_FILES){const fp=path.join(root,name);files[name]=fs.existsSync(fp)?fs.readFileSync(fp,'utf8'):'';}
   for(const name of EFFECTS_OPTIONAL_BUNDLE_FILES){const fp=path.join(root,name);if(fs.existsSync(fp))files[name]=fs.readFileSync(fp,'utf8');}
-  return {path:root,name:path.basename(root),files};
+  return {path:root,name:path.basename(root),files,adapter:'cornsyrup-cfx'};
 }
 function effectsWriteBundle(bundlePath,files={}){
   const root=path.resolve(String(bundlePath||''));if(!root)throw new Error('Choose a CFX bundle folder.');fs.mkdirSync(root,{recursive:true});
   let written=0;
   for(const name of EFFECTS_BUNDLE_FILES){if(!Object.prototype.hasOwnProperty.call(files,name))continue;fs.writeFileSync(path.join(root,name),String(files[name]??''),'utf8');written++;}
-  return {path:root,written,files:EFFECTS_BUNDLE_FILES.filter(n=>Object.prototype.hasOwnProperty.call(files,n))};
+  return {path:root,written,files:EFFECTS_BUNDLE_FILES.filter(n=>Object.prototype.hasOwnProperty.call(files,n)),adapter:'cornsyrup-cfx'};
 }
-function runEffectsTool(args,{cwd='',timeout=120000}={}){
-  const st=effectsStatus();if(!st.ready)return Promise.reject(new Error('Effects Runtime backend is not packaged. Re-apply the Effects Lab patch.'));
-  return new Promise((resolve,reject)=>{
-    const child=spawn(st.runtimePath,args.map(x=>String(x)),{cwd:cwd||st.toolRoot,windowsHide:true});
-    let stdout='',stderr='',done=false;const cap=1024*1024;
-    const append=(cur,buf)=>{cur+=buf.toString();return cur.length>cap?cur.slice(-cap):cur;};
-    child.stdout.on('data',b=>stdout=append(stdout,b));child.stderr.on('data',b=>stderr=append(stderr,b));
-    const timer=setTimeout(()=>{if(done)return;done=true;try{child.kill();}catch(_){}reject(new Error(`Effects Runtime timed out after ${Math.round(timeout/1000)}s.`));},timeout);
-    child.on('error',err=>{if(done)return;done=true;clearTimeout(timer);reject(err);});
-    child.on('close',code=>{if(done)return;done=true;clearTimeout(timer);const result={ok:code===0,code,stdout:stdout.trim(),stderr:stderr.trim()};if(code===0)resolve(result);else reject(new Error(result.stderr||result.stdout||`Effects Runtime exited with code ${code}`));});
-  });
+async function runEffectsTool(args,{cwd='',timeout=120000}={}){
+  const command=String(args?.[0]||''),rest=(args||[]).slice(1);if(!command)throw new Error('Missing PKB backend command.');return effectsBackendManager.run(command,rest,{cwd,timeout});
 }
-async function effectsSelfTest(){
-  const st=effectsStatus();if(!st.ready)return{ready:false,...st};
-  // The packaged Effects Runtime has no stable version verb. `help` is a harmless,
-  // read-only live probe and is explicitly advertised by the runtime itself.
-  const run=await runEffectsTool(['help'],{timeout:10000});
-  const output=(run.stdout||run.stderr||'').trim();
-  return{ready:true,...st,run,output,probe:'help'};
+async function effectsSelfTest(){return effectsBackendManager.selfTest();}
+function readEffectsRuntimeTestSettings(){
+  try{const parsed=JSON.parse(fs.readFileSync(effectsRuntimeTestSettingsPath,'utf8'));return parsed&&typeof parsed==='object'?parsed:{};}catch(_){return{};}
+}
+function writeEffectsRuntimeTestSettings(next){fs.mkdirSync(path.dirname(effectsRuntimeTestSettingsPath),{recursive:true});fs.writeFileSync(effectsRuntimeTestSettingsPath,JSON.stringify(next||{},null,2),'utf8');}
+function effectsRuntimeTestWorkspace(){return path.join(portableData,'Effects','WarcraftRuntimeTest');}
+function effectsWarcraftRuntimeTestStatus(){
+  const install=warcraftInstallFolderState(),exePath=effectsWarcraftRuntimeTest.findWarcraftExe(install.installPath||''),settings=readEffectsRuntimeTestSettings(),map=effectsWarcraftRuntimeTest.validateMap(settings.mapPath||''),ext=map.ok?(map.extension||'.w3x'):effectsWarcraftRuntimeTest.runtimeMapExtension(settings.mapPath||''),graphics=effectsWarcraftRuntimeTest.detectWarcraftGraphicsMode(),classic=graphics.mode==='classic';
+  return{ready:process.platform==='win32'&&!!exePath&&map.ok&&!classic,platform:process.platform,installPath:install.installPath||'',exePath,mapPath:map.ok?map.path:String(settings.mapPath||''),mapValid:map.ok,mapLanguage:map.ok?map.language:'',mapKind:map.ok?map.kind:'',mapExtension:map.ok?map.extension:'',mapError:map.error||'',graphicsMode:graphics.mode,graphicsHd:graphics.hd,graphicsPreferencesPath:graphics.path||'',graphicsWarning:classic?'Classic graphics detected (hd=0). Warcraft PopcornFX/CORN is rendered by Reforged graphics; switch the game to Reforged before testing.':'',runtimeMapPath:path.join(effectsRuntimeTestWorkspace(),`EffectsLabTest${ext}`),launchArgs:['-launch','-loadfile'],message:process.platform!=='win32'?'Warcraft runtime testing is available on Windows.':!exePath?'Warcraft III.exe was not found in the configured installation.':classic?'Classic graphics detected (hd=0) · switch Warcraft III to Reforged graphics before testing PopcornFX/CORN.':!map.ok?(map.reason==='mpq-error'?`Packed map could not be read: ${map.error||'invalid MPQ'}`:'Choose any .w3m/.w3x map file or unpacked map folder once.'):`Ready · Reforged graphics ${graphics.mode==='unknown'?'not detected · ':''}${map.kind==='packed'?'packed MPQ':'unpacked'} ${map.extension||'.w3x'} · ${map.language.toUpperCase()}.`};
+}
+async function effectsChooseRuntimeTestMap(){
+  const current=readEffectsRuntimeTestSettings(),choice=await dialog.showMessageBox(mainWindow||undefined,{type:'question',title:'Choose Warcraft III test map',message:'Select your test map format',detail:'WC3 Asset Studio supports packed .w3m/.w3x files and unpacked .w3m/.w3x folders. The original map is never modified.',buttons:['Map file (.w3m / .w3x)','Unpacked map folder','Cancel'],defaultId:0,cancelId:2,noLink:true});
+  if(choice.response===2)return{canceled:true,...effectsWarcraftRuntimeTestStatus()};
+  const common={defaultPath:current.mapPath&&fs.existsSync(current.mapPath)?current.mapPath:undefined,buttonLabel:'Use as Effects Lab test map'};
+  const pick=choice.response===0?await dialog.showOpenDialog(mainWindow||undefined,{...common,title:'Choose Warcraft III .w3m / .w3x test map',properties:['openFile'],filters:[{name:'Warcraft III maps',extensions:['w3m','w3x']},{name:'All files',extensions:['*']}]}):await dialog.showOpenDialog(mainWindow||undefined,{...common,title:'Choose unpacked Warcraft III map folder',properties:['openDirectory']});
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true,...effectsWarcraftRuntimeTestStatus()};
+  const map=effectsWarcraftRuntimeTest.validateMap(pick.filePaths[0]);
+  if(!map.ok){const reason=map.reason==='missing-script'?'The selected map does not contain war3map.lua or war3map.j.':map.reason==='mpq-error'?`The packed map could not be read: ${map.error||'invalid MPQ'}`:'That path does not look like a Warcraft III .w3m/.w3x map.';throw new Error(reason);}
+  writeEffectsRuntimeTestSettings({...current,mapPath:map.path,selectedAt:new Date().toISOString(),mapKind:map.kind,mapExtension:map.extension});mainLog('info','Effects Runtime Test','Test map configured',{mapPath:map.path,language:map.language,kind:map.kind,extension:map.extension});return{canceled:false,...effectsWarcraftRuntimeTestStatus()};
+}
+function effectsClearRuntimeTestMap(){const current=readEffectsRuntimeTestSettings();delete current.mapPath;delete current.selectedAt;writeEffectsRuntimeTestSettings(current);mainLog('info','Effects Runtime Test','Test map configuration cleared');return effectsWarcraftRuntimeTestStatus();}
+async function effectsOpenRuntimeTestFolder(){const root=effectsRuntimeTestWorkspace();fs.mkdirSync(root,{recursive:true});const error=await shell.openPath(root);if(error)throw new Error(error);return{ok:true,path:root};}
+async function effectsTestInWarcraft(payload={}){
+  if(process.platform!=='win32')throw new Error('Warcraft runtime testing is available on Windows.');
+  let state=effectsWarcraftRuntimeTestStatus();if(!state.exePath)throw new Error('Warcraft III.exe was not found. Configure the Warcraft installation folder in CASC first.');if(state.graphicsMode==='classic')throw new Error('Classic graphics (hd=0) detected. PopcornFX/CORN effects require Reforged graphics. Switch Warcraft III to Reforged graphics, close the game, then run the test again.');
+  if(!state.mapValid){const chosen=await effectsChooseRuntimeTestMap();if(chosen.canceled)return{canceled:true,...chosen};state=effectsWarcraftRuntimeTestStatus();}
+  const pkb=effectsWarcraftRuntimeTest.bytesOf(payload.data);if(!pkb.length)throw new Error('Build a PKB before launching the runtime test.');if(pkb.length>256*1024*1024)throw new Error('Runtime test PKB exceeds the 256 MB safety limit.');
+  const workspace=effectsRuntimeTestWorkspace(),runtimeMapPath=state.runtimeMapPath||path.join(workspace,`EffectsLabTest${effectsWarcraftRuntimeTest.runtimeMapExtension(state.mapPath||'')}`);fs.mkdirSync(workspace,{recursive:true});
+  const prepared=effectsWarcraftRuntimeTest.prepareRuntimeMap({sourceMapPath:state.mapPath,destinationMapPath:runtimeMapPath,pkbData:pkb,effectName:String(payload.name||'effect'),buildSummary:payload.summary&&typeof payload.summary==='object'?payload.summary:null});
+  const args=['-launch','-loadfile',runtimeMapPath],child=spawn(state.exePath,args,{cwd:path.dirname(state.exePath),windowsHide:false,detached:true,stdio:'ignore'});child.unref();
+  const run={time:new Date().toISOString(),effectName:prepared.effectName,pkbBytes:prepared.pkbBytes,sourceMapPath:prepared.sourceMapPath,runtimeMapPath,exePath:state.exePath,args,pid:child.pid||0};fs.appendFileSync(path.join(workspace,'runtime-test-history.jsonl'),JSON.stringify(run)+'\n','utf8');
+  mainLog('info','Effects Runtime Test','Warcraft III launched with Effects Lab runtime map',run);return{canceled:false,launched:true,...prepared,exePath:state.exePath,args,pid:child.pid||0};
 }
 async function effectsChooseEpf(){
   const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open Effect Designer project',properties:['openFile'],filters:[{name:'Effect Designer Project',extensions:['epf']},{name:'All files',extensions:['*']}]});
@@ -1391,30 +1440,68 @@ async function effectsSaveEpf(payload={}){
   let target=String(payload.path||'');if(!target){const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save Effect Designer project',defaultPath:String(payload.name||'effect.epf'),filters:[{name:'Effect Designer Project',extensions:['epf']}]});if(pick.canceled||!pick.filePath)return{canceled:true};target=pick.filePath;}
   fs.writeFileSync(target,Buffer.from(String(payload.text||''),'latin1'));return{canceled:false,path:target,name:path.basename(target),bytes:fs.statSync(target).size};
 }
+function effectsPkbPayload(filePath){
+  const target=path.resolve(String(filePath||''));if(!target||!fs.existsSync(target))throw new Error('PKB file was not found.');const st=fs.statSync(target);if(!st.isFile())throw new Error('PKB path is not a file.');if(st.size>256*1024*1024)throw new Error('PKB exceeds the 256 MB inspector safety limit.');const data=fs.readFileSync(target),arrayBuffer=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);return{canceled:false,path:target,name:path.basename(target),bytes:data.length,data:arrayBuffer};
+}
 async function effectsChoosePkb(){
   const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open Warcraft PopcornFX effect',properties:['openFile'],filters:[{name:'Warcraft PopcornFX',extensions:['pkb','particles']},{name:'All files',extensions:['*']}]});
-  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const filePath=pick.filePaths[0];return{canceled:false,path:filePath,name:path.basename(filePath),bytes:fs.statSync(filePath).size};
+  if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};return effectsPkbPayload(pick.filePaths[0]);
+}
+async function effectsChoosePkbPair(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose two PKB files to compare',properties:['openFile','multiSelections'],filters:[{name:'Warcraft PopcornFX',extensions:['pkb','particles']},{name:'All files',extensions:['*']}]});
+  if(pick.canceled||!pick.filePaths?.length)return{canceled:true};if(pick.filePaths.length!==2)throw new Error('Choose exactly two PKB / .particles files for round-trip comparison.');return{canceled:false,files:pick.filePaths.map(effectsPkbPayload)};
+}
+async function effectsChoosePkbCorpus(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose PKB corpus files',properties:['openFile','multiSelections'],filters:[{name:'Warcraft effects',extensions:['pkb','particles']},{name:'All files',extensions:['*']}]});if(pick.canceled||!pick.filePaths?.length)return{canceled:true,files:[]};
+  const files=[];let totalBytes=0,truncated=false;const maxTotal=512*1024*1024;
+  for(const filePath of pick.filePaths.slice(0,256)){const st=fs.statSync(filePath);if(!st.isFile())continue;if(totalBytes+st.size>maxTotal){truncated=true;break;}const payload=effectsPkbPayload(filePath);files.push(payload);totalBytes+=payload.bytes||0;}
+  if(pick.filePaths.length>256)truncated=true;mainLog('info','Effects Lab','Local PKB corpus selected',{files:files.length,totalBytes,truncated,maxTotalBytes:maxTotal});return{canceled:false,files,truncated,totalBytes,maxTotalBytes:maxTotal};
+}
+
+async function effectsReadPkbPath(filePath){return effectsPkbPayload(filePath);}
+async function effectsChooseNativeProject(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open WC3 Effects Project',properties:['openFile'],filters:[{name:'WC3 Effects Project',extensions:['wc3fx']},{name:'JSON',extensions:['json']},{name:'All files',extensions:['*']}]});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const filePath=pick.filePaths[0],raw=fs.readFileSync(filePath,'utf8');let project;try{project=JSON.parse(raw);}catch(e){throw new Error(`Invalid WC3 Effects Project JSON: ${e.message}`);}return{canceled:false,path:filePath,name:path.basename(filePath),project};
+}
+async function effectsSaveNativeProject(payload={}){
+  let target=String(payload.path||'');const safe=String(payload.name||payload.project?.meta?.name||'effect').replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/\.wc3fx$/i,'');if(!target){const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save WC3 Effects Project',defaultPath:safe+'.wc3fx',filters:[{name:'WC3 Effects Project',extensions:['wc3fx']}]});if(pick.canceled||!pick.filePath)return{canceled:true};target=pick.filePath;}const project=payload.project&&typeof payload.project==='object'?payload.project:{};fs.writeFileSync(target,JSON.stringify(project,null,2),'utf8');return{canceled:false,path:target,name:path.basename(target),bytes:fs.statSync(target).size};
 }
 async function effectsChooseBundle(){
-  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Open CFX bundle folder',properties:['openDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};return{canceled:false,...effectsReadBundle(pick.filePaths[0])};
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Import CFX bundle folder',properties:['openDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};return{canceled:false,...effectsReadBundle(pick.filePaths[0])};
 }
 async function effectsDecompile(payload={}){
   const input=path.resolve(String(payload.inputPath||''));if(!input||!fs.existsSync(input))throw new Error('Choose a valid .pkb / .particles file first.');
-  let out=String(payload.outputDir||'');if(!out){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination for the .cfxb bundle',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};out=path.join(pick.filePaths[0],`${path.basename(input,path.extname(input))}.cfxb`);}
-  out=path.resolve(out);fs.mkdirSync(out,{recursive:true});mainLog('info','Effects Lab','Effects Runtime decompile started',{input,out});const run=await runEffectsTool(['decompile',input,out],{timeout:180000});mainLog('info','Effects Lab','Effects Runtime decompile completed',{input,out,stdout:run.stdout});return{canceled:false,run,...effectsReadBundle(out)};
+  let out=String(payload.outputDir||'');if(!out){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination for the CFX adapter bundle',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};out=path.join(pick.filePaths[0],`${path.basename(input,path.extname(input))}.cfxb`);}
+  out=path.resolve(out);fs.mkdirSync(out,{recursive:true});const selected=effectsBackendManager.resolve();mainLog('info','Effects Lab','PKB backend decompile started',{backend:selected.id,input,out});const run=await effectsBackendManager.run('decompile',[input,out],{timeout:180000});mainLog('info','Effects Lab','PKB backend decompile completed',{backend:selected.id,input,out,stdout:run.stdout});return{canceled:false,backend:selected,run,...effectsReadBundle(out)};
 }
 async function effectsBuild(payload={}){
-  const bundle=path.resolve(String(payload.bundlePath||''));if(!bundle||!fs.existsSync(bundle))throw new Error('Open or save a .cfxb folder first.');
+  const bundle=path.resolve(String(payload.bundlePath||''));if(!bundle||!fs.existsSync(bundle))throw new Error('Export/save a .cfxb adapter folder first.');
   let output=String(payload.outputPath||'');if(!output){const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Build Warcraft PopcornFX effect',defaultPath:path.basename(bundle).replace(/\.cfxb$/i,'')+'.pkb',filters:[{name:'Warcraft PopcornFX',extensions:['pkb']}]});if(pick.canceled||!pick.filePath)return{canceled:true};output=pick.filePath;}
-  output=path.resolve(output);mainLog('info','Effects Lab','Effects Runtime build started',{bundle,output});const run=await runEffectsTool(['build',bundle,output],{timeout:180000});const bytes=fs.existsSync(output)?fs.statSync(output).size:0;mainLog('info','Effects Lab','Effects Runtime build completed',{bundle,output,bytes,stdout:run.stdout});return{canceled:false,run,path:output,name:path.basename(output),bytes};
+  output=path.resolve(output);const selected=effectsBackendManager.resolve();mainLog('info','Effects Lab','PKB backend build started',{backend:selected.id,bundle,output});const run=await effectsBackendManager.run('build',[bundle,output],{timeout:180000});const bytes=fs.existsSync(output)?fs.statSync(output).size:0;mainLog('info','Effects Lab','PKB backend build completed',{backend:selected.id,bundle,output,bytes,stdout:run.stdout});return{canceled:false,backend:selected,run,path:output,name:path.basename(output),bytes};
+}
+async function effectsOracleBake(payload={}){
+  const variants=Array.isArray(payload.variants)?payload.variants.slice(0,8):[];if(variants.length<2)throw new Error('Bake Oracle requires at least two variants.');
+  const selected=effectsBackendManager.resolve();if(!selected.ready)throw new Error('Bake Oracle needs a configured PKB backend. Choose an external CFX / PKB CLI first.');
+  const stamp=new Date().toISOString().replace(/[:.]/g,'-'),token=Math.random().toString(36).slice(2,8),root=path.join(portableData,'Effects','Oracle',`${stamp}-${token}`);fs.mkdirSync(root,{recursive:true});
+  const results=[];mainLog('info','Bake Oracle','Controlled bake started',{backend:selected.id,variants:variants.length,root});
+  for(let i=0;i<variants.length;i++){const v=variants[i]||{},label=String(v.label||String.fromCharCode(65+i)).replace(/[^A-Za-z0-9_.-]+/g,'_').slice(0,40)||`V${i+1}`,files=v.files&&typeof v.files==='object'?v.files:{};const bundle=path.join(root,`${String(i+1).padStart(2,'0')}_${label}.cfxb`);effectsWriteBundle(bundle,files);const output=path.join(root,`${String(i+1).padStart(2,'0')}_${label}.pkb`);const run=await effectsBackendManager.run('build',[bundle,output],{timeout:180000});if(!fs.existsSync(output))throw new Error(`Bake Oracle backend completed without creating ${path.basename(output)}.`);const pkb=effectsPkbPayload(output);results.push({...pkb,label,value:v.value,bundlePath:bundle,run:{ok:run.ok,code:run.code,stdout:run.stdout,stderr:run.stderr}});mainLog('info','Bake Oracle','Controlled variant baked',{label,value:v.value,bytes:pkb.bytes,output});}
+  const manifest={schema:'wc3.effects.bake-oracle-run',version:1,createdAt:new Date().toISOString(),backend:{id:selected.id,label:selected.label||'',contract:selected.contract||'',source:selected.source||''},experiment:payload.meta&&typeof payload.meta==='object'?payload.meta:{},variants:results.map(x=>({label:x.label,value:x.value,name:x.name,path:x.path,bytes:x.bytes,bundlePath:x.bundlePath}))};const manifestPath=path.join(root,'manifest.json');fs.writeFileSync(manifestPath,JSON.stringify(manifest,null,2),'utf8');
+  mainLog('info','Bake Oracle','Controlled bake completed',{backend:selected.id,variants:results.length,root,manifestPath});return{canceled:false,backend:selected,workspace:root,manifestPath,variants:results};
 }
 async function effectsSaveBundle(payload={}){
-  let bundlePath=String(payload.bundlePath||'');if(!bundlePath){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination folder for CFX bundle',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const safe=String(payload.name||'effect').replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/\.cfxb$/i,'');bundlePath=path.join(pick.filePaths[0],safe+'.cfxb');}
+  let bundlePath=String(payload.bundlePath||'');if(!bundlePath){const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose destination folder for CFX adapter export',properties:['openDirectory','createDirectory']});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};const safe=String(payload.name||'effect').replace(/[^A-Za-z0-9_.-]+/g,'_').replace(/\.cfxb$/i,'');bundlePath=path.join(pick.filePaths[0],safe+'.cfxb');}
   return{canceled:false,...effectsWriteBundle(bundlePath,payload.files||{})};
 }
 async function effectsSaveCode(payload={}){
   const lang=String(payload.language||'lua').toLowerCase()==='jass'?'j':'lua';const pick=await dialog.showSaveDialog(mainWindow||undefined,{title:'Save generated effect script',defaultPath:String(payload.name||`effect.${lang}`),filters:[{name:lang==='j'?'JASS':'Lua',extensions:[lang]}]});if(pick.canceled||!pick.filePath)return{canceled:true};fs.writeFileSync(pick.filePath,String(payload.text||''),'utf8');return{canceled:false,path:pick.filePath,name:path.basename(pick.filePath),bytes:fs.statSync(pick.filePath).size};
 }
+const EFFECTS_TEXTURE_EXTENSIONS = Object.freeze(['blp','dds','tga','png','jpg','jpeg','webp','bmp']);
+function effectsTexturePayload(filePath){
+  const target=path.resolve(String(filePath||''));if(!target||!fs.existsSync(target))throw new Error('Local texture file was not found.');const stat=fs.statSync(target);if(!stat.isFile())throw new Error('Local texture path is not a file.');const ext=path.extname(target).slice(1).toLowerCase();if(!EFFECTS_TEXTURE_EXTENSIONS.includes(ext))throw new Error(`Unsupported local texture format: .${ext||'?'}`);if(stat.size>128*1024*1024)throw new Error('Local texture exceeds the 128 MB Effects Lab safety limit.');const data=fs.readFileSync(target),arrayBuffer=data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength);return{canceled:false,path:target,name:path.basename(target),extension:ext,size:data.length,data:arrayBuffer};
+}
+async function effectsChooseTexture(){
+  const pick=await dialog.showOpenDialog(mainWindow||undefined,{title:'Choose external Effects Lab texture',properties:['openFile'],filters:[{name:'Effect textures',extensions:[...EFFECTS_TEXTURE_EXTENSIONS]},{name:'All files',extensions:['*']}]});if(pick.canceled||!pick.filePaths?.[0])return{canceled:true};return effectsTexturePayload(pick.filePaths[0]);
+}
+async function effectsReadTexture(texturePath){return effectsTexturePayload(texturePath);}
 
 function createWindow() {
   mainLog('info','Main','Creating application window',{product:PRODUCT,platform:process.platform,arch:process.arch});

@@ -1,0 +1,220 @@
+// stdlib/payload.cfx — the packed semantic word that every `buildPayloadElement` call ends with.
+//
+// The trailing `int` argument of `buildPayloadElement` / `buildPayloadElementD` is NOT a bitmask of
+// independent flags. It is two byte-fields packed into one word, and the engine spells the packing
+// out itself (`Warcraft IIId.exe`, `PopcornFX::SPayloadElementView`):
+//
+//     PackSemantics(kind, lerp)  @0x143a322e0  ->  (kind << 8) | (lerp & 0xFF)
+//     UnpackLerpSemantic(p)      @0x143a8cf70  ->  p & 0xFF
+//     UnpackKind(p)              @0x143ede4b0  ->  (p >> 8) & 0xFF
+//
+// The compiler emits it as a LITERAL: the argument is registered with `Attribute_None` while every
+// other argument is `Attribute_Stream` (`ParticleScript::DeclareEvents` @0x143ada190), so it is a
+// uniform and can never be a computed per-particle value. The nodegraph frontend builds it in
+// `_AppendPayloadImpl` @0x1439e3ec0 and drops it in as a constant AST node.
+//
+// Everything here folds at build time, so naming a value costs nothing: `PackSemantics` compiles to
+// the same single int constant the baker wrote. That is the point — `768` in a decompiled blob is
+// unreadable, `PackSemantics(Lerp.None, EKind.EmittedCount)` says what the engine will do with it.
+//
+// The four values the WC3 corpus actually contains:
+//
+//     0    Generic       / None            an unlerped payload element
+//     1    Generic       / VectorLinear    interpolated between the two spawn frames
+//     258  Position      / VectorCubic     0x102 — a spawn position, cubic-interpolated
+//     768  EmittedCount  / None            0x300 — the per-child index, never lerped
+//
+// Doc comments are annotated per interface language — see the convention written out at the top of
+// `stdlib/life.cfx`.
+
+namespace payloads {
+
+    // --- low byte: SPayloadElementView::ELerpSemantic ----------------------------------------
+    //
+    // Drives `sourceCount` in `_FnBuildPayloadElementD_Impl_*`: how many source frames the engine
+    // reads to produce one child's value. `VectorCubic` is the ONLY mode that keeps the `ad`/`bd`
+    // derivative streams of the `buildPayloadElementD` form; the others discard them.
+    //
+    // The runtime also DEMOTES: when `payloadA` and `payloadB` are the same storage and the mode is
+    // not `VectorCubic`, it forces `None` and reads one frame. So `None` with two distinct payload
+    // arguments is not a way to pick the first one — it is an assertion failure in a debug engine.
+    namespace Lerp {
+
+        /// @brief_en One source frame: the child gets the value as it was, with no interpolation.
+        /// @brief_es Un solo fotograma fuente: la hija recibe el valor tal cual, sin interpolación.
+        /// @brief_pt Um único quadro fonte: a filha recebe o valor como estava, sem interpolação.
+        /// @brief_fr Une seule image source : l'enfant reçoit la valeur telle quelle, sans interpolation.
+        /// @brief_it Un solo fotogramma sorgente: la figlia riceve il valore così com'è, senza interpolazione.
+        /// @brief_de Ein Quellbild: das Kind erhält den Wert unverändert, ohne Interpolation.
+        /// @brief_ru Один исходный кадр: потомок получает значение как есть, без интерполяции.
+        /// @brief_zh 只有一个源帧：子粒子原样取得该值，不做插值。
+        /// @brief_ja ソースフレームは 1 つ。子は値をそのまま受け取り、補間は行われません。
+        /// @brief_ko 소스 프레임 하나. 자식은 값을 그대로 받고 보간하지 않습니다.
+        const None             : i32 = 0;   // one source frame
+
+        /// @brief_en Two frames, blended componentwise — the child's value lands between the two spawn frames.
+        /// @brief_es Dos fotogramas, mezclados componente a componente: el valor de la hija cae entre los dos fotogramas de nacimiento.
+        /// @brief_pt Dois quadros, misturados componente a componente — o valor da filha cai entre os dois quadros de nascimento.
+        /// @brief_fr Deux images, mélangées composante par composante — la valeur de l'enfant se place entre les deux images de naissance.
+        /// @brief_it Due fotogrammi, fusi componente per componente: il valore della figlia cade fra i due fotogrammi di nascita.
+        /// @brief_de Zwei Bilder, komponentenweise überblendet — der Wert des Kindes liegt zwischen den beiden Geburtsbildern.
+        /// @brief_ru Два кадра, смешанных покомпонентно: значение потомка попадает между двумя кадрами рождения.
+        /// @brief_zh 两个帧按分量混合 —— 子粒子的值落在两个出生帧之间。
+        /// @brief_ja 2 フレームを成分ごとに混ぜます。子の値は 2 つの出生フレームの間に置かれます。
+        /// @brief_ko 두 프레임을 성분별로 섞습니다. 자식의 값은 두 출생 프레임 사이에 놓입니다.
+        const VectorLinear     : i32 = 1;   // two frames, componentwise lerp
+
+        /// @brief_en Four sources — both frames and both derivatives. The only mode that keeps the derivative streams of the `buildPayloadElementD` form; every other mode discards them.
+        /// @brief_es Cuatro fuentes: ambos fotogramas y ambas derivadas. Es el único modo que conserva los flujos de derivadas de la forma `buildPayloadElementD`; los demás los descartan.
+        /// @brief_pt Quatro fontes: ambos os quadros e ambas as derivadas. É o único modo que preserva os fluxos de derivadas da forma `buildPayloadElementD`; os demais os descartam.
+        /// @brief_fr Quatre sources : les deux images et les deux dérivées. C'est le seul mode qui conserve les flux de dérivées de la forme `buildPayloadElementD` ; tous les autres les jettent.
+        /// @brief_it Quattro sorgenti: entrambi i fotogrammi ed entrambe le derivate. È l'unica modalità che conserva i flussi di derivate della forma `buildPayloadElementD`; le altre li scartano.
+        /// @brief_de Vier Quellen — beide Bilder und beide Ableitungen. Der einzige Modus, der die Ableitungsströme der `buildPayloadElementD`-Form behält; alle anderen verwerfen sie.
+        /// @brief_ru Четыре источника — оба кадра и обе производные. Единственный режим, сохраняющий потоки производных формы `buildPayloadElementD`; все прочие их отбрасывают.
+        /// @brief_zh 四个来源 —— 两个帧加两条导数。这是唯一保留 `buildPayloadElementD` 形式导数流的模式，其他模式都会丢弃它们。
+        /// @brief_ja ソースは 4 つ。両フレームと両方の微分値です。`buildPayloadElementD` 形式の微分ストリームを保持する唯一のモードで、他のモードはこれを捨てます。
+        /// @brief_ko 소스가 넷 — 두 프레임과 두 도함수입니다. `buildPayloadElementD` 형식의 도함수 스트림을 유지하는 유일한 모드이며, 다른 모드는 모두 버립니다.
+        const VectorCubic      : i32 = 2;   // four sources (a, b + both derivatives)
+
+        /// @brief_en Two frames blended as a normalized quaternion — the cheap rotation blend, which takes the shorter path but not at constant speed.
+        /// @brief_es Dos fotogramas mezclados como cuaternión normalizado: la mezcla de rotación barata, que toma el camino corto pero no a velocidad constante.
+        /// @brief_pt Dois quadros misturados como quatérnio normalizado — a mistura de rotação barata, que toma o caminho curto mas não a velocidade constante.
+        /// @brief_fr Deux images mélangées comme un quaternion normalisé — le mélange de rotation économique, qui prend le chemin le plus court mais pas à vitesse constante.
+        /// @brief_it Due fotogrammi fusi come quaternione normalizzato: la fusione di rotazione economica, che prende la via breve ma non a velocità costante.
+        /// @brief_de Zwei Bilder als normierte Quaternion überblendet — die günstige Rotationsmischung, die den kürzeren Weg nimmt, aber nicht mit gleichbleibender Geschwindigkeit.
+        /// @brief_ru Два кадра, смешанных как нормированный кватернион, — дешёвое смешение поворота: путь короче, но скорость непостоянна.
+        /// @brief_zh 两个帧按归一化四元数混合 —— 便宜的旋转混合，走最短路径但角速度并不恒定。
+        /// @brief_ja 2 フレームを正規化クォータニオンとして混ぜます。安価な回転補間で、最短経路を通りますが角速度は一定になりません。
+        /// @brief_ko 두 프레임을 정규화 쿼터니언으로 섞습니다. 값싼 회전 보간으로, 최단 경로를 지나지만 속도는 일정하지 않습니다.
+        const QuaternionNlerp  : i32 = 3;   // two frames, normalized lerp
+
+        /// @brief_en Two frames blended along the great circle — constant angular speed, at more cost than the normalized form.
+        /// @brief_es Dos fotogramas mezclados a lo largo del círculo máximo: velocidad angular constante, a mayor coste que la forma normalizada.
+        /// @brief_pt Dois quadros misturados ao longo do círculo máximo — velocidade angular constante, a um custo maior que a forma normalizada.
+        /// @brief_fr Deux images mélangées le long du grand cercle — vitesse angulaire constante, plus coûteuse que la forme normalisée.
+        /// @brief_it Due fotogrammi fusi lungo il cerchio massimo: velocità angolare costante, a costo maggiore della forma normalizzata.
+        /// @brief_de Zwei Bilder entlang des Großkreises überblendet — gleichbleibende Winkelgeschwindigkeit, teurer als die normierte Form.
+        /// @brief_ru Два кадра, смешанных по большой окружности, — постоянная угловая скорость, дороже нормированной формы.
+        /// @brief_zh 两个帧沿大圆混合 —— 角速度恒定，代价高于归一化那种形式。
+        /// @brief_ja 2 フレームを大円に沿って混ぜます。角速度は一定ですが、正規化版より高コストです。
+        /// @brief_ko 두 프레임을 대원을 따라 섞습니다. 각속도가 일정하지만 정규화 방식보다 비쌉니다.
+        const QuaternionSlerp  : i32 = 4;   // two frames, spherical lerp
+    }
+
+    // --- high byte: SParticleDeclaration::SEvent::SPayload::EKind ------------------------------
+    //
+    // What the payload element MEANS to the spawn machinery. Every overload re-packs the kind into
+    // the payload cache header (`SEventHeader_PayloadData::m_PackedSemantic`), where the spawn
+    // XForm reads it — that is all `Position` and `Orientation` do.
+    //
+    // `EmittedCount` is the only kind the interpreter itself branches on, and it is wired in
+    // EXACTLY TWO of the thirteen `_FnBuildPayloadElementD_Impl_*` overloads: `int_` and
+    // `TVector_int_1___` — the same scalar int under two spellings. Every other width
+    // (float, float2/3/4, int2/3/4, orientation) nails `isEmittedCount = 0` at compile time; the
+    // quaternion template even instantiates `_BuildEmittedCount_Inline`/`_Deferred` into branches
+    // that can never be taken. So:
+    //
+    //     EKind.EmittedCount on a SCALAR INT element  -> each child gets its running index
+    //     EKind.EmittedCount on anything else         -> stored in the header, otherwise INERT
+    //
+    // Measured by decompiling all thirteen overloads, not inferred from two of them.
+    namespace EKind {
+
+        /// @brief_en An ordinary payload element with no meaning to the spawn machinery — the right answer for everything that is not a transform or the child index.
+        /// @brief_es Un elemento de carga corriente, sin significado para la maquinaria de generación: la respuesta correcta para todo lo que no sea una transformación ni el índice de hija.
+        /// @brief_pt Um elemento de carga comum, sem significado para a maquinaria de geração — a resposta certa para tudo que não seja uma transformação nem o índice da filha.
+        /// @brief_fr Un élément de charge ordinaire, sans signification pour la machinerie d'engendrement — la bonne réponse pour tout ce qui n'est ni une transformation ni l'indice de l'enfant.
+        /// @brief_it Un elemento di payload comune, senza significato per il meccanismo di generazione: la risposta giusta per tutto ciò che non è una trasformazione né l'indice della figlia.
+        /// @brief_de Ein gewöhnliches Nutzlastelement ohne Bedeutung für die Spawn-Maschinerie — die richtige Wahl für alles, was weder eine Transformation noch der Kindindex ist.
+        /// @brief_ru Обычный элемент нагрузки, ничего не значащий для машинерии порождения, — верный выбор для всего, кроме преобразования и индекса потомка.
+        /// @brief_zh 一个普通的负载元素，对生成机制没有特殊含义 —— 除变换和子粒子索引以外的一切都该用它。
+        /// @brief_ja スポーン機構にとって特別な意味を持たない通常のペイロード要素です。変換でも子インデックスでもないものはすべてこれが正解です。
+        /// @brief_ko 스폰 기계에 특별한 의미가 없는 일반 페이로드 요소입니다. 변환도 자식 인덱스도 아닌 것은 모두 이것이 맞습니다.
+        const Generic      : i32 = 0;
+
+        /// @brief_en A spawn position. The kind is written into the payload cache header, where the spawn transform reads it.
+        /// @brief_es Una posición de nacimiento. El tipo se escribe en la cabecera de la caché de cargas, de donde lo lee la transformación de generación.
+        /// @brief_pt Uma posição de nascimento. O tipo é escrito no cabeçalho do cache de cargas, de onde a transformação de geração o lê.
+        /// @brief_fr Une position de naissance. Le genre est inscrit dans l'en-tête du cache de charges, où la transformation d'engendrement le lit.
+        /// @brief_it Una posizione di nascita. Il genere viene scritto nell'intestazione della cache dei payload, da cui la trasformazione di generazione lo legge.
+        /// @brief_de Eine Geburtsposition. Die Art wird in den Kopf des Nutzlast-Caches geschrieben, wo die Spawn-Transformation sie liest.
+        /// @brief_ru Позиция рождения. Вид записывается в заголовок кэша нагрузок, откуда его читает преобразование порождения.
+        /// @brief_zh 一个出生位置。该种类会写入负载缓存头部，生成变换会从那里读取。
+        /// @brief_ja 出生位置です。種別はペイロードキャッシュのヘッダに書き込まれ、スポーン変換がそこから読み取ります。
+        /// @brief_ko 출생 위치입니다. 종류는 페이로드 캐시 헤더에 기록되고 스폰 변환이 거기서 읽습니다.
+        const Position     : i32 = 1;   // Kind_Builtin_XForms_Position
+
+        /// @brief_en A spawn orientation, handled the same way `Position` is — recorded in the header for the spawn transform.
+        /// @brief_es Una orientación de nacimiento, tratada igual que `Position`: se anota en la cabecera para la transformación de generación.
+        /// @brief_pt Uma orientação de nascimento, tratada como `Position` — registrada no cabeçalho para a transformação de geração.
+        /// @brief_fr Une orientation de naissance, traitée comme `Position` — consignée dans l'en-tête pour la transformation d'engendrement.
+        /// @brief_it Un orientamento di nascita, trattato come `Position`: annotato nell'intestazione per la trasformazione di generazione.
+        /// @brief_de Eine Geburtsausrichtung, genauso behandelt wie `Position` — im Kopf für die Spawn-Transformation vermerkt.
+        /// @brief_ru Ориентация при рождении, обрабатывается так же, как `Position`, — записывается в заголовок для преобразования порождения.
+        /// @brief_zh 一个出生朝向，处理方式与 `Position` 相同 —— 记录在头部供生成变换使用。
+        /// @brief_ja 出生時の向きです。`Position` と同じ扱いで、スポーン変換のためにヘッダへ記録されます。
+        /// @brief_ko 출생 시의 방향입니다. `Position`과 같은 방식으로 스폰 변환을 위해 헤더에 기록됩니다.
+        const Orientation  : i32 = 2;   // Kind_Builtin_XForms_Orientation
+
+        /// @brief_en Each child's running index within the burst. Only ACTS on a scalar int element — on any other width the engine stores the kind and does nothing with it.
+        /// @brief_es El índice correlativo de cada hija dentro de la ráfaga. Solo SURTE EFECTO sobre un elemento entero escalar: en cualquier otra anchura el motor guarda el tipo y no hace nada con él.
+        /// @brief_pt O índice corrente de cada filha dentro da rajada. Só TEM EFEITO sobre um elemento inteiro escalar — em qualquer outra largura o motor guarda o tipo e nada faz com ele.
+        /// @brief_fr L'indice courant de chaque enfant au sein de la salve. N'AGIT que sur un élément entier scalaire — pour toute autre largeur, le moteur enregistre le genre sans rien en faire.
+        /// @brief_it L'indice progressivo di ogni figlia all'interno della raffica. AGISCE solo su un elemento intero scalare: con qualsiasi altra larghezza il motore memorizza il genere e non ne fa nulla.
+        /// @brief_de Der laufende Index jedes Kindes innerhalb des Stoßes. WIRKT nur auf ein skalares Int-Element — bei jeder anderen Breite speichert die Engine die Art und tut nichts damit.
+        /// @brief_ru Порядковый номер каждого потомка внутри залпа. ДЕЙСТВУЕТ только на скалярный int-элемент — при любой другой ширине движок сохраняет вид и ничего с ним не делает.
+        /// @brief_zh 每个子粒子在这一批中的序号。只有对标量 int 元素才真正生效 —— 其他宽度下引擎只是存下种类，不做任何事。
+        /// @brief_ja バースト内での各子の連番です。実際に作用するのはスカラー int 要素のときだけで、それ以外の幅ではエンジンは種別を保存するだけで何もしません。
+        /// @brief_ko 폭발 안에서 각 자식의 일련 번호입니다. 스칼라 int 요소일 때만 실제로 동작하고, 다른 폭에서는 엔진이 종류만 저장할 뿐 아무것도 하지 않습니다.
+        const EmittedCount : i32 = 3;   // Kind_Builtin_EmittedCount
+    }
+
+    /// @brief_en Pack a payload element's interpolation mode and kind into the word `buildPayloadElement` takes as its last argument. NOTE the argument order: `lerp` first, then `kind` — the engine's own `PackSemantics` takes them the other way round.
+    /// @brief_es Empaqueta el modo de interpolación y el tipo de un elemento de carga en la palabra que `buildPayloadElement` toma como último argumento. FÍJATE en el orden: primero `lerp` y luego `kind`; el `PackSemantics` del motor los toma al revés.
+    /// @brief_pt Compacta o modo de interpolação e o tipo de um elemento de carga na palavra que `buildPayloadElement` recebe como último argumento. REPARE na ordem: primeiro `lerp`, depois `kind` — o `PackSemantics` do motor os recebe ao contrário.
+    /// @brief_fr Compacte le mode d'interpolation et le genre d'un élément de charge dans le mot que `buildPayloadElement` prend en dernier argument. ATTENTION à l'ordre : `lerp` d'abord, puis `kind` — le `PackSemantics` du moteur les prend dans l'autre sens.
+    /// @brief_it Compatta la modalità di interpolazione e il genere di un elemento di payload nella parola che `buildPayloadElement` prende come ultimo argomento. ATTENZIONE all'ordine: prima `lerp`, poi `kind`; il `PackSemantics` del motore li prende al contrario.
+    /// @brief_de Packt Interpolationsmodus und Art eines Nutzlastelements in das Wort, das `buildPayloadElement` als letztes Argument nimmt. ACHTUNG auf die Reihenfolge: erst `lerp`, dann `kind` — das `PackSemantics` der Engine nimmt sie andersherum.
+    /// @brief_ru Упаковывает режим интерполяции и вид элемента нагрузки в слово, которое `buildPayloadElement` берёт последним аргументом. ОБРАТИТЕ внимание на порядок: сначала `lerp`, затем `kind` — собственный `PackSemantics` движка берёт их наоборот.
+    /// @brief_zh 把负载元素的插值模式和种类打包成 `buildPayloadElement` 的最后一个参数。注意参数顺序：先 `lerp` 后 `kind` —— 引擎自己的 `PackSemantics` 顺序正好相反。
+    /// @brief_ja ペイロード要素の補間方法と種別を、`buildPayloadElement` の最後の引数となる語に詰め込みます。引数の順序に注意してください。`lerp` が先で `kind` が後です。エンジン自身の `PackSemantics` は逆順です。
+    /// @brief_ko 페이로드 요소의 보간 방식과 종류를 `buildPayloadElement`의 마지막 인자가 되는 워드로 묶습니다. 인자 순서에 주의하세요. `lerp`가 먼저이고 `kind`가 나중입니다. 엔진 자체의 `PackSemantics`는 그 반대입니다.
+    ///
+    /// @param_en lerp How many source frames the engine reads, from `Lerp`.
+    /// @param_es lerp Cuántos fotogramas fuente lee el motor, de `Lerp`.
+    /// @param_pt lerp Quantos quadros fonte o motor lê, de `Lerp`.
+    /// @param_fr lerp Combien d'images sources le moteur lit, parmi `Lerp`.
+    /// @param_it lerp Quanti fotogrammi sorgente legge il motore, da `Lerp`.
+    /// @param_de lerp Wie viele Quellbilder die Engine liest, aus `Lerp`.
+    /// @param_ru lerp Сколько исходных кадров читает движок, из `Lerp`.
+    /// @param_zh lerp 引擎读取多少个源帧，取自 `Lerp`。
+    /// @param_ja lerp エンジンが読むソースフレーム数。`Lerp` から選びます。
+    /// @param_ko lerp 엔진이 읽는 소스 프레임 수. `Lerp`에서 고릅니다.
+    ///
+    /// @param_en kind What the element means to the spawn machinery, from `EKind`. Defaults to `Generic`, which is right for every element that is not a spawn transform or the emitted-count index.
+    /// @param_es kind Lo que el elemento significa para la maquinaria de generación, de `EKind`. Por omisión es `Generic`, que es lo correcto para todo elemento que no sea una transformación de nacimiento ni el índice de emisión.
+    /// @param_pt kind O que o elemento significa para a maquinaria de geração, de `EKind`. O padrão é `Generic`, correto para todo elemento que não seja uma transformação de nascimento nem o índice de emissão.
+    /// @param_fr kind Ce que l'élément signifie pour la machinerie d'engendrement, parmi `EKind`. Vaut `Generic` par défaut, ce qui convient à tout élément qui n'est ni une transformation de naissance ni l'indice d'émission.
+    /// @param_it kind Che cosa significa l'elemento per il meccanismo di generazione, da `EKind`. Il valore predefinito è `Generic`, giusto per ogni elemento che non sia una trasformazione di nascita né l'indice di emissione.
+    /// @param_de kind Was das Element für die Spawn-Maschinerie bedeutet, aus `EKind`. Standard ist `Generic`, richtig für jedes Element, das weder eine Geburtstransformation noch der Emissionsindex ist.
+    /// @param_ru kind Что элемент значит для машинерии порождения, из `EKind`. По умолчанию `Generic` — верно для всякого элемента, кроме преобразования рождения и индекса эмиссии.
+    /// @param_zh kind 该元素对生成机制的含义，取自 `EKind`。默认为 `Generic`，适用于除出生变换和发射序号以外的所有元素。
+    /// @param_ja kind その要素がスポーン機構にとって何を意味するか。`EKind` から選びます。既定は `Generic` で、出生変換でも放出インデックスでもない要素はすべてこれで正しくなります。
+    /// @param_ko kind 그 요소가 스폰 기계에 어떤 의미인지. `EKind`에서 고릅니다. 기본값은 `Generic`이며, 출생 변환도 방출 인덱스도 아닌 모든 요소에 맞습니다.
+    ///
+    /// @result_en The packed word. Folds at build time, so naming the values costs nothing.
+    /// @result_es La palabra empaquetada. Se pliega en compilación, así que nombrar los valores no cuesta nada.
+    /// @result_pt A palavra compactada. É dobrada em tempo de compilação, então nomear os valores não custa nada.
+    /// @result_fr Le mot compacté. Il est replié à la compilation, donc nommer les valeurs ne coûte rien.
+    /// @result_it La parola compattata. Viene ripiegata in compilazione, quindi dare un nome ai valori non costa nulla.
+    /// @result_de Das gepackte Wort. Es wird zur Bauzeit gefaltet, das Benennen der Werte kostet also nichts.
+    /// @result_ru Упакованное слово. Свёртывается на этапе сборки, поэтому именование значений ничего не стоит.
+    /// @result_zh 打包后的字。它在构建期折叠，因此给这些值起名字不会有任何开销。
+    /// @result_ja 詰め込まれた語。ビルド時に畳まれるため、値に名前を付けても一切コストはかかりません。
+    /// @result_ko 묶인 워드. 빌드 시점에 접히므로 값에 이름을 붙여도 비용이 전혀 없습니다.
+    ///
+    /// `kind * 256` rather than a shift: the compiler folds integer `*` and `|` exactly, but leaves
+    /// `<<` to the VM (see `const_fold::fold_binop`), and a value that does not fold would put real
+    /// arithmetic in front of an argument the engine requires to be a uniform.
+    fn PackSemantics(lerp: i32, kind: i32 = 0) -> i32 { (kind * 256) | lerp }
+}

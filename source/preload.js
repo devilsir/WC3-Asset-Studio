@@ -28,16 +28,32 @@ contextBridge.exposeInMainWorld('WC3_CASC', Object.freeze({
 contextBridge.exposeInMainWorld('WC3_EFFECTS', Object.freeze({
   status: () => ipcRenderer.invoke('wc3-effects:status'),
   selfTest: () => ipcRenderer.invoke('wc3-effects:self-test'),
+  runtimeTestStatus: () => ipcRenderer.invoke('wc3-effects:runtime-test-status'),
+  chooseRuntimeTestMap: () => ipcRenderer.invoke('wc3-effects:choose-runtime-test-map'),
+  clearRuntimeTestMap: () => ipcRenderer.invoke('wc3-effects:clear-runtime-test-map'),
+  openRuntimeTestFolder: () => ipcRenderer.invoke('wc3-effects:open-runtime-test-folder'),
+  testInWarcraft: payload => ipcRenderer.invoke('wc3-effects:test-in-warcraft', payload && typeof payload==='object' ? payload : {}),
+  chooseBackend: () => ipcRenderer.invoke('wc3-effects:choose-backend'),
+  clearBackend: () => ipcRenderer.invoke('wc3-effects:clear-backend'),
+  chooseCfxLibrary: () => ipcRenderer.invoke('wc3-effects:choose-cfx-library'),
   launchDesigner: payload => ipcRenderer.invoke('wc3-effects:launch-designer', payload && typeof payload==='object' ? payload : {}),
   chooseEpf: () => ipcRenderer.invoke('wc3-effects:choose-epf'),
   saveEpf: payload => ipcRenderer.invoke('wc3-effects:save-epf', payload && typeof payload==='object' ? payload : {}),
   choosePkb: () => ipcRenderer.invoke('wc3-effects:choose-pkb'),
+  choosePkbPair: () => ipcRenderer.invoke('wc3-effects:choose-pkb-pair'),
+  choosePkbCorpus: () => ipcRenderer.invoke('wc3-effects:choose-pkb-corpus'),
+  readPkbPath: filePath => ipcRenderer.invoke('wc3-effects:read-pkb-path', String(filePath||'')),
+  chooseNativeProject: () => ipcRenderer.invoke('wc3-effects:choose-native-project'),
+  saveNativeProject: payload => ipcRenderer.invoke('wc3-effects:save-native-project', payload && typeof payload==='object' ? payload : {}),
   chooseBundle: () => ipcRenderer.invoke('wc3-effects:choose-bundle'),
   readBundle: bundlePath => ipcRenderer.invoke('wc3-effects:read-bundle', String(bundlePath||'')),
   saveBundle: payload => ipcRenderer.invoke('wc3-effects:save-bundle', payload && typeof payload==='object' ? payload : {}),
   decompile: payload => ipcRenderer.invoke('wc3-effects:decompile', payload && typeof payload==='object' ? payload : {}),
   build: payload => ipcRenderer.invoke('wc3-effects:build', payload && typeof payload==='object' ? payload : {}),
-  saveCode: payload => ipcRenderer.invoke('wc3-effects:save-code', payload && typeof payload==='object' ? payload : {})
+  oracleBake: payload => ipcRenderer.invoke('wc3-effects:oracle-bake', payload && typeof payload==='object' ? payload : {}),
+  saveCode: payload => ipcRenderer.invoke('wc3-effects:save-code', payload && typeof payload==='object' ? payload : {}),
+  chooseTexture: () => ipcRenderer.invoke('wc3-effects:choose-texture'),
+  readTexture: texturePath => ipcRenderer.invoke('wc3-effects:read-texture', String(texturePath||''))
 }));
 
 contextBridge.exposeInMainWorld('WC3_LOCAL_FILES', Object.freeze({

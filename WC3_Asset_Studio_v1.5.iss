@@ -1,5 +1,5 @@
 #define MyAppName "WC3 Asset Studio"
-#define MyAppVersion "1.4"
+#define MyAppVersion "1.5"
 #define MyAppPublisher "DarkSir#1620"
 #define MyAppExeName "WC3 Asset Studio.exe"
 
@@ -13,7 +13,7 @@ DefaultDirName={localappdata}\Programs\WC3 Asset Studio
 DefaultGroupName=WC3 Asset Studio
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=WC3 Asset Studio v1.4 Setup
+OutputBaseFilename=WC3 Asset Studio v1.5 Setup
 SetupIconFile=assets\icon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/ultra64
@@ -23,7 +23,7 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-VersionInfoVersion=1.4.0.0
+VersionInfoVersion=1.5.0.0
 VersionInfoProductName=WC3 Asset Studio
 VersionInfoDescription=WC3 Asset Studio Installer
 VersionInfoCompany={#MyAppPublisher}

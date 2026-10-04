@@ -1,0 +1,29 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+// Authoritative effect structure (Phase-4 B). Owned children nest under their container;
+// cross-references are `&handle`. Blob bytecode is recompiled from code.cfx (shells carry an
+// empty `Blob`). `build` desugars this to node-text, then parses it.
+
+attributes {
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &L0;
+    &L0 emits "Signal" -> [&L1, &L2, &L4];
+    &L1 emits "__e_Child";
+    &L1 emits "__e_OnDeath";
+    &L2 emits "__e_Child" -> &L3;
+    &L2 emits "__e_OnDeath";
+    &L4 emits "__e_Child" -> &L5;
+    &L4 emits "__e_OnDeath";
+    entry;
+    entry "Root" fires &L0."Signal";
+}
+

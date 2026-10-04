@@ -1,0 +1,17 @@
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler BlueOrbSize : Curve {
+    keys 2 {
+        0 = 1.25 in 0 out 0
+        1 = 0.08 in 0 out 0
+    }
+}
+
+sampler BlueOrbAlpha : Curve {
+    keys 2 {
+        0 = 1 in 0 out 0
+        1 = 0 in 0 out 0
+    }
+}

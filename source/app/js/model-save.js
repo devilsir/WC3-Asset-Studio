@@ -55,6 +55,7 @@
     KMTF:[1,'uint'],KMTA:[1,'float'],KMTE:[1,'float'],KFC3:[3,'float'],KFCA:[1,'float'],KFTC:[1,'float'],
     KCTR:[3,'float'],KCRL:[1,'float'],KTTR:[3,'float'],
     KP2E:[1,'float'],KP2G:[1,'float'],KP2L:[1,'float'],KP2R:[1,'float'],KP2N:[1,'float'],KP2W:[1,'float'],KP2S:[1,'float'],KP2V:[1,'float'],
+    KPPL:[1,'float'],KPPE:[1,'float'],KPPS:[1,'float'],KPPC:[3,'float'],KPPA:[1,'float'],KPPV:[1,'float'],
     KGAO:[1,'float'],KGAC:[3,'float']
   };
   function trackBinary(tag,track){
@@ -100,11 +101,19 @@
   function cameraRecordFull(cam){const tracks=trackSetBinary(cam&&cam.tracks,['KCTR','KCRL','KTTR']),size=120+tracks.length,out=new Uint8Array(size),view=new DataView(out.buffer);view.setUint32(0,size,true);writeLatinZ(out,4,80,cam.name||'Camera');let p=84;for(const x of vec3(cam.position)){view.setFloat32(p,x,true);p+=4;}view.setFloat32(p,f(cam.fieldOfView,.7),true);p+=4;view.setFloat32(p,f(cam.farClippingPlane,5000),true);p+=4;view.setFloat32(p,f(cam.nearClippingPlane,8),true);p+=4;for(const x of vec3(cam.targetPosition)){view.setFloat32(p,x,true);p+=4;}if(tracks.length)out.set(tracks,p);return out;}
   function camerasData(model){const parts=(model.cameras||[]).filter(Boolean).map(cameraRecordFull);return parts.length?concat(parts):new Uint8Array();}
   function emitter2OuterFull(node){
-    const g=genericRecordFull(node),fixed=new Uint8Array(171),v=new DataView(fixed.buffer);let p=0;[node.speed,node.variation,node.latitude,node.gravity,node.lifeSpan,node.emissionRate,node.width,node.length].forEach(x=>{v.setFloat32(p,f(x,0),true);p+=4;});v.setUint32(p,i(node.filterMode,1)>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.rows,1))>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.columns,1))>>>0,true);p+=4;v.setUint32(p,i(node.headOrTail,0)>>>0,true);p+=4;v.setFloat32(p,f(node.tailLength,0),true);p+=4;v.setFloat32(p,f(node.timeMiddle,.5),true);p+=4;
+    const g=genericRecordFull(node),fixed=new Uint8Array(171),v=new DataView(fixed.buffer);let p=0;[node.speed,node.variation,node.latitude,node.gravity,node.lifeSpan,node.emissionRate,node.length,node.width].forEach(x=>{v.setFloat32(p,f(x,0),true);p+=4;});v.setUint32(p,i(node.filterMode,1)>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.rows,1))>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.columns,1))>>>0,true);p+=4;v.setUint32(p,i(node.headOrTail,0)>>>0,true);p+=4;v.setFloat32(p,f(node.tailLength,0),true);p+=4;v.setFloat32(p,f(node.timeMiddle,.5),true);p+=4;
     const colors=node.segmentColors||[[1,1,1],[1,.5,.2],[0,0,0]];for(let c=0;c<3;c++)for(const x of vec3(colors[c]||[1,1,1])){v.setFloat32(p,x,true);p+=4;}const alphas=node.segmentAlphas||[255,255,0];for(let a=0;a<3;a++)fixed[p++]=Math.max(0,Math.min(255,i(alphas[a],255)));const scale=node.segmentScaling||[1,1,1];for(let k=0;k<3;k++){v.setFloat32(p,f(scale[k],1),true);p+=4;}const h=node.headIntervals||[[0,0,0],[0,0,0]],t=node.tailIntervals||[[0,0,0],[0,0,0]];for(const set of [h[0],h[1],t[0],t[1]])for(let n=0;n<3;n++){v.setUint32(p,Math.max(0,i(set&&set[n],0))>>>0,true);p+=4;}v.setInt32(p,i(node.textureId,0),true);p+=4;v.setUint32(p,i(node.squirt,0)>>>0,true);p+=4;v.setInt32(p,i(node.priorityPlane,0),true);p+=4;v.setUint32(p,i(node.replaceableId,0)>>>0,true);p+=4;
     const extra=trackSetBinary(node&&node.tracks,['KP2E','KP2G','KP2L','KP2R','KP2N','KP2W','KP2S','KP2V']),total=4+g.length+fixed.length+extra.length,out=new Uint8Array(total),ov=new DataView(out.buffer);ov.setUint32(0,total,true);let q=4;out.set(g,q);q+=g.length;out.set(fixed,q);q+=fixed.length;if(extra.length)out.set(extra,q);return out;
   }
   function emitters2Data(model){const parts=(model.particleEmitters2||[]).filter(n=>n&&!n.__deleted).map(emitter2OuterFull);return parts.length?concat(parts):new Uint8Array();}
+  function popcornOuterFull(node){
+    const g=genericRecordFull(node),fixed=new Uint8Array(552),v=new DataView(fixed.buffer);
+    v.setFloat32(0,f(node.lifeSpan,1),true);v.setFloat32(4,f(node.emissionRate,1),true);v.setFloat32(8,f(node.speed,1),true);
+    const c=Array.isArray(node.color)?node.color:[1,1,1];v.setFloat32(12,f(c[0],1),true);v.setFloat32(16,f(c[1],1),true);v.setFloat32(20,f(c[2],1),true);
+    v.setFloat32(24,f(node.alpha,1),true);v.setUint32(28,i(node.replaceableId,0)>>>0,true);writeLatinZ(fixed,32,260,node.path||'');writeLatinZ(fixed,292,260,node.animationVisibilityGuide||'');
+    const extra=trackSetBinary(node&&node.tracks,['KPPL','KPPE','KPPS','KPPC','KPPA','KPPV']),total=4+g.length+fixed.length+extra.length,out=new Uint8Array(total),ov=new DataView(out.buffer);ov.setUint32(0,total,true);let q=4;out.set(g,q);q+=g.length;out.set(fixed,q);q+=fixed.length;if(extra.length)out.set(extra,q);return out;
+  }
+  function popcornData(model){const parts=(model.popcornEmitters||[]).filter(n=>n&&!n.__deleted).map(popcornOuterFull);return parts.length?concat(parts):new Uint8Array();}
   function cameraRecord(cam){
     const out=new Uint8Array(120), view=new DataView(out.buffer); view.setUint32(0,120,true); writeLatinZ(out,4,80,cam.name||'Camera');
     let p=84; for(const x of vec3(cam.position)){view.setFloat32(p,x,true);p+=4;}
@@ -117,7 +126,7 @@
   }
   function emitter2Outer(node){
     const g=genericRecord(node), fixed=new Uint8Array(171), v=new DataView(fixed.buffer); let p=0;
-    const floats=[node.speed,node.variation,node.latitude,node.gravity,node.lifeSpan,node.emissionRate,node.width,node.length];
+    const floats=[node.speed,node.variation,node.latitude,node.gravity,node.lifeSpan,node.emissionRate,node.length,node.width];
     floats.forEach(x=>{v.setFloat32(p,f(x,0),true);p+=4;});
     v.setUint32(p,i(node.filterMode,1)>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.rows,1))>>>0,true);p+=4;v.setUint32(p,Math.max(1,i(node.columns,1))>>>0,true);p+=4;v.setUint32(p,i(node.headOrTail,0)>>>0,true);p+=4;
     v.setFloat32(p,f(node.tailLength,0),true);p+=4;v.setFloat32(p,f(node.timeMiddle,.5),true);p+=4;
@@ -328,7 +337,7 @@
 
   function saveMDX(source,model){
     if(model&&model.__animationEdited&&window.WC3_MODEL_ANIMATION_SAVE?.patchMdxSource)source=window.WC3_MODEL_ANIMATION_SAVE.patchMdxSource(source,model);
-    const parsed=topChunks(source), defs=model.textureDefs||[], customNodes=(model.nodes||[]).filter(n=>n&&n.__custom), customAttachments=customNodes.filter(n=>n.type==='Attachment'), customEmitters=customNodes.filter(n=>n.type==='ParticleEmitter2'), customCameras=(model.cameras||[]).filter(c=>c&&c.__custom);
+    const parsed=topChunks(source), defs=model.textureDefs||[], customNodes=(model.nodes||[]).filter(n=>n&&n.__custom), customAttachments=customNodes.filter(n=>n.type==='Attachment'), customEmitters=customNodes.filter(n=>n.type==='ParticleEmitter2'), customPopcorn=customNodes.filter(n=>n.type==='ParticleEmitterPopcorn'), customCameras=(model.cameras||[]).filter(c=>c&&c.__custom);
     const byTag=new Map();parsed.chunks.forEach((c,idx)=>{if(!byTag.has(c.tag))byTag.set(c.tag,[]);byTag.get(c.tag).push({c,idx});});
     const replacements=new Map(), consumed=new Set();
     function replaceFirst(tag,data,onlyIfNeeded=true){const arr=byTag.get(tag)||[];if(arr.length){replacements.set(arr[0].idx,chunk(tag,data));consumed.add(tag);return;} if(!onlyIfNeeded||data.length) replacements.set(`append:${tag}`,chunk(tag,data));}
@@ -337,6 +346,7 @@
     if(model.__materialEdited)replaceFirst('MTLS',materialsData(model),false);
     if(model.__cameraEdited)replaceFirst('CAMS',camerasData(model),false);
     if(model.__effectsEdited)replaceFirst('PRE2',emitters2Data(model),false);
+    if(model.__popcornEdited)replaceFirst('CORN',popcornData(model),false);
     if(model.__geosetAnimationsEdited)replaceFirst('GEOA',geosetAnimationsData(model),false);
     if(model.__sequenceExtentsEdited){const seqExisting=(byTag.get('SEQS')||[])[0]?.c.data;if(seqExisting)replaceFirst('SEQS',patchSequenceExtentsMdx(seqExisting,model),false);}
     const clones=geosetClones(model),imports=importedGeosets(model);
@@ -350,10 +360,11 @@
     if(customCameras.length&&!model.__cameraEdited){const ex=(byTag.get('CAMS')||[])[0]?.c.data;replaceFirst('CAMS',appendData(ex,customCameras.map(cameraRecord)),false);}
     if(customAttachments.length){const ex=(byTag.get('ATCH')||[])[0]?.c.data;replaceFirst('ATCH',appendData(ex,customAttachments.map(attachmentOuter)),false);}
     if(customEmitters.length&&!model.__effectsEdited){const ex=(byTag.get('PRE2')||[])[0]?.c.data;replaceFirst('PRE2',appendData(ex,customEmitters.map(emitter2Outer)),false);}
+    if(customPopcorn.length&&!model.__popcornEdited){const ex=(byTag.get('CORN')||[])[0]?.c.data;replaceFirst('CORN',appendData(ex,customPopcorn.map(popcornOuterFull)),false);}
     const parts=[parsed.bytes.slice(0,4)];
     parsed.chunks.forEach((c,idx)=>parts.push(replacements.has(idx)?replacements.get(idx):c.raw));
-    for(const tag of ['TEXS','MTLS','SEQS','GEOS','GEOA','MODL','BONE','HELP','PIVT','ATCH','PRE2','CAMS']){const key=`append:${tag}`;if(replacements.has(key))parts.push(replacements.get(key));}
-    return {bytes:concat(parts),type:'MDX',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetImports:imports.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
+    for(const tag of ['TEXS','MTLS','SEQS','GEOS','GEOA','MODL','BONE','HELP','PIVT','ATCH','PRE2','CORN','CAMS']){const key=`append:${tag}`;if(replacements.has(key))parts.push(replacements.get(key));}
+    return {bytes:concat(parts),type:'MDX',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetImports:imports.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,popcornEmitters:model.__popcornEdited?(model.popcornEmitters||[]).filter(n=>n&&!n.__deleted).length:customPopcorn.length}};
   }
 
   function findContainer(text,keyword){
@@ -371,7 +382,7 @@
     const lines=[`${indent}ObjectId ${i(node.id??node.objectId,-1)},`];if(i(node.parentId,-1)>=0)lines.push(`${indent}Parent ${i(node.parentId,-1)},`);
     const flags=i(node.flags,0);if(flags&1)lines.push(`${indent}DontInherit { Translation },`);if(flags&2)lines.push(`${indent}DontInherit { Rotation },`);if(flags&4)lines.push(`${indent}DontInherit { Scaling },`);if(flags&8)lines.push(`${indent}Billboarded,`);if(flags&16)lines.push(`${indent}BillboardedLockX,`);if(flags&32)lines.push(`${indent}BillboardedLockY,`);if(flags&64)lines.push(`${indent}BillboardedLockZ,`);if(flags&128)lines.push(`${indent}CameraAnchored,`);return lines;
   }
-  const MDL_TRACK_NAMES={KGTR:'Translation',KGRT:'Rotation',KGSC:'Scaling',KMTF:'TextureID',KMTA:'Alpha',KMTE:'EmissiveGain',KFC3:'FresnelColor',KFCA:'FresnelOpacity',KFTC:'FresnelTeamColor',KCTR:'Translation',KCRL:'Rotation',KTTR:'Translation',KP2E:'EmissionRate',KP2G:'Gravity',KP2L:'Latitude',KP2R:'Variation',KP2N:'Length',KP2W:'Width',KP2S:'Speed',KP2V:'Visibility'};
+  const MDL_TRACK_NAMES={KGTR:'Translation',KGRT:'Rotation',KGSC:'Scaling',KMTF:'TextureID',KMTA:'Alpha',KMTE:'EmissiveGain',KFC3:'FresnelColor',KFCA:'FresnelOpacity',KFTC:'FresnelTeamColor',KCTR:'Translation',KCRL:'Rotation',KTTR:'Translation',KP2E:'EmissionRate',KP2G:'Gravity',KP2L:'Latitude',KP2R:'Variation',KP2N:'Length',KP2W:'Width',KP2S:'Speed',KP2V:'Visibility',KPPL:'LifeSpan',KPPE:'EmissionRate',KPPS:'Speed',KPPC:'Color',KPPA:'Alpha',KPPV:'Visibility'};
   function mdlTrackText(tag,tr,indent='\t'){
     if(!tr||!Array.isArray(tr.keys)||!tr.keys.length)return'';
     const name=MDL_TRACK_NAMES[tag]||tag;
@@ -402,6 +413,11 @@
     for(const tag of ['KP2E','KP2G','KP2L','KP2R','KP2N','KP2W','KP2S','KP2V']){const t=mdlTrackText(tag,n.tracks&&n.tracks[tag],'\t\t');if(t)lines.push('\t'+t.replace(/\n/g,'\n\t'));}
     lines.push('}');return lines.join('\n');
   }
+  function popcornMdl(n){
+    const lines=[`ParticleEmitterPopcorn "${escMdl(n.name||'ParticleEmitterPopcorn')}" {`,...genericMdlLines(n),...nodeTrackLines(n),`\tstatic LifeSpan ${num(n.lifeSpan??1)},`,`\tstatic EmissionRate ${num(n.emissionRate??1)},`,`\tstatic Speed ${num(n.speed??1)},`,`\tstatic Color ${v3(n.color||[1,1,1])},`,`\tstatic Alpha ${num(n.alpha??1)},`,`\tReplaceableId ${i(n.replaceableId,0)},`,`\tPath "${escMdl(n.path||'')}",`,`\tAnimVisibilityGuide "${escMdl(n.animationVisibilityGuide||'')}",`];
+    for(const tag of ['KPPL','KPPE','KPPS','KPPC','KPPA','KPPV']){const t=mdlTrackText(tag,n.tracks&&n.tracks[tag],'\t\t');if(t)lines.push('\t'+t.replace(/\n/g,'\n\t'));}
+    lines.push('}');return lines.join('\n');
+  }
   function cameraMdl(c){const lines=[`Camera "${escMdl(c.name||'Camera')}" {`,`\tPosition ${v3(c.position)},`,`\tFieldOfView ${num(c.fieldOfView??.7)},`,`\tFarClip ${num(c.farClippingPlane??5000)},`,`\tNearClip ${num(c.nearClippingPlane??8)},`,'\tTarget {',`\t\tPosition ${v3(c.targetPosition)},`,'\t},'];for(const tag of ['KCTR','KCRL','KTTR']){const t=mdlTrackText(tag,c.tracks&&c.tracks[tag],'\t\t');if(t)lines.push('\t'+t.replace(/\n/g,'\n\t'));}lines.push('}');return lines.join('\n');}
   function stripBareBlocks(text,keyword){
     const re=new RegExp(`\\b${keyword}\\s*\\{`,'gi'),ranges=[];let m;
@@ -418,18 +434,19 @@
   }
   function saveMDL(source,model){
     if(model&&model.__animationEdited&&window.WC3_MODEL_ANIMATION_SAVE?.patchMdlSource)source=window.WC3_MODEL_ANIMATION_SAVE.patchMdlSource(source,model);
-    let text=dec.decode(bytesOf(source));const defs=model.textureDefs||[],customNodes=(model.nodes||[]).filter(n=>n&&n.__custom),customAttachments=customNodes.filter(n=>n.type==='Attachment'),customEmitters=customNodes.filter(n=>n.type==='ParticleEmitter2'),customCameras=(model.cameras||[]).filter(c=>c&&c.__custom),clones=geosetClones(model);
+    let text=dec.decode(bytesOf(source));const defs=model.textureDefs||[],customNodes=(model.nodes||[]).filter(n=>n&&n.__custom),customAttachments=customNodes.filter(n=>n.type==='Attachment'),customEmitters=customNodes.filter(n=>n.type==='ParticleEmitter2'),customPopcorn=customNodes.filter(n=>n.type==='ParticleEmitterPopcorn'),customCameras=(model.cameras||[]).filter(c=>c&&c.__custom),clones=geosetClones(model);
     if(defs.length){const block=findContainer(text,'Textures'),replacement=texturesMdl(defs);if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
     if(model.__rigEdited||model.__animationKeyEdited){text=stripNamedBlocks(stripNamedBlocks(text,'Bone'),'Helper');const rigs=[...(model.bones||[]).filter(n=>n&&!n.__deleted).map(boneMdl),...(model.helpers||[]).filter(n=>n&&!n.__deleted).map(helperMdl)];if(rigs.length)text+='\n\n// Rig written by WC3 Asset Studio\n'+rigs.join('\n\n')+'\n';const block=findContainer(text,'PivotPoints'),replacement=pivotsMdl(model,(model.nodes||[]).filter(n=>n&&!n.__deleted));if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
     if(model.__materialEdited){const block=findContainer(text,'Materials'),replacement=materialsMdl(model);if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
     if(model.__cameraEdited){text=stripNamedBlocks(text,'Camera');const cams=(model.cameras||[]).filter(Boolean).map(cameraMdl);if(cams.length)text+='\n\n// Cameras written by WC3 Asset Studio\n'+cams.join('\n\n')+'\n';}
     if(model.__effectsEdited){text=stripNamedBlocks(text,'ParticleEmitter2');const fx=(model.particleEmitters2||[]).filter(n=>n&&!n.__deleted).map(emitter2Mdl);if(fx.length)text+='\n\n// ParticleEmitter2 written by WC3 Asset Studio\n'+fx.join('\n\n')+'\n';}
+    if(model.__popcornEdited){text=stripNamedBlocks(text,'ParticleEmitterPopcorn');const fx=(model.popcornEmitters||[]).filter(n=>n&&!n.__deleted).map(popcornMdl);if(fx.length)text+='\n\n// ParticleEmitterPopcorn written by WC3 Asset Studio\n'+fx.join('\n\n')+'\n';}
     if(model.__geosetAnimationsEdited){text=stripBareBlocks(text,'GeosetAnim');const gas=(model.geosetAnimations||[]).filter(Boolean).map(geosetAnimMdl);if(gas.length)text+='\n\n// GeosetAnimations written by WC3 Asset Studio\n'+gas.join('\n\n')+'\n';text=patchModelGeosetCountsMdl(text,model);}
     if(clones.length){text=appendClonedGeosetsMdl(text,model);text=patchModelGeosetCountsMdl(text,model);}
     if(model.__geometryEdited||clones.length){text=patchGeosetsMdl(text,model);text=patchModelExtentMdl(text,model);}
     if(customNodes.length&&!model.__rigEdited&&!model.__animationKeyEdited){const block=findContainer(text,'PivotPoints'),replacement=pivotsMdl(model,customNodes);if(block)text=text.slice(0,block.start)+replacement+text.slice(block.end+1);else text+='\n\n'+replacement+'\n';}
-    const additions=[...customAttachments.map(attachmentMdl),...(!model.__effectsEdited?customEmitters.map(emitter2Mdl):[]),...(!model.__cameraEdited?customCameras.map(cameraMdl):[])];if(additions.length)text+='\n\n// Added by WC3 Asset Studio\n'+additions.join('\n\n')+'\n';
-    return {bytes:enc.encode(text),type:'MDL',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length}};
+    const additions=[...customAttachments.map(attachmentMdl),...(!model.__effectsEdited?customEmitters.map(emitter2Mdl):[]),...(!model.__popcornEdited?customPopcorn.map(popcornMdl):[]),...(!model.__cameraEdited?customCameras.map(cameraMdl):[])];if(additions.length)text+='\n\n// Added by WC3 Asset Studio\n'+additions.join('\n\n')+'\n';
+    return {bytes:enc.encode(text),type:'MDL',changes:{textures:defs.length,geosets:(model.geosets||[]).filter(g=>g&&g.__geometryEdited).length,geosetClones:clones.length,geosetAnimations:model.__geosetAnimationsEdited?(model.geosetAnimations||[]).length:0,rig:model.__rigEdited?1:0,materials:model.__materialEdited?1:0,cameras:model.__cameraEdited?(model.cameras||[]).length:customCameras.length,effects:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,attachments:customAttachments.length,particleEmitters2:model.__effectsEdited?(model.particleEmitters2||[]).length:customEmitters.length,popcornEmitters:model.__popcornEdited?(model.popcornEmitters||[]).filter(n=>n&&!n.__deleted).length:customPopcorn.length}};
   }
 
   function saveEditedModel(sourceBuffer,sourceName,model){

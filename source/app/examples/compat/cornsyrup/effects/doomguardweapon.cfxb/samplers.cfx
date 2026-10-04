@@ -1,0 +1,57 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler sd1 : Curve {
+    CustomName = loc[6647399 => "*CURVE*"];
+    WorkspacePosition = (-616, -462);
+    keys 3 {  // 1 ch, hermite
+        0 = 0.0014308239  in 1.1369417 out 0.07757948
+        0.06823523 = 0.12808982  in -0.005789703 out -0.07905947
+        1 = 0  in -0.27602607 out -0.2962401
+    }
+}
+
+sampler sd2 : Shape {
+    CustomName = loc[6647399 => "Shape"];
+    WorkspacePosition = (396, -1144);
+    SampleDimensionality = 3;
+    Position = (0, 1, 0);
+    ShapeType = Cylinder;
+    Radius = 0.15;
+    Height = 1.5;
+}
+
+sampler sd3 : Curve {
+    CustomName = loc[6647399 => "ColorControl"];
+    WorkspacePosition = (-968, 110);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0, 0, 0, 0)  in (0.20337191, 0.97486717, 0.20337191, 0.97486717) out (0.03113561, 0.14924915, 0.03113561, 0.14924915)
+        0.15309691 = (0.97651863, 0.5788827, 0.43140456, 1.4472513)  in (-0.16843985, -0.2838546, -0.24150126, 0.0005236754) out (-0.93177724, -1.5702299, -1.3359392, 0.002896873)
+        1 = (0.5184546, 0.14026555, 0, 0.99871874)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+
+sampler sd4 : Shape {
+    WorkspacePosition = (-1606, -396);
+    Position = (0, 0.7, 0);
+    ShapeType = Cylinder;
+    Radius = 0;
+    Height = 1.5;
+}
+
+sampler sd5 : Curve {
+    WorkspacePosition = (-1474, 990);
+    ValueType = 4;
+    keys 4 {  // 4 ch, hermite
+        0 = (0, 0, 0, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.290106 = (0.848464, 0.16003615, 0.005553557, 1)  in (-0.2729998, -0.04999562, -0.057885148, 0) out (-0.3424071, -0.06270648, -0.07260183, 0)
+        0.58480567 = (1, 0.28800058, 0, 1)  in (0.049146593, 0.39154416, -0.01846805, 0) out (0.049146593, 0.39154416, -0.01846805, 0)
+        1 = (0.8752134, 0.66452616, 0, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+

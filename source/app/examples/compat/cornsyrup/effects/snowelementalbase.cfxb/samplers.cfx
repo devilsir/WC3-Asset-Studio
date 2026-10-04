@@ -1,0 +1,63 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler RootEventsSampler : EventStream {
+    Times = [0];
+}
+
+sampler SnowflakesSizeCurveSampler : Curve {
+    WorkspacePosition = (-836, -44);
+    keys 2 {  // 1 ch, hermite
+        0 = 1  in 2.2133663 out 2.2133663
+        1 = 2  in 0.17527558 out 0.17527558
+    }
+}
+
+sampler SnowflakesColorSampler : Curve {
+    WorkspacePosition = (-2706, 1254);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.8005263, 0.8005263, 0.8005263, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.36992735 = (0.8793349, 0.8793349, 1, 1)  in (-0.4343643, -0.09566441, 0, 0) out (-0.7398238, -0.16293883, 0, 0)
+        1 = (0.6807812, 0.6807812, 0.9405468, 0)  in (0, 0.014492407, -0.009242585, 0) out (0, 0.02300117, -0.01466908, -3.5537202)
+    }
+}
+
+sampler SnowflakesSpawnSampler : Shape {
+    WorkspacePosition = (-836, -264);
+    SampleDimensionality = 3;
+    Position = (0, 0.25, 0);
+    ShapeType = Cylinder;
+    Radius = 0.2;
+    Height = 0.5;
+}
+
+sampler SpinningBaseColorSampler : Curve {
+    WorkspacePosition = (-308, 1166);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.01560873, 0.48054677, 0.85677886, 0)  in (0.049636185, 0.049636185, 0.049636185, 0.08323478) out (0.022143615, 0.022143615, 0.022143615, 0.037132565)
+        0.44611838 = (0.625744, 0.78924805, 0.95251435, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        1 = (0.2, 0.44355902, 0.8440254, 0.00039123185)  in (-0.1753802, -0.1753802, -0.15414776, -0.4626183) out (-0.15103489, -0.15103489, -0.27830452, -0.83522946)
+    }
+}
+
+sampler FrostColorSampler : Curve {
+    WorkspacePosition = (-1408, 1078);
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.8005263, 0.8005263, 0.8005263, 0)  in (-0, 0, 0, 0) out (-0.016704679, 0.09900969, 0.19947366, 1)
+        0.36992735 = (0.78382164, 0.899536, 1, 1)  in (-0.15678564, -0.107295275, -0.019589603, 0) out (-0.26704255, -0.18274891, -0.033365667, 0)
+        1 = (0.37669814, 0.51048213, 0.74757105, 0)  in (-0.4071235, -0.38905388, -0.25242895, -0.99999994) out (-0, -0, -0, -0)
+    }
+}
+
+sampler FrostVelocityShapeSampler : Shape {
+    WorkspacePosition = (-1034, -616);
+    SampleDimensionality = 3;
+    Position = (0, 0.25, 0);
+    ShapeType = Cylinder;
+    Radius = 0.1;
+    InnerRadius = 0.097600006;
+    Height = 0.2;
+}

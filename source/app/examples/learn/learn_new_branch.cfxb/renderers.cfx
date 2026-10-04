@@ -1,0 +1,8 @@
+renderer LessonRenderer : Billboard {
+    EnableRendering = true;
+    Transparent = true;
+    Transparent.Type = Additive;
+    Diffuse = true;
+    Diffuse.DiffuseMap = "_hd.w3mod\textures\fx\flare\flaresimple_bw.dds";
+    DrawOrder = 0;
+}

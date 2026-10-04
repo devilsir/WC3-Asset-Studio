@@ -1,0 +1,76 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+// Authoritative effect structure (Phase-4 B). Owned children nest under their container;
+// cross-references are `&handle`. Blob bytecode is recompiled from code.cfx (shells carry an
+// empty `Blob`). `build` desugars this to node-text, then parses it.
+
+attributes {
+    "Game.EmissionRateMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.SpeedMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.LifespanMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+        max = (3, 0, 0, 0);
+    }
+    "Game.ColorMultiplier" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TeamColor" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TargetPosition" : f32x3 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 1;
+    }
+    "Game.Scale" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 1;
+        default = (1, 0, 0, 0);
+    }
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &RootLayer;
+    &RootLayer emits "Signal" -> [&L2, &L4, &L7, &L10, &L12, &L15];
+    &TerminationLayer emits "__e_Trigger";
+    &L2 emits "__e_Child" -> &L3;
+    &L2 emits "__e_OnDeath";
+    &L4 emits "__e_Child" -> [&L5, &L6];
+    &L4 emits "__e_OnDeath";
+    &L7 emits "__e_Child" -> [&L8, &L9];
+    &L7 emits "__e_OnDeath";
+    &L10 emits "__e_Child" -> &L11;
+    &L10 emits "__e_OnDeath";
+    &L12 emits "__e_Child" -> &LeafLayer;
+    &L12 emits "__e_OnDeath";
+    &L15 emits "__e_Child" -> &L16;
+    &L15 emits "__e_OnDeath";
+    entry;
+    entry "Root" fires &RootLayer."Signal";
+}
+

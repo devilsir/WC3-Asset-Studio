@@ -1,0 +1,5 @@
+import "stdlib/physics.cfx";
+import "stdlib/life.cfx";
+import "stdlib/space.cfx";
+import "stdlib/color.cfx";
+import "stdlib/templates.cfx";

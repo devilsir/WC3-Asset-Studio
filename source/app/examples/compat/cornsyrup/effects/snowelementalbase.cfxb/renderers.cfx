@@ -1,0 +1,51 @@
+// Readable renderer materials. Header: `renderer H : <Type>` where Type is the geometry
+// (Billboard/Ribbon/Light/Mesh). `material = "…"` overrides the default material; a Mesh's
+// model is `path = "…"`. Then one `Name = value;` per non-default property (sampler-style):
+// `= "path"` = texture, `= true` = enabled, `= 1.0` = float, `= AlphaBlend` = named enum.
+// Properties left at their default are OMITTED and reconstructed from the material template on
+// build. Renderer INPUT bindings live in `code.cfx` (`bind rend<N> { "field" -> Slot; }`).
+
+renderer SnowflakesRenderer : Billboard {
+    DrawOrder = 10;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Organic/snowflakes_bw_2x2.tif";
+    SoftParticles.SoftnessDistance = 0.3;
+    Atlas.Source = 1;
+    Atlas.SubDiv = (2, 2);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+
+renderer SpinnigBaseRenderer : Billboard {
+    DrawOrder = 5;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    FlipUVs = true;
+    BillboardingMode = PlaneAligned;
+    Transparent.Type = AlphaBlend;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Shockwave/ShockwaveWarp_BW.tif";
+    SoftParticles.SoftnessDistance = 0.2;
+}
+
+renderer FrostRenderer : Billboard {
+    DrawOrder = 10;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    Atlas = true;
+    BillboardingMode = ScreenAligned;
+    Diffuse.DiffuseMap = "_HD.w3mod/Textures/FX/Smoke/Smoke_Wispy_Soft_2x2.tif";
+    SoftParticles.SoftnessDistance = 0.1;
+    Atlas.Source = 1;
+    Atlas.SubDiv = (2, 2);
+    Atlas.MotionVectorsMap = "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+}
+

@@ -1,0 +1,65 @@
+header {
+    format = "cfx/1";
+    cfx_version = 100;
+    family = Warcraft3;
+    LayerGraphCompileCache = &graph;
+    AttributeFlatList = &attrs;
+}
+
+// Authoritative effect structure (Phase-4 B). Owned children nest under their container;
+// cross-references are `&handle`. Blob bytecode is recompiled from code.cfx (shells carry an
+// empty `Blob`). `build` desugars this to node-text, then parses it.
+
+attributes {
+    "Game.SpeedMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+    }
+    "Game.ColorMultiplier" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TeamColor" : f32x4 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 2;
+        default = (1, 1, 1, 1);
+    }
+    "Game.TargetPosition" : f32x3 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 1;
+    }
+    "Game.EmissionRateMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+    }
+    "Game.LifespanMultiplier" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        UseSlider = true;
+        HasMin = true;
+        default = (1, 0, 0, 0);
+    }
+    "Game.Scale" : f32 {
+        CategoryName = loc[6647399 => "War3"];
+        Semantic = 1;
+        default = (1, 0, 0, 0);
+    }
+}
+
+graph {
+    coordsys = (1, 5, 3, 1);
+    spawn &RootLayer;
+    &EmissionLayer emits "__e_Child" -> &ParticleLayer;
+    &RootLayer emits "Signal" -> &EmissionLayer;
+    spawn &RootLayer;
+    &ParticleLayer emits "__e_Trail" -> &TrailParticlesLayer;
+    &ParticleLayer emits "__e_MyDeath" -> &MultiplyExplossion;
+    &MultiplyExplossion emits "__e_Child" -> &ExplossionLayer;
+    entry;
+    entry "Root" fires &RootLayer."Signal";
+}
+

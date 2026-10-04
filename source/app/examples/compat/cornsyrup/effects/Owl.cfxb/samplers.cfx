@@ -1,0 +1,25 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler sd1 : Shape {
+    WorkspacePosition = (-1892, -110);
+    SampleDimensionality = 2;
+    ShapeType = Mesh;
+    MeshResource = "Meshes/Owl.pkmm";
+    BoxDimensions = (5, 100, 5);
+    Height = 10;
+}
+
+sampler sd2 : Curve {
+    WorkspacePosition = (88, 330);
+    ValueType = 4;
+    keys 2 {  // 4 ch, hermite
+        0 = (3.495, 0.73, 0.23, 0)  in (-7.2191486, 0, 2.1622777, 0) out (-7.2191486, 0, 2.1622777, 0)
+        1 = (0, 0, 0, 0)  in (0, -0, -1.2764602, -0) out (0, 0, -1.2764602, 0)
+    }
+}
+

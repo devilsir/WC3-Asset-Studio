@@ -1,0 +1,547 @@
+// stdlib/templates.cfx — prototypes for the declarations every effect repeats.
+//
+// A template is a structural macro over a declaration: `extends` merges the template's members into
+// the child, `takes`/`using` fill the holes, and `build` compiles the merged text. The `.pkb` is
+// exactly what writing the declaration out longhand would have produced — see CFX_GUIDE §15.
+//
+//   import "stdlib/templates.cfx";
+//
+// Every template here was lifted from a real decompiled bundle, so the byte-for-byte claim is
+// checked rather than asserted (`tests/templates.rs`).
+//
+// TWO RULES WORTH KNOWING BEFORE WRITING ONE:
+//
+//   * The child ADDS to the template. A declaration made on both sides is an error, never a silent
+//     override. `init`/`evolve` are the exception: they concatenate, template first.
+//   * MEMBER ORDER IS PRESERVED — the template's, then the child's — and for a `sampler` that order
+//     survives into the .pkb. So a sampler template must carry the LEADING fields and take whatever
+//     varies as a parameter, which is why `Cylinder` below takes its `WorkspacePosition`. Renderers
+//     are immune: `build` re-sorts their properties into the baker's own order.
+//
+// The `_t_` prefix on parameter names is a convention for the reader, not a requirement —
+// substitution matches whole tokens, so a parameter named `rate` renames `rate` and leaves
+// `rateScale` alone.
+
+// ---------------------------------------------------------------------------------------------
+// Layers
+// ---------------------------------------------------------------------------------------------
+
+/// The root emitter: layer 0 of essentially every WC3 effect.
+///
+/// It carries no particles of its own — it walks an `EventStream` sampler's baked timeline and kicks
+/// one event per entry, which is what the child layers spawn from. `self.invLife = 0` gives it an
+/// unbounded life, and the closing `select` kills it once the effect stops running or the timeline
+/// is spent.
+///
+/// The stream is a parameter rather than a hard-coded `&sd0`: a sampler handle means nothing in
+/// another bundle, and parameterising it is what makes this reusable at all.
+///
+/// The template DECLARES the event it kicks, rather than taking one the child has to declare — so
+/// extending it needs nothing but the stream. The name is still a parameter, with a default,
+/// because a name is exactly the kind of thing substitution renames: `event _ev_Signal;` becomes
+/// `event __e_Signal;` when nothing is bound, and `event Signal;` when something is. That matters
+/// for applying this to a layer that already exists — a hard-coded name would not collide with the
+/// layer's own event, it would sit BESIDE it, leaving the graph wired to an event nothing kicks
+/// (CFX_GUIDE §14.4). With the parameter, `"_ev_Signal" = <the layer's own name>` rebuilds the
+/// corpus layer byte for byte.
+/// @brief_en The root emitter: layer 0 of essentially every WC3 effect. It carries no particles of its own — it walks an `EventStream` sampler's baked timeline and kicks one event per entry, which is what the child layers spawn from.
+/// @brief_es El emisor raíz: la capa 0 de prácticamente todo efecto de WC3. No lleva partículas propias: recorre la línea de tiempo cocida de un muestreador `EventStream` y dispara un evento por entrada, que es de donde nacen las capas hijas.
+/// @brief_pt O emissor raiz: a camada 0 de praticamente todo efeito de WC3. Não carrega partículas próprias — percorre a linha do tempo assada de um amostrador `EventStream` e dispara um evento por entrada, que é de onde nascem as camadas filhas.
+/// @brief_fr L'émetteur racine : le calque 0 de pratiquement tout effet de WC3. Il ne porte aucune particule propre — il parcourt la chronologie cuite d'un échantillonneur `EventStream` et déclenche un événement par entrée, d'où naissent les calques enfants.
+/// @brief_it L'emettitore radice: il livello 0 di praticamente ogni effetto di WC3. Non porta particelle proprie: percorre la linea temporale cotta di un campionatore `EventStream` e attiva un evento per voce, ed è da lì che nascono i livelli figli.
+/// @brief_de Der Wurzelemitter: Ebene 0 nahezu jedes WC3-Effekts. Er trägt keine eigenen Partikel — er läuft die gebackene Zeitleiste eines `EventStream`-Samplers ab und löst je Eintrag ein Ereignis aus, aus dem die Kindebenen entstehen.
+/// @brief_ru Корневой эмиттер: слой 0 практически любого эффекта WC3. Собственных частиц он не несёт — он идёт по запечённой временной шкале сэмплера `EventStream` и на каждую запись запускает событие, из которого и рождаются дочерние слои.
+/// @brief_zh 根发射器：几乎每个 WC3 特效的第 0 层。它本身不携带粒子 —— 而是走遍 `EventStream` 采样器烘培好的时间线，每一项触发一个事件，子图层就从那里生成。
+/// @brief_ja ルートエミッタです。ほぼすべての WC3 エフェクトのレイヤー 0 にあたります。自身はパーティクルを持たず、`EventStream` サンプラーの焼き込まれたタイムラインをたどって項目ごとにイベントを発火し、そこから子レイヤーが生まれます。
+/// @brief_ko 루트 이미터입니다. 사실상 모든 WC3 이펙트의 0번 레이어입니다. 자체 파티클은 없고, `EventStream` 샘플러의 구워진 타임라인을 따라가며 항목마다 이벤트를 하나씩 발생시키고, 자식 레이어는 거기서 생겨납니다.
+///
+/// @param_en _sd_eventStream The timeline to walk. A parameter rather than a hard-coded handle, because a sampler handle means nothing in another bundle — parameterising it is what makes this reusable at all.
+/// @param_es _sd_eventStream La línea de tiempo que se recorre. Es un parámetro y no un manejador fijo, porque un manejador de muestreador no significa nada en otro paquete: parametrizarlo es lo que lo hace reutilizable.
+/// @param_pt _sd_eventStream A linha do tempo a percorrer. É um parâmetro e não um identificador fixo, porque um identificador de amostrador não significa nada em outro pacote: parametrizá-lo é o que o torna reutilizável.
+/// @param_fr _sd_eventStream La chronologie à parcourir. C'est un paramètre et non un identifiant en dur, car un identifiant d'échantillonneur ne veut rien dire dans un autre bundle : c'est le paramétrage qui rend ceci réutilisable.
+/// @param_it _sd_eventStream La linea temporale da percorrere. È un parametro e non un handle fisso, perché un handle di campionatore non significa nulla in un altro bundle: parametrizzarlo è ciò che lo rende riutilizzabile.
+/// @param_de _sd_eventStream Die abzulaufende Zeitleiste. Ein Parameter statt eines fest verdrahteten Handles, denn ein Sampler-Handle bedeutet in einem anderen Bundle nichts — erst die Parametrisierung macht dies wiederverwendbar.
+/// @param_ru _sd_eventStream Временная шкала, по которой идём. Это параметр, а не жёстко заданный дескриптор, потому что дескриптор сэмплера ничего не значит в другом бандле: именно параметризация делает шаблон переиспользуемым.
+/// @param_zh _sd_eventStream 要走遍的时间线。它是一个参数而不是写死的句柄，因为采样器句柄在另一个包里毫无意义 —— 正是参数化才让它可以复用。
+/// @param_ja _sd_eventStream たどるタイムラインです。ハンドルを直書きせずパラメータにしているのは、サンプラーのハンドルが別のバンドルでは意味を持たないからで、これを再利用可能にしているのはまさにこのパラメータ化です。
+/// @param_ko _sd_eventStream 따라갈 타임라인. 하드코딩한 핸들이 아니라 매개변수인 이유는 샘플러 핸들이 다른 번들에서는 아무 의미가 없기 때문입니다. 매개변수로 둔 덕분에 재사용이 가능해집니다.
+template layer RootLayerTemplate {
+    takes {
+        "_sd_eventStream" : samplerEventStreamC;
+    }
+    properties {
+        // Load-bearing placeholder, not a stray default: the engine reads the Events list even when
+        // the layer declares none, and dropping it changes runtime behaviour.
+        Events = [];
+        NeedsEvolveOnDeath;
+        sampler "EventStream" : EventStream = &_sd_eventStream;
+    }
+    event Signal;
+    root;
+    init {
+        needs {
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+        }
+        self.invLife = 0.0;
+        PrevAge = 0.0;
+        EventAccum = #i32x2(0, 0);
+    }
+    evolve {
+        needs {
+            "PrevAge" : f32;
+            "EventAccum" : i32x2;
+            "EventStream" : samplerEventStreamC;
+        }
+        let v1 : f32 = PrevAge;
+        let v2 : f32 = effect.age();
+        let v3 : i32x2 = EventAccum;
+        // Emit every stream entry falling in [PrevAge, age].
+        let v4 : i32x3 = EventStream.generate(v3, v1, v2, 0.0, scene.dt);
+        PrevAge = v2;
+        EventAccum = v4.xy;
+        let v5 : i32 = Signal.initPayload(0, v4);
+        Signal.kick(v5);
+        let v6 : f32 = self.lifeRatio;
+        let v7 : bool = effect.isRunning();
+        let v8 : f32 = EventStream.duration();
+        self.lifeRatio = select(v7 & v2 <= v8, v6, 1.0);
+    }
+}
+
+/// A rate-driven emitter: kicks `_t_EmissionRate` events per second for `_t_Duration` seconds.
+///
+/// The counterpart to [RootLayerTemplate] for a layer that emits continuously rather than off a
+/// baked timeline. `_t_Duration = inf` runs for the whole effect — `rcp(inf)` const-folds to `0.0`
+/// at build time, so the bytecode is what `self.invLife = 0.0` would have emitted by hand.
+///
+/// The accumulator seed is the corpus's, not zero: `generate` keeps its fractional carry in lane 0
+/// as float bits, and `1065353048` is `0x3F7FFFD8` ≈ 0.99999 — a hair under one, so the first
+/// particle emits on the first tick rather than a frame later.
+///
+/// It declares `root;` because the corpus layers it was lifted from do, and a layer built without
+/// one is a different layer. `root` does not merge, so a layer that needs its own payload cannot
+/// extend this — write the emitter out longhand, or split the payload off into its own layer.
+/// @brief_en A rate-driven emitter: kicks `_t_EmissionRate` events per second for `_t_Duration` seconds. The counterpart to `RootLayerTemplate` for a layer that emits continuously rather than off a baked timeline.
+/// @brief_es Un emisor guiado por tasa: dispara `_t_EmissionRate` eventos por segundo durante `_t_Duration` segundos. Es la contraparte de `RootLayerTemplate` para una capa que emite de forma continua en vez de a partir de una línea de tiempo cocida.
+/// @brief_pt Um emissor guiado por taxa: dispara `_t_EmissionRate` eventos por segundo durante `_t_Duration` segundos. É a contraparte de `RootLayerTemplate` para uma camada que emite continuamente em vez de a partir de uma linha do tempo assada.
+/// @brief_fr Un émetteur piloté par un taux : déclenche `_t_EmissionRate` événements par seconde pendant `_t_Duration` secondes. Le pendant de `RootLayerTemplate` pour un calque qui émet en continu plutôt qu'à partir d'une chronologie cuite.
+/// @brief_it Un emettitore guidato dal tasso: attiva `_t_EmissionRate` eventi al secondo per `_t_Duration` secondi. È la controparte di `RootLayerTemplate` per un livello che emette di continuo invece che da una linea temporale cotta.
+/// @brief_de Ein ratengesteuerter Emitter: löst `_t_EmissionRate` Ereignisse pro Sekunde für `_t_Duration` Sekunden aus. Das Gegenstück zu `RootLayerTemplate` für eine Ebene, die fortlaufend statt aus einer gebackenen Zeitleiste emittiert.
+/// @brief_ru Эмиттер, управляемый частотой: запускает `_t_EmissionRate` событий в секунду в течение `_t_Duration` секунд. Аналог `RootLayerTemplate` для слоя, который излучает непрерывно, а не по запечённой временной шкале.
+/// @brief_zh 基于速率的发射器：在 `_t_Duration` 秒内每秒触发 `_t_EmissionRate` 个事件。它是 `RootLayerTemplate` 的对应物，适用于持续发射而非依据烘培时间线的图层。
+/// @brief_ja レート駆動のエミッタです。`_t_Duration` 秒の間、毎秒 `_t_EmissionRate` 個のイベントを発火します。焼き込まれたタイムラインではなく連続的に放出するレイヤー向けの、`RootLayerTemplate` の対です。
+/// @brief_ko 비율 기반 이미터입니다. `_t_Duration`초 동안 초당 `_t_EmissionRate`개의 이벤트를 발생시킵니다. 구워진 타임라인이 아니라 연속적으로 방출하는 레이어를 위한 `RootLayerTemplate`의 짝입니다.
+///
+/// @param_en _t_EmissionRate How many events to kick per second.
+/// @param_es _t_EmissionRate Cuántos eventos se disparan por segundo.
+/// @param_pt _t_EmissionRate Quantos eventos disparar por segundo.
+/// @param_fr _t_EmissionRate Combien d'événements déclencher par seconde.
+/// @param_it _t_EmissionRate Quanti eventi attivare al secondo.
+/// @param_de _t_EmissionRate Wie viele Ereignisse pro Sekunde ausgelöst werden.
+/// @param_ru _t_EmissionRate Сколько событий запускать в секунду.
+/// @param_zh _t_EmissionRate 每秒触发多少个事件。
+/// @param_ja _t_EmissionRate 毎秒何個のイベントを発火させるか。
+/// @param_ko _t_EmissionRate 초당 몇 개의 이벤트를 발생시킬지.
+///
+/// @param_en _t_Duration How long to keep emitting. `inf` runs for the whole effect — `rcp(inf)` const-folds to 0 at build time, so the bytecode is what an unbounded life would have emitted by hand.
+/// @param_es _t_Duration Cuánto tiempo seguir emitiendo. `inf` dura todo el efecto: `rcp(inf)` se pliega a 0 en compilación, así que el bytecode es el que habría dado una vida ilimitada escrita a mano.
+/// @param_pt _t_Duration Por quanto tempo continuar emitindo. `inf` dura o efeito inteiro: `rcp(inf)` dobra para 0 em tempo de compilação, então o bytecode é o que uma vida ilimitada escrita à mão teria produzido.
+/// @param_fr _t_Duration Combien de temps continuer d'émettre. `inf` dure tout l'effet : `rcp(inf)` se replie à 0 à la compilation, donc le bytecode est celui qu'une durée de vie illimitée écrite à la main aurait produit.
+/// @param_it _t_Duration Per quanto continuare a emettere. `inf` dura tutto l'effetto: `rcp(inf)` si ripiega a 0 in compilazione, quindi il bytecode è quello che una vita illimitata scritta a mano avrebbe prodotto.
+/// @param_de _t_Duration Wie lange weiter emittiert wird. `inf` läuft den ganzen Effekt — `rcp(inf)` faltet zur Bauzeit auf 0, der Bytecode ist also derselbe, den eine von Hand geschriebene unbegrenzte Lebensdauer erzeugt hätte.
+/// @param_ru _t_Duration Сколько продолжать излучать. `inf` работает весь эффект: `rcp(inf)` сворачивается в 0 на этапе сборки, так что байт-код тот же, что дала бы написанная вручную бесконечная жизнь.
+/// @param_zh _t_Duration 继续发射多久。`inf` 表示贯穿整个特效 —— `rcp(inf)` 在构建期折叠为 0，因此字节码与手写无限寿命一模一样。
+/// @param_ja _t_Duration どれだけの間放出を続けるか。`inf` ならエフェクト全体を通して動きます。`rcp(inf)` はビルド時に 0 に畳まるため、バイトコードは手書きの無限寿命と同じになります。
+/// @param_ko _t_Duration 얼마나 계속 방출할지. `inf`이면 이펙트 전체 동안 동작합니다. `rcp(inf)`가 빌드 시점에 0으로 접히므로 바이트코드는 손으로 쓴 무한 수명과 같습니다.
+template layer EventMultiplier {
+    takes {
+        "_t_EmissionRate" : f32;
+        "_t_Duration" : f32 = inf;
+    }
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    root;
+    event __e_Child;
+    event __e_OnDeath;
+    init {
+        needs {
+            "EventAccum" : i32x2;
+        }
+        self.invLife = rcp(_t_Duration);
+        EventAccum = #i32x2(1065353048, 0);
+    }
+    evolve {
+        needs {
+            "EventAccum" : i32x2;
+        }
+        let running : bool = effect.isRunning();
+        self.kill(lnot(running));
+        let prevAccum : i32x2 = EventAccum;
+        let spawnEvents : i32x3 = generate(prevAccum, scene.dt * _t_EmissionRate, 1.0, 0.0, 1.0);
+        let payload : i32 = __e_Child.initPayload(0, spawnEvents);
+        __e_Child.kick(payload);
+        EventAccum = spawnEvents.xy;
+    }
+}
+
+/// @brief_en A layer that outlives the effect by one frame, so a trailing event has somewhere to fire from. It counts up a timer once the effect stops running and kills itself when the timer saturates.
+/// @brief_es Una capa que sobrevive al efecto un fotograma, para que un evento final tenga desde dónde dispararse. Cuenta un temporizador en cuanto el efecto deja de correr y se mata a sí misma cuando el temporizador se satura.
+/// @brief_pt Uma camada que sobrevive ao efeito por um quadro, para que um evento final tenha de onde disparar. Ela conta um temporizador assim que o efeito para de rodar e se mata quando o temporizador satura.
+/// @brief_fr Un calque qui survit à l'effet d'une image, pour qu'un événement final ait d'où partir. Il incrémente un minuteur dès que l'effet cesse de tourner et se tue quand le minuteur sature.
+/// @brief_it Un livello che sopravvive all'effetto di un fotogramma, perché un evento finale abbia da dove partire. Conta un timer non appena l'effetto smette di girare e si uccide quando il timer satura.
+/// @brief_de Eine Ebene, die den Effekt um ein Bild überlebt, damit ein abschließendes Ereignis noch einen Ort zum Auslösen hat. Sie zählt einen Timer hoch, sobald der Effekt nicht mehr läuft, und tötet sich, wenn der Timer sättigt.
+/// @brief_ru Слой, переживающий эффект на один кадр, чтобы завершающему событию было откуда сработать. Он набирает таймер, как только эффект перестаёт идти, и убивает себя, когда таймер насыщается.
+/// @brief_zh 一个比特效多活一帧的图层，好让收尾事件有地方可以触发。当特效停止运行后它开始累加计时器，计时器饱和时就自杀。
+/// @brief_ja エフェクトより 1 フレーム長く生き残るレイヤーです。最後のイベントを発火させる場所を残すためにあります。エフェクトが止まるとタイマーを進め、飽和したところで自滅します。
+/// @brief_ko 이펙트보다 한 프레임 더 살아남는 레이어입니다. 마지막 이벤트가 발생할 자리를 남기기 위해 있습니다. 이펙트가 멈추면 타이머를 올리고, 타이머가 포화되면 스스로 죽습니다.
+///
+/// @param_en _ev_Trigger The event this layer declares and leaves for the graph to wire. Named as a parameter so applying the template to an existing layer renames its own event rather than adding a second one beside it.
+/// @param_es _ev_Trigger El evento que esta capa declara y deja para que el grafo lo conecte. Es un parámetro con nombre para que aplicar la plantilla a una capa existente renombre su propio evento en vez de añadir un segundo al lado.
+/// @param_pt _ev_Trigger O evento que esta camada declara e deixa para o grafo ligar. É um parâmetro nomeado para que aplicar o modelo a uma camada existente renomeie o próprio evento dela em vez de acrescentar um segundo ao lado.
+/// @param_fr _ev_Trigger L'événement que ce calque déclare et laisse au graphe le soin de câbler. C'est un paramètre nommé pour qu'appliquer le modèle à un calque existant renomme son propre événement au lieu d'en ajouter un second à côté.
+/// @param_it _ev_Trigger L'evento che questo livello dichiara e lascia collegare al grafo. È un parametro con nome affinché applicare il modello a un livello esistente rinomini il suo evento invece di aggiungerne un secondo accanto.
+/// @param_de _ev_Trigger Das Ereignis, das diese Ebene deklariert und dem Graphen zum Verdrahten überlässt. Ein benannter Parameter, damit das Anwenden der Vorlage auf eine bestehende Ebene deren eigenes Ereignis umbenennt, statt ein zweites danebenzusetzen.
+/// @param_ru _ev_Trigger Событие, которое слой объявляет и оставляет графу на разводку. Это именованный параметр, чтобы применение шаблона к существующему слою переименовывало его собственное событие, а не добавляло второе рядом.
+/// @param_zh _ev_Trigger 本图层声明、并交由图去连接的事件。把它做成命名参数，是为了让模板应用到已有图层时重命名它自己的事件，而不是在旁边再添一个。
+/// @param_ja _ev_Trigger このレイヤーが宣言し、配線はグラフに任せるイベントです。名前付きパラメータにしてあるのは、既存のレイヤーにテンプレートを適用したとき、隣にもう一つ追加するのではなくそのレイヤー自身のイベントを名前変更するためです。
+/// @param_ko _ev_Trigger 이 레이어가 선언하고 배선은 그래프에 맡기는 이벤트. 이름 있는 매개변수로 둔 이유는, 기존 레이어에 템플릿을 적용했을 때 옆에 또 하나를 더하는 게 아니라 그 레이어 자신의 이벤트를 이름만 바꾸게 하기 위해서입니다.
+template layer TerminationTemplate {
+    takes {
+        "_ev_Trigger" : particleEvent = __e_Trigger;
+    }
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+    }
+    event _ev_Trigger;
+    root;
+    init {
+        needs {
+            "deathTimer" : f32;
+        }
+        deathTimer = 0.0;
+        self.invLife = 0.0;
+    }
+    evolve {
+        needs {
+            "deathTimer" : f32;
+        }
+        let v1 : f32 = deathTimer;
+        let v2 : bool = effect.isRunning();
+        let v3 : f32 = saturate(v1 + select(lnot(v2), scene.dt, 0.0));
+        self.kill(v3 == 1.0);
+        deathTimer = v3;
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Renderers
+// ---------------------------------------------------------------------------------------------
+
+/// The plain textured billboard — by far the most common renderer in the corpus.
+///
+/// `_t_Mode` and `_t_Order` default to the screen-aligned quad at draw order 0; pass them when they
+/// differ. Note the child still adds whatever else it needs (`FlipUVs`, a `Transparent.Type`): the
+/// merge is additive, so a template does not have to anticipate every variant.
+/// @brief_en The plain textured billboard — by far the most common renderer in the corpus. The child still adds whatever else it needs: the merge is additive, so a template does not have to anticipate every variant.
+/// @brief_es El cartel texturizado simple: con diferencia el renderizador más común del corpus. La hija aún añade lo que le haga falta: la fusión es aditiva, así que una plantilla no tiene que anticipar cada variante.
+/// @brief_pt O billboard texturizado simples — de longe o renderizador mais comum do corpus. A filha ainda acrescenta o que precisar: a fusão é aditiva, então um modelo não precisa antecipar cada variante.
+/// @brief_fr Le panneau texturé simple — de loin le renderer le plus courant du corpus. L'enfant ajoute encore ce dont il a besoin : la fusion est additive, un modèle n'a donc pas à anticiper chaque variante.
+/// @brief_it Il billboard testurizzato semplice: di gran lunga il renderer più comune del corpus. La figlia aggiunge comunque ciò che le serve: la fusione è additiva, quindi un modello non deve anticipare ogni variante.
+/// @brief_de Das schlichte texturierte Billboard — mit Abstand der häufigste Renderer im Korpus. Das Kind ergänzt weiterhin, was es sonst braucht: das Verschmelzen ist additiv, eine Vorlage muss also nicht jede Variante vorwegnehmen.
+/// @brief_ru Простой текстурированный биллборд — безусловно самый частый рендерер в корпусе. Ребёнок всё равно добавляет то, что ему нужно: слияние аддитивное, так что шаблону не надо предугадывать каждый вариант.
+/// @brief_zh 普通的贴图公告板 —— 这是语料中最常见的渲染器。子声明仍可自行补充所需的内容：合并是叠加式的，因此模板无需预先考虑所有变体。
+/// @brief_ja 素のテクスチャ付きビルボードです。コーパス中で圧倒的に多いレンダラーです。子側は必要なものをさらに追加できます。マージは加算的なので、テンプレートがすべての変種を先回りして抱えておく必要はありません。
+/// @brief_ko 평범한 텍스처 빌보드입니다. 코퍼스에서 가장 흔한 렌더러입니다. 자식은 필요한 것을 그대로 더 넣을 수 있습니다. 병합이 더하기이므로 템플릿이 모든 변형을 미리 예상할 필요가 없습니다.
+///
+/// @param_en _t_Texture The image drawn on the quad.
+/// @param_es _t_Texture La imagen que se dibuja sobre el cuadrilátero.
+/// @param_pt _t_Texture A imagem desenhada no quadrilátero.
+/// @param_fr _t_Texture L'image dessinée sur le quadrilatère.
+/// @param_it _t_Texture L'immagine disegnata sul quadrilatero.
+/// @param_de _t_Texture Das Bild, das auf das Viereck gezeichnet wird.
+/// @param_ru _t_Texture Изображение, рисуемое на четырёхугольнике.
+/// @param_zh _t_Texture 绘制在四边形上的图像。
+/// @param_ja _t_Texture クアッドに描かれる画像。
+/// @param_ko _t_Texture 사각면에 그려지는 이미지.
+///
+/// @param_en _t_Mode How the quad is turned to face the camera.
+/// @param_es _t_Mode Cómo se gira el cuadrilátero para encarar a la cámara.
+/// @param_pt _t_Mode Como o quadrilátero é girado para encarar a câmera.
+/// @param_fr _t_Mode Comment le quadrilatère est orienté face à la caméra.
+/// @param_it _t_Mode Come il quadrilatero viene ruotato per guardare la telecamera.
+/// @param_de _t_Mode Wie das Viereck zur Kamera gedreht wird.
+/// @param_ru _t_Mode Как четырёхугольник разворачивается к камере.
+/// @param_zh _t_Mode 四边形以何种方式转向面对相机。
+/// @param_ja _t_Mode クアッドをカメラに向ける方法。
+/// @param_ko _t_Mode 사각면을 카메라 쪽으로 돌리는 방식.
+///
+/// @param_en _t_Order The draw order. Higher numbers are drawn later, so they land on top.
+/// @param_es _t_Order El orden de dibujo. Los números mayores se dibujan después, así que quedan encima.
+/// @param_pt _t_Order A ordem de desenho. Números maiores são desenhados depois, portanto ficam por cima.
+/// @param_fr _t_Order L'ordre de dessin. Les nombres plus grands sont dessinés plus tard et passent donc au-dessus.
+/// @param_it _t_Order L'ordine di disegno. I numeri più alti vengono disegnati dopo, quindi finiscono sopra.
+/// @param_de _t_Order Die Zeichenreihenfolge. Höhere Zahlen werden später gezeichnet und liegen daher obenauf.
+/// @param_ru _t_Order Порядок отрисовки. Большие числа рисуются позже и потому оказываются сверху.
+/// @param_zh _t_Order 绘制顺序。数值越大绘制越晚，因此会盖在上面。
+/// @param_ja _t_Order 描画順。数値が大きいほど後から描かれ、上に重なります。
+/// @param_ko _t_Order 그리는 순서. 숫자가 클수록 나중에 그려져 위에 올라갑니다.
+template renderer TexturedBillboard : Billboard {
+    takes {
+        "_t_Texture" : texture;
+        "_t_Mode" : enum = ScreenAligned;
+        "_t_Order" : i32 = 0;
+    }
+    DrawOrder = _t_Order;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    BillboardingMode = _t_Mode;
+    Diffuse.DiffuseMap = _t_Texture;
+}
+
+/// A billboard that fades as it nears scene geometry instead of cutting a hard edge into it.
+/// @brief_en A billboard that fades as it nears scene geometry instead of cutting a hard edge into it.
+/// @brief_es Un cartel que se desvanece al acercarse a la geometría de la escena en vez de recortar un borde duro contra ella.
+/// @brief_pt Um billboard que esmaece ao se aproximar da geometria da cena em vez de cortar uma borda dura nela.
+/// @brief_fr Un panneau qui s'estompe à l'approche de la géométrie de la scène au lieu d'y découper une arête franche.
+/// @brief_it Un billboard che sfuma avvicinandosi alla geometria della scena invece di tagliarvi un bordo netto.
+/// @brief_de Ein Billboard, das an Szenengeometrie ausblendet, statt eine harte Kante hineinzuschneiden.
+/// @brief_ru Биллборд, который гаснет вблизи геометрии сцены, а не врезается в неё резкой кромкой.
+/// @brief_zh 一种靠近场景几何体时会淡出的公告板，而不是在其上切出一条硬边。
+/// @brief_ja シーンのジオメトリに近づくと硬い境界を切るのではなくフェードするビルボードです。
+/// @brief_ko 씬 기하에 가까워질 때 딱딱한 경계를 남기는 대신 부드럽게 사라지는 빌보드입니다.
+///
+/// @param_en _t_Texture The image drawn on the quad.
+/// @param_es _t_Texture La imagen que se dibuja sobre el cuadrilátero.
+/// @param_pt _t_Texture A imagem desenhada no quadrilátero.
+/// @param_fr _t_Texture L'image dessinée sur le quadrilatère.
+/// @param_it _t_Texture L'immagine disegnata sul quadrilatero.
+/// @param_de _t_Texture Das Bild, das auf das Viereck gezeichnet wird.
+/// @param_ru _t_Texture Изображение, рисуемое на четырёхугольнике.
+/// @param_zh _t_Texture 绘制在四边形上的图像。
+/// @param_ja _t_Texture クアッドに描かれる画像。
+/// @param_ko _t_Texture 사각면에 그려지는 이미지.
+///
+/// @param_en _t_Softness How far from the geometry the fade begins. Larger is softer.
+/// @param_es _t_Softness A qué distancia de la geometría empieza el desvanecido. Cuanto mayor, más suave.
+/// @param_pt _t_Softness A que distância da geometria o esmaecimento começa. Quanto maior, mais suave.
+/// @param_fr _t_Softness À quelle distance de la géométrie le fondu commence. Plus grand, plus doux.
+/// @param_it _t_Softness A che distanza dalla geometria inizia la dissolvenza. Più grande, più morbido.
+/// @param_de _t_Softness In welchem Abstand zur Geometrie das Ausblenden beginnt. Größer ist weicher.
+/// @param_ru _t_Softness На каком расстоянии от геометрии начинается затухание. Больше — мягче.
+/// @param_zh _t_Softness 淡出从距离几何体多远处开始。值越大越柔和。
+/// @param_ja _t_Softness ジオメトリからどれだけ離れたところでフェードを始めるか。大きいほど柔らかくなります。
+/// @param_ko _t_Softness 기하에서 얼마나 떨어진 곳에서 페이드가 시작되는지. 클수록 부드럽습니다.
+///
+/// @param_en _t_Mode How the quad is turned to face the camera.
+/// @param_es _t_Mode Cómo se gira el cuadrilátero para encarar a la cámara.
+/// @param_pt _t_Mode Como o quadrilátero é girado para encarar a câmera.
+/// @param_fr _t_Mode Comment le quadrilatère est orienté face à la caméra.
+/// @param_it _t_Mode Come il quadrilatero viene ruotato per guardare la telecamera.
+/// @param_de _t_Mode Wie das Viereck zur Kamera gedreht wird.
+/// @param_ru _t_Mode Как четырёхугольник разворачивается к камере.
+/// @param_zh _t_Mode 四边形以何种方式转向面对相机。
+/// @param_ja _t_Mode クアッドをカメラに向ける方法。
+/// @param_ko _t_Mode 사각면을 카메라 쪽으로 돌리는 방식.
+///
+/// @param_en _t_Order The draw order. Higher numbers are drawn later, so they land on top.
+/// @param_es _t_Order El orden de dibujo. Los números mayores se dibujan después, así que quedan encima.
+/// @param_pt _t_Order A ordem de desenho. Números maiores são desenhados depois, portanto ficam por cima.
+/// @param_fr _t_Order L'ordre de dessin. Les nombres plus grands sont dessinés plus tard et passent donc au-dessus.
+/// @param_it _t_Order L'ordine di disegno. I numeri più alti vengono disegnati dopo, quindi finiscono sopra.
+/// @param_de _t_Order Die Zeichenreihenfolge. Höhere Zahlen werden später gezeichnet und liegen daher obenauf.
+/// @param_ru _t_Order Порядок отрисовки. Большие числа рисуются позже и потому оказываются сверху.
+/// @param_zh _t_Order 绘制顺序。数值越大绘制越晚，因此会盖在上面。
+/// @param_ja _t_Order 描画順。数値が大きいほど後から描かれ、上に重なります。
+/// @param_ko _t_Order 그리는 순서. 숫자가 클수록 나중에 그려져 위에 올라갑니다.
+template renderer SoftBillboard : Billboard {
+    takes {
+        "_t_Texture" : texture;
+        "_t_Softness" : f32 = 0.5;
+        "_t_Mode" : enum = AxisAlignedSpheroid;
+        "_t_Order" : i32 = 0;
+    }
+    DrawOrder = _t_Order;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    SoftParticles = true;
+    BillboardingMode = _t_Mode;
+    Diffuse.DiffuseMap = _t_Texture;
+    SoftParticles.SoftnessDistance = _t_Softness;
+}
+
+/// A flipbook billboard. `_t_SubDiv` is `(columns, rows)`, each 1..=64; frames are laid out
+/// row-major with columns varying fastest and frame 0 at the top. The particle picks its frame
+/// through the renderer's `AtlasId` input, which the engine clamps to `frameCount - 1`.
+/// @brief_en A flipbook billboard. The particle picks its frame through the renderer's `AtlasId` input, which the engine clamps to `frameCount - 1`.
+/// @brief_es Un cartel de folioscopio. La partícula elige su fotograma a través de la entrada `AtlasId` del renderizador, que el motor recorta a `frameCount - 1`.
+/// @brief_pt Um billboard de folioscopio. A partícula escolhe seu quadro pela entrada `AtlasId` do renderizador, que o motor recorta a `frameCount - 1`.
+/// @brief_fr Un panneau de folioscope. La particule choisit son image via l'entrée `AtlasId` du renderer, que le moteur borne à `frameCount - 1`.
+/// @brief_it Un billboard a flipbook. La particella sceglie il suo fotogramma tramite l'ingresso `AtlasId` del renderer, che il motore limita a `frameCount - 1`.
+/// @brief_de Ein Daumenkino-Billboard. Das Partikel wählt sein Bild über den `AtlasId`-Eingang des Renderers, den die Engine auf `frameCount - 1` begrenzt.
+/// @brief_ru Биллборд-флипбук. Частица выбирает кадр через вход `AtlasId` рендерера, который движок обрезает до `frameCount - 1`.
+/// @brief_zh 翻页动画公告板。粒子通过渲染器的 `AtlasId` 输入选择帧，引擎会将其截断到 `frameCount - 1`。
+/// @brief_ja パラパラ漫画式のビルボードです。パーティクルはレンダラーの `AtlasId` 入力でフレームを選び、エンジンはそれを `frameCount - 1` にクランプします。
+/// @brief_ko 플립북 빌보드입니다. 파티클은 렌더러의 `AtlasId` 입력으로 프레임을 고르며, 엔진은 그 값을 `frameCount - 1`로 자릅니다.
+///
+/// @param_en _t_Texture The image drawn on the quad.
+/// @param_es _t_Texture La imagen que se dibuja sobre el cuadrilátero.
+/// @param_pt _t_Texture A imagem desenhada no quadrilátero.
+/// @param_fr _t_Texture L'image dessinée sur le quadrilatère.
+/// @param_it _t_Texture L'immagine disegnata sul quadrilatero.
+/// @param_de _t_Texture Das Bild, das auf das Viereck gezeichnet wird.
+/// @param_ru _t_Texture Изображение, рисуемое на четырёхугольнике.
+/// @param_zh _t_Texture 绘制在四边形上的图像。
+/// @param_ja _t_Texture クアッドに描かれる画像。
+/// @param_ko _t_Texture 사각면에 그려지는 이미지.
+///
+/// @param_en _t_SubDiv The grid as `(columns, rows)`, each 1..=64. Frames are laid out row-major with columns varying fastest and frame 0 at the top.
+/// @param_es _t_SubDiv La rejilla como `(columnas, filas)`, cada una de 1 a 64. Los fotogramas se disponen por filas, variando antes las columnas, con el fotograma 0 arriba.
+/// @param_pt _t_SubDiv A grade como `(colunas, linhas)`, cada uma de 1 a 64. Os quadros são dispostos por linhas, variando primeiro as colunas, com o quadro 0 no topo.
+/// @param_fr _t_SubDiv La grille sous forme `(colonnes, lignes)`, chacune de 1 à 64. Les images sont disposées par lignes, les colonnes variant le plus vite, l'image 0 en haut.
+/// @param_it _t_SubDiv La griglia come `(colonne, righe)`, ciascuna da 1 a 64. I fotogrammi sono disposti per righe, con le colonne che variano più in fretta e il fotogramma 0 in alto.
+/// @param_de _t_SubDiv Das Raster als `(Spalten, Zeilen)`, jeweils 1 bis 64. Die Bilder liegen zeilenweise, wobei die Spalten am schnellsten wechseln und Bild 0 oben steht.
+/// @param_ru _t_SubDiv Сетка в виде `(столбцы, строки)`, каждый от 1 до 64. Кадры разложены по строкам: столбцы меняются быстрее всего, кадр 0 — сверху.
+/// @param_zh _t_SubDiv 以 `(列数, 行数)` 表示的网格，各自为 1 到 64。帧按行优先排列，列变化最快，第 0 帧在顶部。
+/// @param_ja _t_SubDiv `(列数, 行数)` で表すグリッド。いずれも 1〜64 です。フレームは行優先で並び、列が最も速く変わり、フレーム 0 が上に来ます。
+/// @param_ko _t_SubDiv `(열 수, 행 수)` 형태의 격자로 각각 1~64입니다. 프레임은 행 우선으로 놓이며 열이 가장 빨리 변하고 0번 프레임이 맨 위입니다.
+///
+/// @param_en _t_Mode How the quad is turned to face the camera.
+/// @param_es _t_Mode Cómo se gira el cuadrilátero para encarar a la cámara.
+/// @param_pt _t_Mode Como o quadrilátero é girado para encarar a câmera.
+/// @param_fr _t_Mode Comment le quadrilatère est orienté face à la caméra.
+/// @param_it _t_Mode Come il quadrilatero viene ruotato per guardare la telecamera.
+/// @param_de _t_Mode Wie das Viereck zur Kamera gedreht wird.
+/// @param_ru _t_Mode Как четырёхугольник разворачивается к камере.
+/// @param_zh _t_Mode 四边形以何种方式转向面对相机。
+/// @param_ja _t_Mode クアッドをカメラに向ける方法。
+/// @param_ko _t_Mode 사각면을 카메라 쪽으로 돌리는 방식.
+///
+/// @param_en _t_Order The draw order. Higher numbers are drawn later, so they land on top.
+/// @param_es _t_Order El orden de dibujo. Los números mayores se dibujan después, así que quedan encima.
+/// @param_pt _t_Order A ordem de desenho. Números maiores são desenhados depois, portanto ficam por cima.
+/// @param_fr _t_Order L'ordre de dessin. Les nombres plus grands sont dessinés plus tard et passent donc au-dessus.
+/// @param_it _t_Order L'ordine di disegno. I numeri più alti vengono disegnati dopo, quindi finiscono sopra.
+/// @param_de _t_Order Die Zeichenreihenfolge. Höhere Zahlen werden später gezeichnet und liegen daher obenauf.
+/// @param_ru _t_Order Порядок отрисовки. Большие числа рисуются позже и потому оказываются сверху.
+/// @param_zh _t_Order 绘制顺序。数值越大绘制越晚，因此会盖在上面。
+/// @param_ja _t_Order 描画順。数値が大きいほど後から描かれ、上に重なります。
+/// @param_ko _t_Order 그리는 순서. 숫자가 클수록 나중에 그려져 위에 올라갑니다.
+///
+/// @param_en _t_MotionVectors The motion-vector map used to blend between frames. Defaults to the engine's own distort texture.
+/// @param_es _t_MotionVectors El mapa de vectores de movimiento con el que se mezcla entre fotogramas. Por omisión, la textura de distorsión propia del motor.
+/// @param_pt _t_MotionVectors O mapa de vetores de movimento usado para misturar entre quadros. O padrão é a textura de distorção do próprio motor.
+/// @param_fr _t_MotionVectors La carte de vecteurs de mouvement servant à fondre entre les images. Par défaut, la texture de distorsion du moteur lui-même.
+/// @param_it _t_MotionVectors La mappa di vettori di movimento usata per fondere fra i fotogrammi. Per impostazione predefinita, la texture di distorsione del motore stesso.
+/// @param_de _t_MotionVectors Die Bewegungsvektor-Karte, mit der zwischen Bildern überblendet wird. Standardmäßig die engineeigene Verzerrungstextur.
+/// @param_ru _t_MotionVectors Карта векторов движения для смешивания между кадрами. По умолчанию — собственная текстура искажения движка.
+/// @param_zh _t_MotionVectors 用于在帧之间混合的运动向量图。默认使用引擎自带的扭曲贴图。
+/// @param_ja _t_MotionVectors フレーム間をブレンドするためのモーションベクトルマップ。既定値はエンジン付属のディストートテクスチャです。
+/// @param_ko _t_MotionVectors 프레임 사이를 섞는 데 쓰는 모션 벡터 맵. 기본값은 엔진이 제공하는 디스토트 텍스처입니다.
+template renderer AtlasBillboard : Billboard {
+    takes {
+        "_t_Texture" : texture;
+        "_t_SubDiv" : i32x2;
+        "_t_Mode" : enum = ScreenAligned;
+        "_t_Order" : i32 = 0;
+        "_t_MotionVectors" : texture =
+            "Popcorn/Library/PopcornFXCore/Materials/DefaultTextures/Distort.dds";
+    }
+    DrawOrder = _t_Order;
+    Transparent = true;
+    Diffuse = true;
+    EnableRendering = true;
+    Atlas = true;
+    BillboardingMode = _t_Mode;
+    Diffuse.DiffuseMap = _t_Texture;
+    Atlas.Source = 1;
+    Atlas.SubDiv = _t_SubDiv;
+    Atlas.MotionVectorsMap = _t_MotionVectors;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Samplers
+// ---------------------------------------------------------------------------------------------
+
+/// The single-entry event timeline [RootLayerTemplate] reads: one entry at t=0, so the effect emits
+/// once when it starts. This is `sd0` in most bundles.
+/// @brief_en The single-entry event timeline `RootLayerTemplate` reads: one entry at t = 0, so the effect emits once when it starts. This is `sd0` in most bundles.
+/// @brief_es La línea de tiempo de un solo evento que lee `RootLayerTemplate`: una entrada en t = 0, así que el efecto emite una vez al arrancar. Es `sd0` en la mayoría de los paquetes.
+/// @brief_pt A linha do tempo de um único evento que `RootLayerTemplate` lê: uma entrada em t = 0, então o efeito emite uma vez ao começar. É `sd0` na maioria dos pacotes.
+/// @brief_fr La chronologie à une seule entrée que lit `RootLayerTemplate` : une entrée à t = 0, l'effet émet donc une fois au démarrage. C'est `sd0` dans la plupart des bundles.
+/// @brief_it La linea temporale a voce singola che `RootLayerTemplate` legge: una voce a t = 0, quindi l'effetto emette una volta all'avvio. È `sd0` nella maggior parte dei bundle.
+/// @brief_de Die einteilige Ereignis-Zeitleiste, die `RootLayerTemplate` liest: ein Eintrag bei t = 0, der Effekt emittiert also einmal beim Start. In den meisten Bundles ist das `sd0`.
+/// @brief_ru Временная шкала с единственной записью, которую читает `RootLayerTemplate`: одна запись при t = 0, так что эффект излучает один раз при запуске. В большинстве бандлов это `sd0`.
+/// @brief_zh `RootLayerTemplate` 所读取的单项事件时间线：在 t = 0 处只有一项，因此特效启动时发射一次。在大多数包里它就是 `sd0`。
+/// @brief_ja `RootLayerTemplate` が読む、項目が 1 つだけのイベントタイムラインです。t = 0 に 1 項目だけあるので、エフェクトは開始時に一度だけ放出します。多くのバンドルでは `sd0` にあたります。
+/// @brief_ko `RootLayerTemplate`이 읽는 단일 항목 이벤트 타임라인입니다. t = 0에 항목이 하나만 있어 이펙트가 시작할 때 한 번만 방출합니다. 대부분의 번들에서 `sd0`입니다.
+template sampler SingleShot : EventStream {
+    Times = [0];
+}
+
+/// A cylinder spawn volume.
+///
+/// `_t_Position` is the node's editor workspace coordinate. It is a parameter, and it comes FIRST,
+/// because sampler field order survives into the .pkb and a child's fields are appended after the
+/// template's — so anything that has to lead has to come from the template.
+/// @brief_en A cylinder spawn volume. Its workspace position comes FIRST and is a parameter, because sampler field order survives into the .pkb and a child's fields are appended after the template's — so anything that has to lead has to come from the template.
+/// @brief_es Un volumen cilíndrico de nacimiento. Su posición en el espacio de trabajo va PRIMERO y es un parámetro, porque el orden de los campos del muestreador sobrevive hasta el .pkb y los campos de la hija se añaden tras los de la plantilla: así que todo lo que deba ir delante tiene que venir de la plantilla.
+/// @brief_pt Um volume cilíndrico de nascimento. Sua posição no espaço de trabalho vem PRIMEIRO e é um parâmetro, porque a ordem dos campos do amostrador sobrevive até o .pkb e os campos da filha são acrescentados após os do modelo — então tudo que precisa vir na frente tem de vir do modelo.
+/// @brief_fr Un volume cylindrique de naissance. Sa position d'espace de travail vient EN PREMIER et est un paramètre, car l'ordre des champs d'un échantillonneur survit jusqu'au .pkb et les champs de l'enfant sont ajoutés après ceux du modèle — tout ce qui doit venir en tête doit donc venir du modèle.
+/// @brief_it Un volume cilindrico di nascita. La sua posizione nello spazio di lavoro viene PER PRIMA ed è un parametro, perché l'ordine dei campi del campionatore sopravvive fino al .pkb e i campi della figlia vengono aggiunti dopo quelli del modello: quindi tutto ciò che deve stare in testa deve venire dal modello.
+/// @brief_de Ein zylindrisches Geburtsvolumen. Seine Arbeitsbereichsposition kommt ZUERST und ist ein Parameter, denn die Feldreihenfolge eines Samplers überlebt bis in die .pkb und die Felder des Kindes werden hinter denen der Vorlage angehängt — alles, was vorne stehen muss, muss also aus der Vorlage kommen.
+/// @brief_ru Цилиндрический объём рождения. Его позиция в рабочей области идёт ПЕРВОЙ и является параметром, потому что порядок полей сэмплера доживает до .pkb, а поля ребёнка добавляются после полей шаблона — так что всё, что должно идти впереди, обязано идти из шаблона.
+/// @brief_zh 一个圆柱形的生成体积。它的工作区位置排在最前面且是参数，因为采样器字段的顺序会一直保留到 .pkb，而子声明的字段是接在模板之后的 —— 所以凡是必须打头阵的东西都得由模板提供。
+/// @brief_ja 円柱形のスポーンボリュームです。ワークスペース位置が先頭にあり、かつパラメータなのは、サンプラーのフィールド順が .pkb まで残り、子側のフィールドはテンプレートの後ろに追加されるからです。先頭になければならないものはテンプレートから出すしかありません。
+/// @brief_ko 원기둥 모양의 생성 볼륨입니다. 작업 공간 위치가 맨 앞에 오고 매개변수인 이유는, 샘플러 필드 순서가 .pkb까지 살아남고 자식의 필드는 템플릿 뒤에 붙기 때문입니다. 앞에 와야 하는 것은 반드시 템플릿이 내줘야 합니다.
+///
+/// @param_en _t_Position The node's editor workspace coordinate. It leads because the field order survives into the .pkb.
+/// @param_es _t_Position La coordenada del nodo en el espacio de trabajo del editor. Va delante porque el orden de los campos sobrevive hasta el .pkb.
+/// @param_pt _t_Position A coordenada do nó no espaço de trabalho do editor. Vem primeiro porque a ordem dos campos sobrevive até o .pkb.
+/// @param_fr _t_Position La coordonnée du nœud dans l'espace de travail de l'éditeur. Elle vient en tête car l'ordre des champs survit jusqu'au .pkb.
+/// @param_it _t_Position La coordinata del nodo nello spazio di lavoro dell'editor. Sta in testa perché l'ordine dei campi sopravvive fino al .pkb.
+/// @param_de _t_Position Die Arbeitsbereichskoordinate des Knotens im Editor. Sie steht vorne, weil die Feldreihenfolge bis in die .pkb überlebt.
+/// @param_ru _t_Position Координата узла в рабочей области редактора. Она идёт первой, потому что порядок полей доживает до .pkb.
+/// @param_zh _t_Position 节点在编辑器工作区中的坐标。它排在最前，因为字段顺序会保留到 .pkb。
+/// @param_ja _t_Position エディタのワークスペースにおけるノードの座標。フィールド順が .pkb まで残るため先頭に置かれています。
+/// @param_ko _t_Position 에디터 작업 공간에서의 노드 좌표. 필드 순서가 .pkb까지 살아남기 때문에 맨 앞에 옵니다.
+///
+/// @param_en _t_Radius The cylinder's outer radius.
+/// @param_es _t_Radius El radio exterior del cilindro.
+/// @param_pt _t_Radius O raio externo do cilindro.
+/// @param_fr _t_Radius Le rayon extérieur du cylindre.
+/// @param_it _t_Radius Il raggio esterno del cilindro.
+/// @param_de _t_Radius Der Außenradius des Zylinders.
+/// @param_ru _t_Radius Внешний радиус цилиндра.
+/// @param_zh _t_Radius 圆柱的外半径。
+/// @param_ja _t_Radius 円柱の外半径。
+/// @param_ko _t_Radius 원기둥의 바깥반지름.
+///
+/// @param_en _t_InnerRadius The hollow core's radius. 0 fills the cylinder solid; anything larger makes it a tube.
+/// @param_es _t_InnerRadius El radio del hueco interior. 0 llena el cilindro macizo; cualquier valor mayor lo convierte en un tubo.
+/// @param_pt _t_InnerRadius O raio do núcleo oco. 0 preenche o cilindro maciço; qualquer valor maior o torna um tubo.
+/// @param_fr _t_InnerRadius Le rayon du cœur creux. 0 remplit le cylindre plein ; toute valeur supérieure en fait un tube.
+/// @param_it _t_InnerRadius Il raggio del nucleo cavo. 0 riempie il cilindro pieno; qualsiasi valore maggiore lo rende un tubo.
+/// @param_de _t_InnerRadius Der Radius des hohlen Kerns. 0 füllt den Zylinder massiv; alles Größere macht ihn zu einem Rohr.
+/// @param_ru _t_InnerRadius Радиус пустоты внутри. 0 делает цилиндр сплошным, любое большее значение превращает его в трубу.
+/// @param_zh _t_InnerRadius 中心空洞的半径。0 表示实心圆柱；大于 0 则变成管状。
+/// @param_ja _t_InnerRadius 中心の空洞の半径。0 なら中詰まりの円柱になり、それより大きければ管状になります。
+/// @param_ko _t_InnerRadius 가운데 빈 공간의 반지름. 0이면 속이 찬 원기둥이 되고, 그보다 크면 관 모양이 됩니다.
+template sampler SimpleCylinder : Shape {
+    takes {
+        "_t_Position" : i32x2;
+        "_t_Radius" : f32;
+        "_t_InnerRadius" : f32 = 0.0;
+    }
+    WorkspacePosition = _t_Position;
+    SampleDimensionality = 3;
+    ShapeType = Cylinder;
+    Radius = _t_Radius;
+    InnerRadius = _t_InnerRadius;
+}

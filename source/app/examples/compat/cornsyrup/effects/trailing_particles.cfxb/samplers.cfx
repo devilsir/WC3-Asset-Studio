@@ -1,0 +1,40 @@
+// Readable sampler data (curves, shapes, textures, …). Curve keyframes are `t = value in .. out ..`
+// (value/tangent arity = channel count); `build` folds them back into Times/FloatValues/FloatTangents.
+
+sampler sd0 : EventStream {
+    Times = [0];
+}
+
+sampler mainParticleColor : Curve {
+    ValueType = 4;
+    keys 4 {  // 4 ch, hermite
+        0 = (1, 0.85, 0.35, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.18 = (1, 0.9974545, 0.9927273, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.29363957 = (0.74422956, 0.74330765, 0.7431471, 1)  in (-0.33750004, -0.45000008, -0.11250002, 0) out (-0.3375, -0.45000002, -0.112500004, 0)
+        1 = (0.49987218, 0.49174333, 0.49042, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+
+sampler trailParticleColor : Curve {
+    ValueType = 4;
+    keys 3 {  // 4 ch, hermite
+        0 = (0.3446093, 0.25003356, 0.21177807, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        0.18 = (0.34106517, 0.20264176, 0.13121708, 1)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+        1 = (0.040824726, 0.03282629, 0.031976894, 0)  in (0, 0, 0, 0) out (0, 0, 0, 0)
+    }
+}
+
+sampler SmokeSize : Curve {
+    keys 2 {  // 1 ch, hermite
+        0.0008613169 = 1  in 0 out 0.0077369213
+        1 = 4.08  in 5.677853 out 0
+    }
+}
+
+sampler ExplossionFalloff : Curve {
+    keys 3 {  // 1 ch, hermite
+        0 = 1  in 0 out 0
+        0.4 = 1  in 0 out -0
+        1 = 0  in 0 out 0
+    }
+}

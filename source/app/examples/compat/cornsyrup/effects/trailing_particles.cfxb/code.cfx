@@ -1,0 +1,367 @@
+// Editable layer code — rewrite a formula and rebuild to change behavior.
+// Each layer has a spawn-once `init` program and an optional per-frame `evolve` program.
+// The engine's physics / timeFixed / timeVarying blobs are update-rate LOD variants of ONE
+// evolve program; timeVarying is the superset, so that is what is stored here and `build`
+// recompiles it into each scope the layer needs (`evolve physics` = this layer also needs
+// the physics-scope copy).
+//
+// A layer also declares its EVENTS here: `event NAME { … }` is a kick target and `root { … }`
+// is the payload a newborn receives. A payload line is just `Name` (or `Name = flags`) — Type
+// and Kind are derived from the canonical particle-attribute name (Position/Orientation/
+// Velocity/Color/Size/EmittedCount/…); a non-canonical name or an off-table value is written
+// out in full as `Name : Type = flags kind K`. Event flags are implicit (event = 1, root = 0);
+// a rare non-default is `event NAME flags N { … }`. An empty one is `event NAME;` / `root;`.
+// `root auto;` means the root payload is DERIVED from the spawn graph on build.
+//
+// A program's `needs { }` block declares the externals it touches. Most of them need NOT be listed,
+// because something else in the bundle already fixes the type and `build` fills them in: the engine
+// constants (`scene.dt`, `scene.time`, `self.invLife`, `self.lifeRatio`); the `Wc3.Attributes.…`
+// constants the game drives; any event this layer declares above (`event Signal;` makes
+// `Signal.kick(…)` legal on its own); every sampler it declares in `properties`; and the effect's
+// own attributes. What is left is the STREAM FIELDS, and each keeps its `"Name" : type;` line:
+// nothing else in the bundle records a layer field's type, so that declaration is the only copy.
+//
+// FIELD ORDER IS LOAD-BEARING: the code addresses payload elements by INDEX, so reordering
+// an event's fields silently repoints every appendPayload/extractPayloadElement.
+
+layer EmissionLayer extends EventMultiplier {
+    using {
+        "_t_EmissionRate" = 3.0;
+    }
+}
+
+layer RootLayer extends RootLayerTemplate {
+    using {
+        "_sd_eventStream" = sd0;
+    }
+}
+
+layer ParticleLayer {
+    properties {
+        Events = [];
+        Renderers = [&MainParticle];
+        metaData;
+        sampler "mainParticleColor" : Curve = &mainParticleColor;
+        NeedsEvolveOnDeath;
+    }
+    event __e_Trail {
+        Position = 7176;
+    }
+    event __e_MyDeath {
+        Position = 7168;
+        Velocity = 6152;
+        Color;
+        Size;
+    }
+    root auto;
+    init {
+
+        needs {
+            "Position" : f32x3;
+            "Velocity" : f32x3;
+            "Size" : f32;
+            "Enabled" : bool;
+            "trailingEventAccum" : i32x2;
+            "ColorMultiplier" : f32x4;
+        }
+
+        self.invLife = rcp(1.0);
+
+        Position = coord_space.world_base_position();
+
+        Velocity = #f32x3(rand(-3.0, 3.0), rand(-3.0, 3.0), 6.0);
+
+        Size = rand(0.65, 1.0);
+
+        Enabled = true;
+
+        let baseHueOffset : f32 = rand(-0.1, 0.1);
+        let hsv = #f32x4(baseHueOffset, 1.0, 1.0, 1.0);
+        ColorMultiplier = hsv2rgb(hsv);
+
+        trailingEventAccum = #i32x2(1056964608, 0);
+    }
+    evolve {
+
+        needs {
+            "Position" : f32x3;
+            "Velocity" : f32x3;
+            "trailingEventAccum" : i32x2;
+            "Color" : f32x4;
+            "Size" : f32;
+            "ColorMultiplier" : f32x4;
+        }
+        let posState : f32x3 = Position;
+        let velState : f32x3 = Velocity;
+        let colorState : f32x4 = mainParticleColor.sample(self.lifeRatio) * ColorMultiplier;
+
+        // simple physics integration.
+        physics.integrate(
+            position = posState,
+            velocity = velState
+        );
+        // physics scope is not needed when change is linear
+
+        // calculate traveled distance
+        let travelVector : f32x3 = posState - Position;
+
+        let travelledDistance : f32 = sqrt(dot(travelVector, travelVector));
+
+        //*********************************************************
+        // Trail Payload Setup
+        //*********************************************************
+
+        // Setup payload information for trail payload.
+        let eventsCount : i32x2 = trailingEventAccum;
+        let spawnEvents : i32x3 = generate(eventsCount, travelledDistance, 0.01, 0.0, 1.0);
+        let payloadSlotTrail : i32 = 0; // First slot for first payload.
+        let trailPayload : i32 = __e_Trail.initPayload(payloadSlotTrail, spawnEvents);
+
+        // Attach Position
+        let posFlags : i32 = payloads.PackSemantics(payloads.Lerp.VectorLinear, payloads.EKind.Position);
+        let positionPayload : i32 = buildPayloadElement(spawnEvents, Position, posState, posFlags);
+        trailPayload = __e_Trail.appendPayload(trailPayload, 0, positionPayload);
+        __e_Trail.kick(trailPayload);
+
+        //*********************************************************
+        // OnDeath Payload Setup
+        //*********************************************************
+
+        let hasDied : i32x3 = trigger(self.lifeRatio >= 1.0, 1.0);
+        let payloadSlotDeath : i32 = 1; // Second slot for second payload.
+        let deathPayload : i32 = __e_MyDeath.initPayload(payloadSlotDeath, hasDied);
+
+        // Attach Position
+        let onDeathPosFlags : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Position);
+        let onDeathPosPayload : i32 = buildPayloadElement(hasDied, posState, posState, onDeathPosFlags);
+        deathPayload = __e_MyDeath.appendPayload(deathPayload, 0, onDeathPosPayload);
+
+        let genericFlags : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic);
+
+        // Attach Velocity
+        let OnDeathVelocityPayload : i32 = buildPayloadElement(hasDied, velState, velState, genericFlags);
+        deathPayload = __e_MyDeath.appendPayload(deathPayload, 1, OnDeathVelocityPayload);
+
+        // Attach Color
+        let OnDeathColorPayload : i32 = buildPayloadElement(hasDied, colorState, colorState, genericFlags);
+        deathPayload = __e_MyDeath.appendPayload(deathPayload, 2, OnDeathColorPayload);
+
+        // Attach  Size
+        let OnDeathSizePayload : i32 = buildPayloadElement(hasDied, Size, Size, genericFlags);
+        deathPayload = __e_MyDeath.appendPayload(deathPayload, 3, OnDeathSizePayload);
+        __e_MyDeath.kick(deathPayload);
+
+        //*********************************************************
+        // Update Particle elements
+        //*********************************************************
+
+        // Finally update position and velocity
+        Position = posState;
+        Velocity = velState;
+
+        // and update color
+        Color = colorState;
+    }
+    bind MainParticle {
+        "Position" -> Position;
+        "Enabled" -> Enabled;
+        "Size" -> SizeScale;
+        "Color" -> Color;
+    }
+}
+
+layer TrailParticlesLayer {
+    // @color #8CC8E6
+    properties {
+        Renderers = [&TrailParticle];
+        sampler "__sampler_0" : Curve = &trailParticleColor;
+        sampler "SmokeSize" : Curve = &SmokeSize;
+    }
+    root {
+        EmittedCount = 8
+        Position = 7177
+        Orientation = 8
+        Velocity = 7176
+        Color = 8
+        Size = 8
+        LifeRatio = 8
+    }
+    init {
+        needs {
+            "Position" : f32x3;
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "Increase" : f32x3;
+        }
+        let basePos : f32x3 = coord_space.world_base_position();
+        self.invLife = rcp(0.5);
+        Position = basePos + vrand() * 0.1;
+        Rotation = rand(0.0, 360.0);
+        Enabled = true;
+    }
+    evolve {
+        needs {
+            "Size" : f32;
+            "Color" : f32x4;
+            "TextureId" : f32;
+            "Increase" : f32x3;
+        }
+        let colorState : f32x4 = __sampler_0.sample(self.lifeRatio);
+        Size = 0.1 * SmokeSize.sample(self.lifeRatio);
+        Color = colorState;
+        TextureId = life.select_texture_id_on_age(TrailParticle);
+    }
+    bind TrailParticle {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "TextureId" -> TextureID;
+    }
+}
+
+layer MultiplyExplossion {
+    properties {
+        Events = [];
+        NeedsEvolveOnDeath;
+        metaData;
+    }
+    event __e_Child {
+        Position = 7168;
+        Velocity = 6152;
+        Color;
+        Size;
+    }
+    event __e_OnDeath;
+    root {
+        Position = 7173;
+        Velocity = 6157;
+        Orientation = 8;
+        Color = 5;
+        Size = 5;
+    }
+    init {
+        needs {
+            "childSpawnAccum" : i32x2;
+            "srcPos" : f32x3;
+            "srcVel" : f32x3;
+            "srcColor" : f32x4;
+            "srcSize" : f32;
+        }
+        self.invLife = inf;
+        // spawn-rate accumulator seed: float bits (~1.0) in .x, carry count in .y
+        childSpawnAccum = #i32x2(1065353048, 0);
+        let payloadPos : f32x3 = extractPayloadElementF3(0);
+        srcPos = payloadPos;
+        let payloadVel : f32x3 = extractPayloadElementF3(1);
+        srcVel = payloadVel;
+        let payloadColor : f32x4 = extractPayloadElementF4(3);
+        srcColor = payloadColor;
+        let payloadSize : f32 = extractPayloadElementF1(4);
+        srcSize = payloadSize;
+    }
+    evolve {
+        needs {
+            "childSpawnAccum" : i32x2;
+            "srcPos" : f32x3;
+            "srcVel" : f32x3;
+            "srcColor" : f32x4;
+            "srcSize" : f32;
+        }
+        let effectRunning : bool = effect.isRunning();
+        self.kill(lnot(effectRunning));
+        let prevSpawnAccum : i32x2 = childSpawnAccum;
+        // spawn-rate accumulator: 100 children/s, fractional remainder carried in .xy
+        let spawnEvents : i32x3 = generate(prevSpawnAccum, 100.0, 1.0, 0.0, 1.0);
+        let childPayload : i32 = __e_Child.initPayload(0, spawnEvents);
+        let posValue : f32x3 = srcPos;
+        let flags01 : i32 = payloads.PackSemantics(payloads.Lerp.None, payloads.EKind.Generic);
+        let posPayload : i32 = buildPayloadElement(spawnEvents, posValue, posValue, flags01);
+        let childPayloadPos : i32 = __e_Child.appendPayload(childPayload, 0, posPayload);
+        let velValue : f32x3 = srcVel;
+        let velPayload : i32 = buildPayloadElement(spawnEvents, velValue, velValue, flags01);
+        let childPayloadVel : i32 = __e_Child.appendPayload(childPayloadPos, 1, velPayload);
+        let colorValue : f32x4 = srcColor;
+        let colorPayload : i32 = buildPayloadElement(spawnEvents, colorValue, colorValue, flags01);
+        let childPayloadColor : i32 = __e_Child.appendPayload(childPayloadVel, 2, colorPayload);
+        let sizeValue : f32 = srcSize;
+        let sizePayload : i32 = buildPayloadElement(spawnEvents, sizeValue, sizeValue, flags01);
+        let childPayloadSize : i32 = __e_Child.appendPayload(childPayloadColor, 3, sizePayload);
+        __e_Child.kick(childPayloadSize);
+        childSpawnAccum = spawnEvents.xy;
+    }
+}
+
+layer ExplossionLayer {
+    // @color #8CC8E6
+    properties {
+        Renderers = [&ExplossionParticleRenderer];
+        sampler "__sampler_0" : Curve = &ExplossionFalloff;
+        metaData;
+    }
+    root {
+        Position = 7169;
+        Velocity = 6153;
+        Orientation = 8;
+        Color = 1;
+        Size = 1;
+        LifeSpan = 8;
+        FirstSpawnDelay = 8;
+        EmittedCount = 8;
+        SpawnCount = 8;
+        Flux = 8;
+        LifeRatio = 8;
+    }
+    init {
+        needs {
+            "Position" : f32x3;
+            "Size" : f32;
+            "Rotation" : f32;
+            "Enabled" : bool;
+            "baseColor" : f32x4;
+            "velState" : f32x3;
+        }
+        self.invLife = 2.0;
+        let basePos = coord_space.world_base_position();
+        let burstDir : f32x3 = vrand(0.646, 1.0);
+        let srcSize : f32 = extractPayloadElementF1(4);
+        let srcVel : f32x3 = extractPayloadElementF3(1);
+        let srcColor : f32x4 = extractPayloadElementF4(3);
+        baseColor = srcColor;
+        // inherited velocity plus an outward burst scaled by the spawner's size
+        velState = burstDir * (srcSize * 10.0).xxx + srcVel;
+        Position = basePos;
+        Size = srcSize * 0.25;
+        Rotation = 0.0;
+        Enabled = true;
+    }
+    evolve physics {
+        needs {
+            "Position" : f32x3;
+            "Color" : f32x4;
+            "baseColor" : f32x4;
+            "velState" : f32x3;
+        }
+        // well
+        let falloff : f32 = __sampler_0.sample(self.lifeRatio);
+        Color = falloff.xxxx * baseColor;
+        // p += v·t + ½·a·t², with velocity decayed by exponential drag
+        physics.integrate(
+            position = Position,
+            velocity = velState,
+            acceleration = #f32x3(0.0, -0.0, -10.0),
+            wind = #f32x3(0.0, 0.0, 0.0),
+            mass = 1.0,
+            drag = 2.0
+        );
+    }
+    bind ExplossionParticleRenderer {
+        "Position" -> Position;
+        "Size" -> SizeScale;
+        "Enabled" -> Enabled;
+        "Rotation" -> Rotation;
+        "Color" -> Color;
+        "velState" -> Axis0;
+    }
+}
